@@ -1,0 +1,14 @@
+imageio
+openpyxl
+xlwings
+hachoir
+decord
+moviepy
+boto3
+memory_profiler
+reportlab
+openai
+psutil
+ultralytics
+sahi # custom version install from repo
+scikit-learn
