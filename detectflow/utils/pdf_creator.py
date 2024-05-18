@@ -385,7 +385,7 @@ class DiagPDFCreator(PDFCreator):
             for plot, periods in zip(motion_plots, high_movement_periods):
 
                 # Convert the plot to an image stream
-                img_data = PdfCreator.create_plot_image(plot)
+                img_data = PDFCreator.create_plot_image(plot)
 
                 # Convert BytesIO to PIL Image
                 if img_data is not None:

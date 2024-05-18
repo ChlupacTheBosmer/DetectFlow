@@ -3,6 +3,7 @@ from detectflow.predict.predictor import Predictor
 from detectflow.predict.tracker import Tracker
 from detectflow.utils.inspector import Inspector
 from detectflow.image.smart_crop import SmartCrop
+from detectflow.video.video_inter import VideoFileInteractive
 
 
 def test_callback(**kwargs): #TODO: Rename the callback function

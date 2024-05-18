@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from detectflow.manipulators.manipulator import Manipulator
 from detectflow.validators.validator import Validator
 from detectflow.validators.object_detect_validator import ObjectDetectValidator
+from detectflow.video.video_inter import VideoFileInteractive
 import pandas as pd
 
 class VideoManipulator:

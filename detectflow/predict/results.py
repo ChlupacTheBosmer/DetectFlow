@@ -8,6 +8,8 @@ import os
 import cv2
 from detectflow.manipulators.box_manipulator import BoxManipulator
 from detectflow.validators.input_validator import InputValidator
+from detectflow.video.video_inter import VideoFileInteractive
+from detectflow.video.video_passive import VideoFilePassive
 
 
 class DetectionBoxes(Boxes):

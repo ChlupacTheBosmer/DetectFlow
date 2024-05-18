@@ -19,6 +19,7 @@ from detectflow.manipulators.box_analyser import BoxAnalyser
 from detectflow.predict.results import DetectionBoxes
 from detectflow.utils.pdf_creator import PDFCreator
 from detectflow.utils.pdf_creator import DiagPDFCreator
+from detectflow.video.video_inter import VideoFileInteractive
 from PIL import Image as PILImage
 
 

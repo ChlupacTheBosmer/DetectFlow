@@ -3,6 +3,7 @@ import random
 from detectflow.validators.input_validator import InputValidator
 from detectflow.predict.results import DetectionResults, DetectionBoxes
 from ultralytics.engine.results import Results
+from detectflow.video.video_passive import VideoFilePassive
 
 
 class Sampler:

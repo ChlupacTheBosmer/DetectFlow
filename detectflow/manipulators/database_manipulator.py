@@ -8,6 +8,7 @@ import threading
 import traceback
 import time
 from detectflow.utils.hash import get_numeric_hash
+import logging
 
 
 class DatabaseManipulator:
@@ -345,7 +346,7 @@ class DatabaseManipulator:
                                     raise Exception("Failed to insert all rows from the CSV.")
                         # Delete the CSV file after inserting its data into the database
                         if delete_dumps:
-                            Manipulator.delete_file(csv_path)
+                            Manipulator.delete_file(csv_file)
                             print(f"Data from {csv_file} inserted into the database and file removed.")
                         else:
                             print(f"Data from {csv_file} inserted into the database.")

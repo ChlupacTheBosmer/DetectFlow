@@ -7,6 +7,7 @@ from detectflow.validators.validator import Validator
 from detectflow.validators.video_validator import VideoValidator
 from detectflow.manipulators.frame_manipulator import FrameManipulator
 import logging
+from detectflow.video.video_passive import VideoFilePassive
 
 
 @dataclass

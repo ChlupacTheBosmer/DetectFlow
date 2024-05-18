@@ -7,6 +7,7 @@ from queue import Queue
 import numpy as np
 import pandas as pd
 from detectflow.manipulators.video_manipulator import VideoManipulator
+from detectflow.video.video_passive import VideoFilePassive
 from detectflow.validators.validator import Validator
 #TODO: Add imports for video classes and functions dealing with the excel fiel and dataframe
 
