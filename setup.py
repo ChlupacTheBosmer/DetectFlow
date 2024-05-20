@@ -28,16 +28,22 @@ def parse_requirements(file_path: Path):
 
     Returns:
         (List[str]): List of parsed requirements.
+        (List[str]): List of parsed dependency links.
     """
 
     requirements = []
+    dependency_links = []
     for line in Path(file_path).read_text().splitlines():
         line = line.strip()
         if line and not line.startswith('#'):
-            requirements.append(line.split('#')[0].strip())  # ignore inline comments
+            if line.startswith('git+'):
+                dependency_links.append(line)
+            else:
+                requirements.append(line)
+    return requirements, dependency_links
 
-    return requirements
 
+install_requires, dependency_links = parse_requirements(PARENT / 'requirements.txt')
 
 setup(
     name='detectflow',  # name of pypi package
@@ -59,7 +65,8 @@ setup(
         '': ['*.yaml', '*.jpg', '*.json', '*.csv'],  # Add other data file types if needed
     },
     include_package_data=True,
-    install_requires=parse_requirements(PARENT / 'requirements.txt'),  # List of dependencies
+    install_requires=install_requires,
+    dependency_links=dependency_links,
     extras_require={
         'ai': [
             'transformers==4.41.0',
