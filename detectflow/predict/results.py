@@ -6,7 +6,6 @@ import numpy as np
 from datetime import datetime, timedelta
 import os
 import cv2
-from detectflow.manipulators.box_manipulator import BoxManipulator
 from detectflow.validators.input_validator import InputValidator
 from detectflow.video.video_inter import VideoFileInteractive
 from detectflow.video.video_passive import VideoFilePassive
@@ -51,6 +50,7 @@ class DetectionBoxes(Boxes):
         additional collumns with more data. Default format is class, probability, track_id, but other order can be specified
         by passing a format_flag - flag must start with "xyxy" as this will be passed on after conversion.
         '''
+        from detectflow.manipulators.box_manipulator import BoxManipulator
 
         # Convert boxes
         xyxy_boxes = BoxManipulator.coco_to_xyxy(coco_boxes)
@@ -488,6 +488,8 @@ class DetectionResults(Results):
         Check for each box in self.boxes whether it overlaps with any box in self.ref_boxes.
         Returns a list of booleans indicating overlap with any ref_boxes.
         """
+        from detectflow.manipulators.box_manipulator import BoxManipulator
+
         try:
             # Check if ref_boxes and boxes attributes are set and valid
             if self.ref_boxes is None or self.boxes is None:
