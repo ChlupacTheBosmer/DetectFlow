@@ -1,12 +1,15 @@
 # Extra packages
-from google.cloud import vision
-import cv2
+try:
+    from google.cloud import vision
+    import cv2
+    vision_available = True
+except ImportError:
+    vision_available = False
 
 # Default part of python
 import re
 from datetime import datetime
 import os
-from tkinter import filedialog
 import shutil
 
 def get_grouped_rois_from_frame(frames, unique_rois, grouping_radius_dimensions):
@@ -77,6 +80,10 @@ def get_unique_rois_from_frame(frame, min_confidence: float = 0.2):
 
 def get_text_with_OCR(frame):
 
+    if not vision_available:
+        print("Please run 'pip install detectflow[vision]' to install the DetectFlow package with Google Cloud Vision API client library.")
+        return False, None
+
     script_directory = os.path.dirname(os.path.abspath(__file__))
     two_parent_folders_up = os.path.abspath(os.path.join(script_directory, '..', '..'))
     key_path = os.path.join(two_parent_folders_up, 'resources', 'key', 'ICVT.json')
@@ -137,6 +144,10 @@ def extract_time_from_text(text):
         return valid_times
 
 def install_google_api_key():
+    try:
+        from tkinter import filedialog
+    except ImportError:
+        raise ImportError("Please run 'pip install tk' to install the tkinter package.")
 
     # Open a file dialog to get the new file path
     new_file_path = filedialog.askopenfilename()

@@ -7,13 +7,15 @@ import time
 from datetime import datetime
 import cv2
 import logging
+
 # Other modules
 import pandas as pd
 from hachoir.metadata import extractMetadata
 from hachoir.parser import createParser
-# Modules of ICVT
-from ..video.video_passive import VideoFilePassive
-#from ..vision import vision_AI --- Imported in a local space
+
+# Modules of DetectFlow
+from video_passive import VideoFilePassive
+
 
 class VideoFileInteractive(VideoFilePassive):
     __slots__ = ('end_time', 'main_window', 'manual_text_input_window', 'ocr_roi', 'start_time', 'sec_OCR')

@@ -1,8 +1,14 @@
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, LlamaForCausalLM
-import bitsandbytes, flash_attn
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-from typing import Dict, Any
+# Import packages and check whether they are installed
+try:
+    import torch
+    from transformers import AutoTokenizer, AutoModelForCausalLM, LlamaForCausalLM
+    import bitsandbytes, flash_attn
+    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+    from typing import Dict, Any
+    ai_available = True
+except ImportError:
+    ai_available = False
+
 
 
 class CustomChatHandler:
@@ -28,6 +34,9 @@ class CustomChatHandler:
         """
         if not torch.cuda.is_available():
             raise EnvironmentError("CUDA is not available. AIAssistant requires a GPU to function efficiently.")
+
+        if not ai_available:
+            raise ImportError("AIAssistant requires the 'transformers', 'bitsandbytes', and 'flash_attn' packages to be installed. Install the package including extras with 'pip install detectflow[ai]'.")
 
         self.device = torch.device("cuda")
 

@@ -1,8 +1,12 @@
 import logging
 import functools
-from memory_profiler import memory_usage
 import time
-import psutil
+try:
+    from memory_profiler import memory_usage
+    import psutil
+    dev_available = True
+except ImportError:
+    dev_available = False
 
 # Init the logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(threadName)s - %(name)s - %(levelname)s : %(message)s')
@@ -42,11 +46,14 @@ def profile_function_call(logger):
 def profile_memory(logger):
     def decorator(func):
         def wrapper(*args, **kwargs):
-            mem_usage_before = memory_usage(-1, interval=0.2, timeout=1)
-            result = func(*args, **kwargs)
-            mem_usage_after = memory_usage(-1, interval=0.2, timeout=1)
-            logger.info(f"{func.__name__} - Memory Usage Before: {max(mem_usage_before)} MB - Memory Usage After: {max(mem_usage_after)} MB")
-            return result
+            if dev_available:
+                mem_usage_before = memory_usage(-1, interval=0.2, timeout=1)
+                result = func(*args, **kwargs)
+                mem_usage_after = memory_usage(-1, interval=0.2, timeout=1)
+                logger.info(f"{func.__name__} - Memory Usage Before: {max(mem_usage_before)} MB - Memory Usage After: {max(mem_usage_after)} MB")
+                return result
+            else:
+                return func(*args, **kwargs)
         return wrapper
     return decorator
 
@@ -56,10 +63,13 @@ def profile_cpu(logger):
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            cpu_percent_before = psutil.cpu_percent()
-            result = func(*args, **kwargs)
-            cpu_percent_after = psutil.cpu_percent()
-            logger.info(f"{func.__name__} - CPU Usage: {cpu_percent_after - cpu_percent_before}%")
-            return result
+            if dev_available:
+                cpu_percent_before = psutil.cpu_percent()
+                result = func(*args, **kwargs)
+                cpu_percent_after = psutil.cpu_percent()
+                logger.info(f"{func.__name__} - CPU Usage: {cpu_percent_after - cpu_percent_before}%")
+                return result
+            else:
+                return func(*args, **kwargs)
         return wrapper
     return decorator

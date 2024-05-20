@@ -1,7 +1,11 @@
-import openai
-from typing import Dict, Any
-from openai import OpenAI
-from detectflow.handlers.custom_chat_handler import CustomChatHandler
+# Import packages and check whether they are installed
+try:
+    from typing import Dict, Any
+    from openai import OpenAI
+    from detectflow.handlers.custom_chat_handler import CustomChatHandler
+    ai_available = True
+except ImportError:
+    ai_available = False
 
 
 class OpenAIChatHandler:
@@ -11,6 +15,10 @@ class OpenAIChatHandler:
 
         :param api_key: Your OpenAI API key.
         """
+
+        if not ai_available:
+            raise ImportError("AIAssistant requires the 'transformers', 'bitsandbytes', and 'flash_attn' packages to be installed. Install the package including extras with 'pip install detectflow[ai]'.")
+
         self.api_key = api_key
         self.client = OpenAI(
             # This is the default and can be omitted

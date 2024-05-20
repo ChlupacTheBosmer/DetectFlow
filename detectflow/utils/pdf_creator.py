@@ -1,21 +1,25 @@
-from reportlab.lib.pagesizes import letter
-from typing import Optional
-from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Image
-from reportlab.lib.styles import getSampleStyleSheet
-import matplotlib.pyplot as plt
-import io
-from reportlab.lib.units import inch
+try:
+    from reportlab.lib.pagesizes import letter
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Image
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib import colors
+    from reportlab.lib.units import inch
+    report_available = True
+except ImportError:
+    report_available = False
+
 from PIL import Image as PILImage
+from datetime import datetime, timedelta
+from typing import Optional
+import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import os
-from datetime import datetime
+import io
 import tempfile
 import logging
-from detectflow.predict.results import DetectionBoxes
-from datetime import timedelta
 import traceback
 
+from detectflow.predict.results import DetectionBoxes
 
 class PDFCreator():
     def __init__(self,
@@ -23,6 +27,9 @@ class PDFCreator():
                  output_folder: str,
                  data: Optional[dict] = None
                  ):
+
+        if not report_available:
+            raise ImportError("PDFCreator requires the 'reportlab' package to be installed. Install the package with 'pip install detectflow[pdf]'.")
 
         # Set attributes
         self.filename = filename

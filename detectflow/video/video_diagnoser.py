@@ -2,8 +2,6 @@ from typing import Optional, List, Tuple, Union
 import cv2
 import numpy as np
 import os
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
 from datetime import timedelta
 import logging
 import traceback
@@ -189,7 +187,7 @@ class VideoDiagnoser():
     def validate_video(self):
         # Run validator on video
         validator = VideoValidator(self.video_path, self.video_origin)
-        result = validator.validate_video(5)
+        result = validator.validate_video()
 
         # List to hold the keys where the value is True
         self.validated_methods = []
@@ -363,6 +361,8 @@ class VideoDiagnoser():
                 # Check if validated_methods attribute exists
                 if hasattr(self, 'validated_methods'):
                     validated_methods = self.validated_methods
+                else:
+                    validated_methods = None
 
                 # Define frame reader method
                 frame_reader_method = "decord" if "decord" in validated_methods else "imageio"
@@ -641,11 +641,7 @@ class VideoDiagnoser():
                                     # Convert BytesIO to PIL Image
                                     if img_data is not None:
                                         pil_img = PILImage.open(img_data)
-
-                                    Inspector.display_images(pil_img)
-                                #                                 if hasattr(plot, 'number') and callable(getattr(plot, 'show', None)):
-                                #                                     plt.figure(plot.number)  # This makes the returned figure the current figure
-                                #                                     plot.show()
+                                        Inspector.display_images(pil_img)
                                 else:
                                     raise TypeError(f"The 'plot' in key '{key}' is not a valid plot object")
                             except Exception as e:
@@ -661,7 +657,11 @@ class VideoDiagnoser():
     def _create_pdf(self, output_data, output_path):
 
         # Init PDF Creator
-        pdf_creator = DiagPDFCreator(f"{self.video_identifier}_Diag_Report.pdf", output_path, output_data)
+        try:
+            pdf_creator = DiagPDFCreator(f"{self.video_identifier}_Diag_Report.pdf", output_path, output_data)
+        except ImportError:
+            logging.error("ERROR: (Video Diagnoser) PDF diagnostic report cannot be generated as the required packages are unavailable. Install DetectFlow with pip install detectflow[pdf].")
+            return
 
         # Build the document
         success = pdf_creator.create_pdf()
