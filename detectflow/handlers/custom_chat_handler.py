@@ -1,15 +1,14 @@
 # Import packages and check whether they are installed
 try:
-    import torch
     from transformers import AutoTokenizer, AutoModelForCausalLM, LlamaForCausalLM
     import bitsandbytes, flash_attn
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-    from typing import Dict, Any
     ai_available = True
 except ImportError:
     ai_available = False
 
-
+from typing import Dict, Any
+import torch
 
 class CustomChatHandler:
     """

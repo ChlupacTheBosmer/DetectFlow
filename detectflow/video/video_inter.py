@@ -14,7 +14,7 @@ from hachoir.metadata import extractMetadata
 from hachoir.parser import createParser
 
 # Modules of DetectFlow
-from video_passive import VideoFilePassive
+from .video_passive import VideoFilePassive
 
 
 class VideoFileInteractive(VideoFilePassive):

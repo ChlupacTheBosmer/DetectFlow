@@ -5,7 +5,8 @@ import logging
 from itertools import permutations
 from scipy.spatial.distance import euclidean
 from typing import List, Tuple
-from detectflow.predict.results import DetectionBoxes
+from detectflow.predict.results import DetectionResults, DetectionBoxes
+from typing import Union
 
 
 class BoxManipulator:

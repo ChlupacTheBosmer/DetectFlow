@@ -7,9 +7,9 @@ from typing import Dict, List
 from detectflow.utils.hash import get_numeric_hash
 from detectflow.utils.profile import profile_function_call
 from detectflow.manipulators.s3_manipulator import S3Manipulator
-from detectflow.validators.input_validator import InputValidator
 from detectflow.validators.validator import Validator
 import time
+import re
 import datetime
 from datetime import timedelta
 from queue import Queue
@@ -348,7 +348,7 @@ class DatabaseManager:
             # Recording ID has a format of XX(X)0_X0_XXXXXX00
             recording_id_pattern = r'^[A-Za-z]{2,3}\d_[A-Za-z]\d_[A-Za-z]{6}\d{2}$'
 
-            if not InputValidator.validate_string(recording_id, recording_id_pattern):
+            if re.match(recording_id_pattern, recording_id) is None:
                 raise ValueError(f"The string '{recording_id}' does not match the expected format.")
 
             # Video ID has a format of XX(X)0_X0_XXXXXX00_00000000_00_00
@@ -356,7 +356,7 @@ class DatabaseManager:
                                 r'(\d{4})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])_'
                                 r'([01]\d|2[0-3])_([0-5]\d)$')
 
-            if not InputValidator.validate_string(video_id, video_id_pattern):
+            if re.match(video_id_pattern, video_id) is None:
                 raise ValueError(f"The string '{video_id}' does not match the expected format.")
 
         except Exception as e:

@@ -1,7 +1,6 @@
 import json
 import configparser
 from abc import ABC, abstractmethod
-from detectflow.validators.validator import Validator
 
 
 class ConfigHandler(ABC):
@@ -26,6 +25,8 @@ class ConfigHandler(ABC):
         Returns:
             dict: The configuration dictionary.
         """
+        from detectflow.validators.validator import Validator
+
         if Validator.is_valid_file_path(self.config_path):
             if self.format == 'json':
                 with open(self.config_path, 'r') as file:

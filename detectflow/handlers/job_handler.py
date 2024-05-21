@@ -2,7 +2,6 @@ import os
 import glob
 from detectflow.manipulators.manipulator import Manipulator
 from detectflow.manipulators.s3_manipulator import S3Manipulator
-from detectflow.validators.s3_validator import S3Validator
 from detectflow.manipulators.database_manipulator import DatabaseManipulator
 import logging
 import sqlite3
@@ -10,7 +9,6 @@ import re
 from detectflow.handlers.email_handler import EmailHandler
 from detectflow.utils.log_file import LogFile
 from detectflow.utils.pbs_job_report import PBSJobReport
-from detectflow.validators.input_validator import InputValidator
 import traceback
 from typing import List
 
@@ -27,12 +25,11 @@ class JobHandler:
 
         self.output_directory = output_directory
         self.s3_manipulator = S3Manipulator(s3_cfg_file)
-        self.s3_valdiator = S3Validator(s3_cfg_file)
         self.email_sender = EmailHandler(sender_email, email_password) if email_handler is None else email_handler
         self.llm_handler = llm_handler
 
         # Validate email address
-        if InputValidator.is_valid_email(user_email):
+        if is_valid_email(user_email):
             self.user_email = user_email
         else:
             raise ValueError(f"Invalid email address: {user_email}")
@@ -345,3 +342,11 @@ class JobHandler:
             return {"number_of_visits": 0,
                     "number_of_frames": 0
                     }  # Return zero or appropriate error handling
+
+def is_valid_email(email):
+    """Validate an email address using a regular expression."""
+    # Improved pattern to handle more complex email addresses
+    pattern = r'^[a-z0-9]+[\._]?[a-z0-9]+[@]\w+([.]\w+)*\.[a-z]{2,4}$'
+    if re.match(pattern, email, re.IGNORECASE):
+        return True
+    return False

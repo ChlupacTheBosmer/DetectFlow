@@ -1,9 +1,9 @@
 import numpy as np
 import random
-from detectflow.validators.input_validator import InputValidator
 from detectflow.predict.results import DetectionResults, DetectionBoxes
 from ultralytics.engine.results import Results
 from detectflow.video.video_passive import VideoFilePassive
+from detectflow.utils.input import validate_flags
 
 
 class Sampler:
@@ -66,7 +66,7 @@ class Sampler:
         #             raise IOError("Could not open video file")
 
         # Validate input
-        reader = InputValidator.validate_flags(reader, ('opencv', 'imageio', 'decord'), True)
+        reader = validate_flags(reader, ('opencv', 'imageio', 'decord'), True)
 
         try:
             # Init video file

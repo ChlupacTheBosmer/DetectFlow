@@ -7,7 +7,7 @@ import os
 import random
 import traceback
 from detectflow.video.frame_reader import FrameReader
-from detectflow.validators.input_validator import InputValidator
+from detectflow.utils.input import validate_flags
 from detectflow.validators.object_detect_validator import ObjectDetectValidator
 from detectflow.predict.predictor import Predictor
 from detectflow.predict.results import DetectionBoxes
@@ -117,7 +117,7 @@ class MotionDetector():
 
         # Validate and assign methods
         try:
-            self.methods = InputValidator.validate_flags(methods, self.METHOD_MAP, True)
+            self.methods = validate_flags(methods, self.METHOD_MAP, True)
         except (AssertionError, TypeError):
             methods = ["TA"]
 

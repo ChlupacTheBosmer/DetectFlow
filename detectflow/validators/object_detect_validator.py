@@ -2,7 +2,6 @@ from detectflow.validators.validator import Validator
 import numpy as np
 import datetime
 
-
 class ObjectDetectValidator(Validator):
     def __init__(self):
 

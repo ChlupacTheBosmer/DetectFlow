@@ -5,12 +5,13 @@ import json
 import uuid
 import os
 from detectflow.process.database_manager import DatabaseManager
-from detectflow.validators.input_validator import InputValidator
+from detectflow.validators.s3_validator import S3Validator
 from detectflow.validators.validator import Validator
 from detectflow.manipulators.manipulator import Manipulator
 from detectflow.manipulators.dataloader import Dataloader
 from queue import Queue
 from detectflow.utils.threads import profile_threads, manage_threads
+from detectflow.utils.s3.input import validate_and_process_input
 
 class Task:
     def __init__(self, directory: str, video_files: list, status: dict):
@@ -94,7 +95,7 @@ class Orchestrator:
 
         try:
             # Start by initializing the validator and dataloader, they should be injected
-            self.input_validator = validator if validator is not None else InputValidator(cfg_file)
+            self.validator = validator if validator is not None else S3Validator(cfg_file)
             self.dataloader = dataloader if dataloader is not None else Dataloader()
 
             # Assign attributes
@@ -104,7 +105,7 @@ class Orchestrator:
             self.batch_size = batch_size
             self.max_workers = max_workers
             self.force_restart = force_restart
-            self.scratch_path = scratch_path if self.input_validator.is_valid_directory_path(scratch_path) else ""
+            self.scratch_path = scratch_path if self.validator.is_valid_directory_path(scratch_path) else ""
             self.user_name = user_name
             self.fallback_directories = self._generate_fallback_directories()
             self.process_task_callback = process_task_callback
@@ -201,7 +202,7 @@ class Orchestrator:
     def _create_new_checkpoint(self):
         try:
             # Attempt to validate and process input data
-            directories, input_flags = self.input_validator.validate_and_process_input(self.input_data)
+            directories, input_flags = validate_and_process_input(self.input_data)
 
             print(directories)
 
@@ -232,7 +233,7 @@ class Orchestrator:
                 raise ValueError("Error during input data processing - 'None' type")
 
             if input_flags[0]:  # S3 bucket, directory
-                bucket, prefix = self.input_validator._parse_s3_path(directory)
+                bucket, prefix = self.validator._parse_s3_path(directory)
                 file_list = self.dataloader.list_files_s3(bucket, prefix, regex=r"^(?!.*^\.).*(?<=\.mp4|\.avi|\.mkv)$",
                                                           return_full_path=True)
             elif input_flags[2]:  # Local directory

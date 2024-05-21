@@ -4,7 +4,6 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
 import re
-from detectflow.validators.validator import Validator
 
 
 class EmailHandler:
@@ -166,6 +165,8 @@ class EmailHandler:
         appendix (str): Optional appendix text to add below the main body.
         attachments (dict): Optional dictionary of filenames and their file paths to be attached.
         """
+        from detectflow.validators.validator import Validator
+
         # Create a multipart message and set headers
         message = MIMEMultipart()
         message["From"] = self.sender_email
@@ -219,3 +220,4 @@ class EmailHandler:
             print("Email sent successfully!")
         except Exception as e:
             print(f"An error occurred: {e}")
+

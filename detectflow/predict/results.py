@@ -6,7 +6,6 @@ import numpy as np
 from datetime import datetime, timedelta
 import os
 import cv2
-from detectflow.validators.input_validator import InputValidator
 from detectflow.video.video_inter import VideoFileInteractive
 from detectflow.video.video_passive import VideoFilePassive
 
@@ -243,6 +242,7 @@ class DetectionResults(Results):
         #             # Initialize with arguments for Results
         #             super().__init__(*args, **kwargs)
 
+
         super().__init__(*args, **kwargs)
 
         # Redefine boxes
@@ -258,7 +258,7 @@ class DetectionResults(Results):
         self.roi_number = None if not 'roi_number' in kwargs else kwargs['roi_number']
         self.ref_boxes = None
         self._fil_boxes = None
-        self.source_type = InputValidator.determine_source_type(self.source_path)
+        self.source_type = determine_source_type(self.source_path)
 
         # Init attrributes later populated if property method is called
         self._video_time = None  # Time of the frame in the source video (if source is video) in seconds
@@ -701,5 +701,40 @@ class DetectionResults(Results):
     @source_path.setter
     def source_path(self, new_value: str):
         """Setter for 'source_path' that updates the source_type when 'source_path' is updated."""
+
         self._source_path = new_value
-        self.source_type = InputValidator.determine_source_type(self.source_path)
+        self.source_type = determine_source_type(self.source_path)
+
+
+def determine_source_type(path):
+    if path is None:
+        return "array"
+
+    # Check if the source_path is a URL
+    if is_valid_url(path):
+        return "url"
+
+    # File extension mapping
+    video_formats = ['.mp4', '.avi', '.mov', '.wmv', '.flv']
+    image_formats = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff']
+
+    # Get file extension
+    _, file_extension = os.path.splitext(path.lower())
+
+    # Determine the type based on the extension
+    if file_extension in video_formats:
+        return "video"
+    elif file_extension in image_formats:
+        return "image"
+    else:
+        return "unknown"
+
+def is_valid_url(path):
+
+    import urllib.parse
+
+    try:
+        result = urllib.parse.urlparse(path)
+        return all([result.scheme, result.netloc])
+    except ValueError:
+        return False

@@ -6,7 +6,7 @@ from datetime import timedelta
 import logging
 import traceback
 from detectflow.validators.validator import Validator
-from detectflow.validators.input_validator import InputValidator
+from detectflow.utils.input import validate_flags
 from detectflow.validators.object_detect_validator import ObjectDetectValidator
 from detectflow.utils.sampler import Sampler
 from detectflow.predict.predictor import Predictor
@@ -94,7 +94,7 @@ class VideoDiagnoser():
         if self.output_path and not Validator.is_valid_directory_path(self.output_path):
             raise ValueError(f"Invalid output path: {self.output_path}")
         if self.motion_methods:
-            self.motion_methods = InputValidator.validate_flags(self.motion_methods, self.METHOD_MAP, True)
+            self.motion_methods = validate_flags(self.motion_methods, self.METHOD_MAP, True)
         if not self.flowers_model_path or not Validator.is_valid_file_path(self.flowers_model_path):
             raise ValueError(f"Invalid model weights file path: {self.flowers_model_path}")
 
@@ -348,7 +348,7 @@ class VideoDiagnoser():
         if not self._check_attribute("_motion_data") or motion_methods or rois:
 
             # Use passed argument or the class attribute
-            motion_methods = InputValidator.validate_flags(motion_methods, self.METHOD_MAP,
+            motion_methods = validate_flags(motion_methods, self.METHOD_MAP,
                                                            True) if motion_methods is not None else self.motion_methods
             rois = rois if rois is not None else self.rois
 
