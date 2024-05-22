@@ -155,7 +155,9 @@ class Orchestrator(ConfigHandler):
                 max_workers=self.max_workers,
                 force_restart=self.force_restart,
                 scratch_path=self.scratch_path,
-                user_name=self.user_name
+                user_name=self.user_name,
+                dataloader=None,
+                process_task_callback=None
             )
         except Exception as e:
             logging.error(f"Failed to initialize Orchestrator: {e}")
