@@ -10,7 +10,6 @@ from detectflow.manipulators.s3_manipulator import S3Manipulator
 from detectflow.validators.validator import Validator
 import time
 import re
-import datetime
 from datetime import timedelta, datetime
 from queue import Queue
 import logging
