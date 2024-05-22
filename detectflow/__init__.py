@@ -65,6 +65,3 @@ __all__ = [
 'get_grouped_rois_from_frame', 'get_unique_rois_from_frame', 'get_text_with_OCR', 'extract_time_from_text',
 'install_google_api_key'
 ]
-
-# Optional initialization code
-print(f"DetectFlow version {__version__} by {__author__} initialized.")
