@@ -11,7 +11,7 @@ from detectflow.validators.validator import Validator
 import time
 import re
 import datetime
-from datetime import timedelta
+from datetime import timedelta, datetime
 from queue import Queue
 import logging
 from detectflow.predict.results import DetectionResults
