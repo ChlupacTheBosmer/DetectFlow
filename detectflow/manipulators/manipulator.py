@@ -6,14 +6,9 @@ from typing import List, Optional, Tuple, Union
 from detectflow.validators.validator import Validator
 
 
-class Manipulator:
-    def __init__(self, validator=None):
-
-        # Init the validator if none is passed
-        if validator is None:
-            self.validator = Validator()
-        else:
-            self.validator = validator
+class Manipulator(Validator):
+    def __init__(self):
+        Validator.__init__(self)
 
     # @profile_function_call(logging.getLogger(__name__))
     @staticmethod

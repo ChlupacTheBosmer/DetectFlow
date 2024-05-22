@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 import pandas as pd
 
 class Validator:
@@ -94,6 +95,10 @@ class Validator:
                 continue
 
             expected_type = config_map[key]
+            if isinstance(expected_type, str):
+                # Resolve the type from string if using strong literals
+                expected_type = eval(expected_type, sys.modules[__name__].__dict__)
+
             if not isinstance(value, expected_type):
                 try:
                     if isinstance(expected_type, tuple):

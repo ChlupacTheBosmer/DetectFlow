@@ -4,12 +4,8 @@ from threading import Thread
 import json
 import uuid
 import os
-from detectflow.process.database_manager import DatabaseManager
-from detectflow.validators.s3_validator import S3Validator
-from detectflow.validators.validator import Validator
-from detectflow.manipulators.manipulator import Manipulator
-from detectflow.manipulators.dataloader import Dataloader
 from queue import Queue
+from detectflow.manipulators.dataloader import Dataloader
 from detectflow.utils.threads import profile_threads, manage_threads
 from detectflow.utils.s3.input import validate_and_process_input
 
@@ -69,7 +65,7 @@ class Task:
 
 class Orchestrator:
     CONFIG_MAP = {"scratch_path": str,
-                  "db_manager": DatabaseManager,
+                  "db_manager": "detectflow.DatabaseManager",
                   "frame_batch_size": int,
                   "frame_skip": int,
                   "max_producers": int,
@@ -87,16 +83,14 @@ class Orchestrator:
                  force_restart=False,
                  scratch_path="",
                  user_name="USER",
-                 validator=None,
                  dataloader=None,
-                 cfg_file: str = "/storage/brno2/home/USER/.s3.cfg",
+                 s3_cfg_file: str = "/storage/brno2/home/USER/.s3.cfg",
                  process_task_callback=None,
                  **kwargs):
 
         try:
-            # Start by initializing the validator and dataloader, they should be injected
-            self.validator = validator if validator is not None else S3Validator(cfg_file)
-            self.dataloader = dataloader if dataloader is not None else Dataloader()
+            # Start by initializing dataloader, it should be injected
+            self.dataloader = dataloader or Dataloader(s3_cfg_file)
 
             # Assign attributes
             self.input_data = input_data
@@ -105,13 +99,13 @@ class Orchestrator:
             self.batch_size = batch_size
             self.max_workers = max_workers
             self.force_restart = force_restart
-            self.scratch_path = scratch_path if self.validator.is_valid_directory_path(scratch_path) else ""
+            self.scratch_path = scratch_path if self.dataloader.is_valid_directory_path(scratch_path) else ""
             self.user_name = user_name
             self.fallback_directories = self._generate_fallback_directories()
             self.process_task_callback = process_task_callback
 
             if kwargs:
-                Validator.fix_kwargs(self.CONFIG_MAP, kwargs, False)
+                self.dataloader.fix_kwargs(self.CONFIG_MAP, kwargs, False)
             self.config = kwargs
 
             # Init other attributes
@@ -202,9 +196,7 @@ class Orchestrator:
     def _create_new_checkpoint(self):
         try:
             # Attempt to validate and process input data
-            directories, input_flags = validate_and_process_input(self.input_data)
-
-            print(directories)
+            directories, input_flags = validate_and_process_input(self.input_data, self.dataloader)
 
             # Prepare initial data for the checkpoint
             self.checkpoint_data = {
@@ -212,7 +204,7 @@ class Orchestrator:
                 'input_type_flags': input_flags,
                 'batch_size': self.batch_size,
                 'max_workers': self.max_workers,
-                'tasks': [{'directory': dir, 'status': self._prepare_initial_status(dir, input_flags)} for dir in
+                'tasks': [{'directory': directory, 'status': self._prepare_initial_status(directory, input_flags)} for directory in
                           directories],
                 'progress': {}
             }
@@ -233,11 +225,11 @@ class Orchestrator:
                 raise ValueError("Error during input data processing - 'None' type")
 
             if input_flags[0]:  # S3 bucket, directory
-                bucket, prefix = self.validator._parse_s3_path(directory)
+                bucket, prefix = self.dataloader._parse_s3_path(directory)
                 file_list = self.dataloader.list_files_s3(bucket, prefix, regex=r"^(?!.*^\.).*(?<=\.mp4|\.avi|\.mkv)$",
                                                           return_full_path=True)
             elif input_flags[2]:  # Local directory
-                file_list = Manipulator.list_files(directory, regex=r"^(?!.*^\.).*(?<=\.mp4|\.avi|\.mkv)$",
+                file_list = self.dataloader.list_files(directory, regex=r"^(?!.*^\.).*(?<=\.mp4|\.avi|\.mkv)$",
                                                    return_full_path=True)
             elif input_flags[1] or input_flags[3]:  # S3 file or local file
                 file_list = [directory]  # If it's a file, we typically just return a list containing it.
@@ -286,7 +278,7 @@ class Orchestrator:
             self.task_queue.put(None)
 
         # Wait for all tasks to be completed
-        # self.task_queue.join() #TODO: Is queue a thread? Shouldn't the wokrers be joined rather than the queue?
+        # self.task_queue.join() #TODO: Is queue a thread? Shouldn't the workers be joined rather than the queue?
         for thread in self.threads:
             thread.join()
 

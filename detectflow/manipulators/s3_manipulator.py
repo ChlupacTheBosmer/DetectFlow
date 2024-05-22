@@ -7,17 +7,14 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Optional, Tuple, Union
 import time
-from detectflow.validators.validator import Validator
+from detectflow.validators.s3_validator import S3Validator
 
 
-class S3Manipulator:
-    def __init__(self, cfg_file: str = "/storage/brno2/home/USER/.s3.cfg", validator=None):
+class S3Manipulator(S3Validator):
+    def __init__(self, cfg_file: str = "/storage/brno2/home/USER/.s3.cfg"):
 
-        # Init the validator if none is passed
-        if validator is None:
-            self.validator = Validator()
-        else:
-            self.validator = validator
+        # Run the init method of S3Validator parent class
+        S3Validator.__init__(self, cfg_file)
 
         self.endpoint_url, self.aws_access_key_id, self.aws_secret_access_key = self.parse_s3_config(cfg_file)
         region_name = 'eu-west-2'
@@ -340,7 +337,7 @@ class S3Manipulator:
         if not directory_path.endswith('/'):
             directory_path += '/'
         try:
-            if not self.validator.is_s3_directory(f"s3://{bucket_name}/{directory_path}"):
+            if not self.is_s3_directory(f"s3://{bucket_name}/{directory_path}"):
                 # Creating a placeholder object for the directory
                 self.s3_client.put_object(Bucket=bucket_name, Key=directory_path)
                 logging.info(f"Directory '{directory_path}' created in bucket '{bucket_name}'.")
@@ -358,7 +355,7 @@ class S3Manipulator:
         :param bucket_name: Name of the S3 bucket.
         """
         # Check if the bucket exists
-        if not self.validator.is_s3_bucket(bucket_name):
+        if not self.is_s3_bucket(bucket_name):
             logging.info(f"Bucket '{bucket_name}' does not exist, creating it.")
             self.create_directory_s3(bucket_name, '')  # Create the bucket as a directory placeholder
         else:

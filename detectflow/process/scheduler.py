@@ -7,12 +7,11 @@ import subprocess
 import json
 import logging
 from typing import List, Tuple, Union, Optional, Dict
-from detectflow.handlers.config_handler import ConfigHandler
+
 from detectflow.manipulators.manipulator import Manipulator
 from detectflow.manipulators.s3_manipulator import S3Manipulator
-from detectflow.validators.s3_validator import S3Validator
-from detectflow.validators.validator import Validator
 from detectflow.manipulators.database_manipulator import DatabaseManipulator
+from detectflow.handlers.config_handler import ConfigHandler
 from detectflow.handlers.job_handler import JobHandler
 from detectflow.handlers.ssh_handler import SSHHandler
 
@@ -63,10 +62,9 @@ class Scheduler(ConfigHandler):
 
         # Init the manipulator and validator
         s3_manipulator = S3Manipulator()
-        s3_validator = S3Validator()
 
         # Validate bucket
-        if not s3_validator.is_s3_bucket(self.bucket_name):
+        if not s3_manipulator.is_s3_bucket(self.bucket_name):
             raise ValueError(f"{self.bucket_name} is not a valid S3 bucket.")
 
         # Get the s3 paths to directories for the jobs
@@ -118,7 +116,7 @@ class Scheduler(ConfigHandler):
         self.username = username
         self.remote_host = remote_host
 
-        if Validator.is_valid_regex(directory_filter):
+        if Manipulator.is_valid_regex(directory_filter):
             self.directory_filter = directory_filter
         else:
             raise ValueError(f"Invalid regex pattern: {directory_filter}")

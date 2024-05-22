@@ -1,14 +1,13 @@
 import sqlite3
 from sqlite3 import Error
 import csv
-from detectflow.manipulators.manipulator import Manipulator
-from detectflow.validators.validator import Validator
 import os
 import threading
 import traceback
 import time
-from detectflow.utils.hash import get_numeric_hash
 import logging
+from detectflow.utils.hash import get_numeric_hash
+from detectflow.manipulators.manipulator import Manipulator
 
 
 class DatabaseManipulator:
@@ -321,7 +320,7 @@ class DatabaseManipulator:
         dumps_folder = "dumps"
         try:
             # Check if the dumps folder exists
-            if not Validator.is_valid_directory_path(dumps_folder):
+            if not Manipulator.is_valid_directory_path(dumps_folder):
                 print(f"No dumps folder found in the current directory.")
                 return
 
