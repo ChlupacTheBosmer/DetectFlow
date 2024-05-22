@@ -18,7 +18,7 @@ class Tracker:
     def _load_trackers(self):
         try:
             tracker = check_yaml(self.tracker_type)
-            cfg = IterableSimpleNamespace(**yaml_load(self.tracker_type))
+            cfg = IterableSimpleNamespace(**yaml_load(tracker))
 
             if cfg.tracker_type not in ['bytetrack', 'botsort']:
                 raise ValueError(f"Unsupported tracker type: '{cfg.tracker_type}'")
