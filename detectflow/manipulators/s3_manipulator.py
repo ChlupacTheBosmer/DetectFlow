@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Optional, Tuple, Union
 import time
 from detectflow.validators.validator import Validator
-from dateutil.tz import tzutc
+
 
 class S3Manipulator:
     def __init__(self, cfg_file: str = "/storage/brno2/home/USER/.s3.cfg", validator=None):
@@ -523,7 +523,7 @@ class S3Manipulator:
             logging.error(f"Error occurred while syncing directory to S3: {e}")
             raise
 
-    def _is_file_modified(self, local_path: str, bucket_name: str, s3_file_path: str): #TODO: Fix the tzutc reference
+    def _is_file_modified(self, local_path: str, bucket_name: str, s3_file_path: str): # DONE: Fix the tzutc reference
         """
         Check if a local file is modified compared to its version in S3.
 
@@ -532,6 +532,8 @@ class S3Manipulator:
         :param s3_file_path: Path of the file in S3.
         :return: True if local file is modified, False otherwise.
         """
+        from dateutil.tz import tzutc
+
         try:
             local_modified_time = os.path.getmtime(local_path)
             response = self.s3_client.head_object(Bucket=bucket_name, Key=s3_file_path)
