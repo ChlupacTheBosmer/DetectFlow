@@ -138,6 +138,12 @@ class Orchestrator(ConfigHandler):
             self.fallback_directories = self._generate_fallback_directories()
             self.process_task_callback = self.config.get('process_task_callback', None) if not kwargs.get('process_task_callback', None) else kwargs.get('process_task_callback', None)
 
+            # Pack the callback config rewriting values loaded from config file
+            if kwargs:
+                for key, value in kwargs.items():
+                    if key not in self.CONFIG_MAP:
+                        self.callback_config[key] = value
+
             # Init other attributes
             self.task_queue = Queue()
             self.checkpoint_file = os.path.join(self.checkpoint_dir, f"{self.task_name}.json")
