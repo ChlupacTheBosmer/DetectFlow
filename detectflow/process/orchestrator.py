@@ -1,13 +1,16 @@
 import logging
-import queue
 from threading import Thread
 import json
+import sys
 import uuid
 import os
 from queue import Queue
+from typing import Dict, Optional
+from detectflow.handlers.config_handler import ConfigHandler
 from detectflow.manipulators.dataloader import Dataloader
 from detectflow.utils.threads import profile_threads, manage_threads
 from detectflow.utils.s3.input import validate_and_process_input
+
 
 class Task:
     def __init__(self, directory: str, video_files: list, status: dict):
@@ -63,58 +66,97 @@ class Task:
         return f"Task(directory={self.directory}, video_files={self._video_files}, status={self._status})"
 
 
-class Orchestrator:
-    CONFIG_MAP = {"scratch_path": str,
-                  "db_manager": "detectflow.DatabaseManager",
-                  "frame_batch_size": int,
-                  "frame_skip": int,
-                  "max_producers": int,
-                  "db_queue": Queue,
-                  "model_config": dict,
-                  "crop_imgs": bool,
-                  "inspect": bool}
+class Orchestrator(ConfigHandler):
+    """
+        Args:
+        - config_path (str): Path to the config file. If it does not exist defaults will be used for config.
+                            Manually adjusted config can be saved with save_config method.
+        - format (str): Format of the config file ('json' or 'ini').
+        - defaults Optional(dict): Dictionary of the default values used in case of no config file.
+                                - When no defaults are provided then defaults from the DEFAULT_CONFIG map are used
+                                  to fill in the missing keys in config.
+                                - If defaults are provided than those custom defaults are used to fill in the
+                                  missing keys in config.
+        - kwargs: They override the settings loaded from the config file.
+
+    """
+
+    CONFIG_MAP = {
+        "input_data": (str, list, tuple),
+        "checkpoint_dir": (str, type(None)),
+        "task_name": (str, type(None)),
+        "batch_size": int,
+        "max_workers": int,
+        "force_restart": bool,
+        "scratch_path": str,
+        "user_name": str,
+        "dataloader": None,
+        "process_task_callback": None,
+    }
+
+    CONFIG_DEFAULTS = {
+        "input_data": None,
+        "checkpoint_dir": None,
+        "task_name": None,
+        "batch_size": 3,
+        "max_workers": 3,
+        "force_restart": False,
+        "scratch_path": "",
+        "user_name": "USER",
+        "dataloader": None,
+        "process_task_callback": None
+    }
 
     def __init__(self,
-                 input_data,
-                 checkpoint_dir=None,
-                 task_name=None,
-                 batch_size=3,
-                 max_workers=3,  # WATCH OUT - same name also in the callabck!! WIll be a problem in config loading
-                 force_restart=False,
-                 scratch_path="",
-                 user_name="USER",
-                 dataloader=None,
-                 s3_cfg_file: str = "/storage/brno2/home/USER/.s3.cfg",
-                 process_task_callback=None,
+                 config_path: Optional[str] = None,
+                 config_format: str = "json",
+                 config_defaults: Optional[Dict] = None,
                  **kwargs):
+
+        if not config_defaults:
+            config_defaults = self.CONFIG_DEFAULTS
+
+        self.callback_config = {}
+
+        super().__init__(config_path, config_format, config_defaults)
 
         try:
             # Start by initializing dataloader, it should be injected
-            self.dataloader = dataloader or Dataloader(s3_cfg_file)
+            dataloader = self.config.get('dataloader', None) if not kwargs.get('dataloader', None) else kwargs.get('dataloader', None)
+            self.dataloader = dataloader or Dataloader()
 
             # Assign attributes
-            self.input_data = input_data
-            self.checkpoint_dir = checkpoint_dir or os.getcwd()  # Default to current working directory
-            self.task_name = task_name or str(uuid.uuid4())
-            self.batch_size = batch_size
-            self.max_workers = max_workers
-            self.force_restart = force_restart
+            self.input_data = self.config.get('input_data', None) if not kwargs.get('input_data', None) else kwargs.get('input_data', None)
+            self.checkpoint_dir = self.config.get('checkpoint_dir', os.getcwd()) if not kwargs.get('checkpoint_dir', None) else kwargs.get('checkpoint_dir', None)
+            self.task_name = self.config.get('task_name', str(uuid.uuid4())) if not kwargs.get('task_name', None) else kwargs.get('task_name', None)
+            self.batch_size = self.config.get('batch_size', 3) if not kwargs.get('batch_size', None) else kwargs.get('batch_size', None)
+            self.max_workers = self.config.get('max_workers', 3) if not kwargs.get('max_workers', None) else kwargs.get('max_workers', None)
+            self.force_restart = self.config.get('force_restart', False) if not kwargs.get('force_restart', None) else kwargs.get('force_restart', None)
+            scratch_path = self.config.get('scratch_path', "") if not kwargs.get('scratch_path', None) else kwargs.get('scratch_path', None)
             self.scratch_path = scratch_path if self.dataloader.is_valid_directory_path(scratch_path) else ""
-            self.user_name = user_name
+            self.user_name = self.config.get('user_name', None) if not kwargs.get('user_name', None) else kwargs.get('user_name', None)
             self.fallback_directories = self._generate_fallback_directories()
-            self.process_task_callback = process_task_callback
-
-            if kwargs:
-                self.dataloader.fix_kwargs(self.CONFIG_MAP, kwargs, False)
-            self.config = kwargs
+            self.process_task_callback = self.config.get('process_task_callback', None) if not kwargs.get('process_task_callback', None) else kwargs.get('process_task_callback', None)
 
             # Init other attributes
-            self.task_queue = queue.Queue()
+            self.task_queue = Queue()
             self.checkpoint_file = os.path.join(self.checkpoint_dir, f"{self.task_name}.json")
             self._setup_logging()
             self.checkpoint_data = None
             self._initialize_checkpoint()
             self.threads = []
+
+            # Update the config by the values of the atr in case custom values were passed. Saving config would save the custom configuration.
+            self.pack_config(
+                input_data=self.input_data,
+                checkpoint_dir=self.checkpoint_dir,
+                task_name=self.task_name,
+                batch_size=self.batch_size,
+                max_workers=self.max_workers,
+                force_restart=self.force_restart,
+                scratch_path=self.scratch_path,
+                user_name=self.user_name
+            )
         except Exception as e:
             logging.error(f"Failed to initialize Orchestrator: {e}")
             raise
@@ -127,6 +169,31 @@ class Orchestrator:
             f'/storage/brno1-cerit/home/{self.user_name}/',
             self.scratch_path
         ]
+
+    def validate_config(self):
+        """
+        Validate config. Checks if all required keys are present.
+        """
+        required_keys = self.CONFIG_MAP  # Keys and their expected data types
+
+        for key, type_ in required_keys.items():
+            if key not in self.config:
+                raise KeyError(f"Missing required configuration key: {key}")
+            if type_ is None:
+                continue
+            if isinstance(type_, str):
+                # Resolve the type from string when using strong literals for specifying type
+                type_ = eval(type_, sys.modules[__name__].__dict__)
+            if isinstance(type_, (tuple, list)):
+                if not any([isinstance(self.config[key], t) for t in type_]):
+                    raise TypeError(f"Expected types {type_} for key '{key}', got {type(self.config[key])}")
+            if not isinstance(self.config[key], type_):
+                raise TypeError(f"Expected type {type_} for key '{key}', got {type(self.config[key])}")
+
+        # Sort out config keys that are supposed to be passed into the callback
+        for key, value in self.config.items():
+            if key not in required_keys:
+                self.callback_config[key] = value
 
     def _setup_logging(self):
         # Initialize the logger attribute
@@ -254,15 +321,15 @@ class Orchestrator:
 
     def _attempt_fallback_checkpoint_write(self):
         # Attempt to save to fallback dirs
-        for dir in self.fallback_directories:
-            fallback_file = os.path.join(dir, f"{self.task_name}.json")
+        for directory in self.fallback_directories:
+            fallback_file = os.path.join(directory, f"{self.task_name}.json")
             try:
                 with open(fallback_file, 'w') as file:
                     json.dump(self.checkpoint_data, file, indent=4)
                     logging.info(f"Checkpoint successfully written to fallback location: {fallback_file}")
                     return
             except Exception as e:
-                logging.error(f"Failed to write checkpoint to fallback location {dir}: {e}")
+                logging.error(f"Failed to write checkpoint to fallback location {directory}: {e}")
 
         logging.critical("All attempts to write checkpoint failed. Progress may be lost.")
 
@@ -286,6 +353,7 @@ class Orchestrator:
         profile_threads()
 
     def _manage_tasks(self):
+        directory = None
         for task in self.checkpoint_data.get('tasks', []):
             try:
                 directory = task.get('directory')
@@ -350,6 +418,7 @@ class Orchestrator:
             logging.error(f"Error updating task progress for {file} in {directory}: {e}")
 
     def handle_worker_update(self, update_info):
+        file, directory = None, None
         try:
             # Validate update_info format
             if not all(key in update_info for key in ['directory', 'file', 'status']):
@@ -415,7 +484,7 @@ class Orchestrator:
                     name=name,
                     scratch_path=self.scratch_path,
                     max_workers=self.max_workers,
-                    **self.config  # TODO: Rename config after implementing the ocnfig funcionality
+                    **self.callback_config  # DONE: Rename config after implementing the ocnfig funcionality
                 )
             except Exception as callback_exc:
                 logging.error(f"{name} - Error during processing callback in orchestrator process task: {callback_exc}")
