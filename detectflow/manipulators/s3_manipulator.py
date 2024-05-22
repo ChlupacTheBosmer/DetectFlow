@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Optional, Tuple, Union
 import time
 from detectflow.validators.s3_validator import S3Validator
+from detectflow.utils.s3.cfg import parse_s3_config
 
 
 class S3Manipulator(S3Validator):
@@ -16,7 +17,7 @@ class S3Manipulator(S3Validator):
         # Run the init method of S3Validator parent class
         S3Validator.__init__(self, cfg_file)
 
-        self.endpoint_url, self.aws_access_key_id, self.aws_secret_access_key = self.parse_s3_config(cfg_file)
+        self.endpoint_url, self.aws_access_key_id, self.aws_secret_access_key = parse_s3_config(cfg_file)
         region_name = 'eu-west-2'
 
         # Initialize the S3 client
@@ -27,32 +28,6 @@ class S3Manipulator(S3Validator):
             aws_secret_access_key=self.aws_secret_access_key,
             region_name=region_name
         )
-
-    @staticmethod
-    def parse_s3_config(cfg_file):
-        """
-        Parse the .cfg file to get S3 configuration details.
-
-        :param cfg_file: Path to the .cfg file.
-        :return: A tuple of endpoint_url, aws_access_key_id, and aws_secret_access_key.
-        """
-
-        # Validate filepath
-        if os.path.isfile(cfg_file):
-
-            # Init and load config
-            config = configparser.ConfigParser()
-            with open(cfg_file, "r") as cfg_file_obj:  # Open the file in text mode
-                config.read_file(cfg_file_obj)
-
-            # Retrieve values
-            endpoint_url = config.get('default', 'host_base')
-            access_key = config.get('default', 'access_key')
-            secret_key = config.get('default', 'secret_key')
-
-            return endpoint_url, access_key, secret_key
-        else:
-            return None, None, None
 
     def list_files_s3(self, bucket_name: str, folder_name: str, regex: str = None, return_full_path: bool = True) -> \
     List[str]:
