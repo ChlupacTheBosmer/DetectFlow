@@ -82,7 +82,7 @@ class Orchestrator(ConfigHandler):
     """
 
     CONFIG_MAP = {
-        "input_data": (str, list, tuple),
+        "input_data": (str, list, tuple, type(None)),
         "checkpoint_dir": (str, type(None)),
         "task_name": (str, type(None)),
         "batch_size": int,
@@ -90,8 +90,8 @@ class Orchestrator(ConfigHandler):
         "force_restart": bool,
         "scratch_path": str,
         "user_name": str,
-        "dataloader": None,
-        "process_task_callback": None,
+        "dataloader": type(None),
+        "process_task_callback": type(None),
     }
 
     CONFIG_DEFAULTS = {
