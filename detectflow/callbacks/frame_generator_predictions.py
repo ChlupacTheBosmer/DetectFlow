@@ -143,7 +143,7 @@ def test_callback(**kwargs): #TODO: Rename the callback function
                                                                                                              'conf']))):
 
             if inspect:
-                Inspector.display_frames_with_boxes([result], [result.boxes])
+                Inspector.display_frames_with_boxes([result.orig_img], [result.boxes])
 
             # Predictor Performs tracking on the result
             try:
