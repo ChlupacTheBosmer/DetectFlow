@@ -257,7 +257,7 @@ class DatabaseManager:
             all_visitor_bboxes = result.boxes.to_list() if result.boxes is not None else None
             relevant_visitor_bboxes = result.fil_boxes.to_list() if result.fil_boxes is not None else None
             visit_ids = result.boxes.id.to_list() if result.boxes is not None and result.boxes.id is not None else None
-            on_flower = result.on_flowers.to_list()
+            on_flower = result.on_flowers
 
             # I dont remember
             rois = ""
