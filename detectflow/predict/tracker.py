@@ -43,7 +43,7 @@ class Tracker:
         Args:
             detection_results: (list, optional): List of DetectionResults objects with detections. Also contains frames in attr
             batch_size: (int): Currently this is number of repeated runs of the tracker. NotImplemented.
-            persist (bool, optional): Whether to persist the tracker if it already exists. Defaults to False.
+            persist (bool, optional): Whether to persist the tracker if it already exists. Defaults to True.
         """
 
         if isinstance(detection_results, DetectionResults):
@@ -56,10 +56,9 @@ class Tracker:
 
         updated_detections = []
         try:
-            for i in range(
-                    batch_size):  # TODO: If you want to support more than one batch you need to ensure iteration over different sources
+            for i in range(batch_size):  # TODO: If you want to support more than one batch you need to ensure iteration over different sources
                 for detection_result in detection_results:
-                    if (not persist):
+                    if not persist:
                         self.trackers[i].reset()
                     else:
                         if detection_result is None or detection_result.boxes is None:  # Check for None values
@@ -74,7 +73,7 @@ class Tracker:
                             continue
 
                     # print(detection_result.orig_img)
-                    tracks = self.trackers[i].update(detection, detection_result.orig_img)
+                    tracks = self.trackers[i].update(detection, detection_result.orig_img) # TODO: Should be more robust to make sure dtection is defined
 
                     if len(tracks) == 0:
                         print("No tracks")

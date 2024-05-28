@@ -145,7 +145,11 @@ def test_callback(**kwargs): #TODO: Rename the callback function
             if inspect:
                 Inspector.display_frames_with_boxes([result], [result.boxes])
 
-            tracked_result = tracker.process_tracking(result)[0]
+            # Predictor Performs tracking on the result
+            try:
+                result = tracker.process_tracking(result)[0]
+            except Exception as e:
+                logging.error(f"Error in tracking: {e}")
 
             # Add attributes
             result._real_start_time = video_start_time
