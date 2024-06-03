@@ -150,8 +150,8 @@ class VideoDownloader:
 
             logging.info(f"Downloading video: {video_path} to {destination_path}")
 
-            # Placeholder for actual download logic
-            self.manipulator.download_file_s3(bucket_name=bucket, file_name=video_path,
+            # Download logic
+            self.manipulator.download_file_s3(bucket_name=bucket, file_name=self.manipulator._parse_s3_path(video_path)[1],
                                               local_file_name=destination_path)
 
             callback_result = None
