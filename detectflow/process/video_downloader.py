@@ -167,7 +167,7 @@ class VideoDownloader:
 
             yield (destination_path, callback_result)
 
-    def download_videos_ordered(self, batch_size: int = 5):
+    def download_videos_ordered(self):
         checkpoint = self._read_checkpoint()
         buckets = self._filter_buckets(self.manipulator.list_buckets_s3())
         logging.info(f"Processing buckets: {buckets}")
@@ -193,7 +193,7 @@ class VideoDownloader:
 
         self._remove_checkpoint()
 
-    def download_videos_random(self, batch_size: int = 5):
+    def download_videos_random(self, sample_size: int = 5):
         checkpoint = self._read_checkpoint()
         buckets = self._filter_buckets(self.manipulator.list_buckets_s3())
         logging.info(f"Processing buckets: {buckets}")
@@ -207,10 +207,10 @@ class VideoDownloader:
                     # print(video_files)
                     available_videos = [v for v in video_files if
                                         os.path.basename(v) not in checkpoint.get("downloaded_videos", [])]
-                    if len(available_videos) < batch_size:
+                    if len(available_videos) < sample_size:
                         logging.warning(f"Not enough new videos in {directory}, found only {len(available_videos)}")
                         continue
-                    selected_videos = random.sample(available_videos, batch_size)
+                    selected_videos = random.sample(available_videos, sample_size)
                     for destination_path, callback_result in self._download_videos(bucket, directory, selected_videos):
                         logging.info(
                             f"Processed {destination_path} with callback result: {None if callback_result is None else 'OK'}")
