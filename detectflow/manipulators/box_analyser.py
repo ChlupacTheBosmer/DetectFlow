@@ -142,6 +142,36 @@ class BoxAnalyser:
         return iou
 
     @staticmethod
+    def is_close(box1, box2, threshold=20):
+        """
+        Check if two bounding boxes are close based on distance of centers.
+
+        Args:
+        - box1 (tuple, list, np.ndarray): Bounding box in xyxy format.
+        - box2 (tuple, list, np.ndarray): Bounding box in xyxy format.
+        - threshold (float): Maximum distance between centers for boxes to be considered close.
+        Returns:
+        - bool: True if the boxes are close, False otherwise.
+        """
+        center1 = BoxAnalyser.box_center(box1)
+        center2 = BoxAnalyser.box_center(box2)
+        distance = np.linalg.norm(np.array(center1) - np.array(center2))
+        return distance < threshold
+
+    @staticmethod
+    def is_contained(box1, box2):
+        """
+        Check if box1 is contained within box2.
+
+        Args:
+        - box1 (tuple, list, np.ndarray): Bounding box in xyxy format.
+        - box2 (tuple, list, np.ndarray): Bounding box in xyxy format.
+        Returns:
+        - bool: True if the boxes are close, False otherwise.
+        """
+        return box1[0] >= box2[0] and box1[1] >= box2[1] and box1[2] <= box2[2] and box1[3] <= box2[3]
+
+    @staticmethod
     def find_consistent_boxes(detection_results: list, iou_threshold=0.5, min_frames=3):
         """ Find boxes that appear consistently across frames. """
         consistent_results = []

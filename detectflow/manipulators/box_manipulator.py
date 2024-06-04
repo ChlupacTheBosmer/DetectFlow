@@ -6,7 +6,71 @@ from itertools import permutations
 from scipy.spatial.distance import euclidean
 from typing import List, Tuple
 from detectflow.predict.results import DetectionResults, DetectionBoxes
-from typing import Union
+from detectflow.manipulators.box_analyser import BoxAnalyser
+from typing import Union, Callable
+
+
+def boxes_max_distance(box1, box2):
+    """
+    Calculate the distance from the center of a bounding box (bbox1) to the furthest point of another bounding box (bbox2).
+    Can be used as metric for analyse_clusters method of BoxManipulator.
+
+    Args:
+    - bbox1 (np.ndarray): Array of the first bounding box.
+    - bbox2 (np.ndarray): Array of the second bounding box.
+
+    Returns:
+    - float: Distance from the center of bbox1 to the furthest point of bbox2.
+    """
+
+    if not (isinstance(box1, np.ndarray) and isinstance(box2, np.ndarray)):
+        raise TypeError(f"Expected np.ndarray instances, got {type(box1)} and {type(box2)}")
+
+    # Calculate the centers and dimensions
+    x1_center, y1_center = (box1[0] + box1[2]) / 2, (box1[1] + box1[3]) / 2
+    x2_center, y2_center = (box2[0] + box2[2]) / 2, (box2[1] + box2[3]) / 2
+    width2, height2 = box2[2] - box2[0], box2[3] - box2[1]
+
+    # Calculate the corners of the second bbox
+    x2_min = x2_center - width2 / 2
+    x2_max = x2_center + width2 / 2
+    y2_min = y2_center - height2 / 2
+    y2_max = y2_center + height2 / 2
+
+    # Calculate distances from bbox1 center to bbox2 corners
+    distances = [
+        distance.euclidean((x1_center, y1_center), (x2_min, y2_min)),
+        distance.euclidean((x1_center, y1_center), (x2_max, y2_min)),
+        distance.euclidean((x1_center, y1_center), (x2_min, y2_max)),
+        distance.euclidean((x1_center, y1_center), (x2_max, y2_max))
+    ]
+
+    # Return the maximum distance
+    return max(distances)
+
+
+def boxes_centers_distance(box1, box2):
+    """
+    Calculate the distance from the center of a bounding box (bbox1) to the center of another bounding box (bbox2).
+    Can be used as metric for analyse_clusters method of BoxManipulator.
+
+    Args:
+    - bbox1 (np.ndarray): Array of the first bounding box.
+    - bbox2 (np.ndarray): Array of the second bounding box.
+
+    Returns:
+    - float: Distance from the center of bbox1 to the center of bbox2.
+    """
+
+    if not (isinstance(box1, np.ndarray) and isinstance(box2, np.ndarray)):
+        raise TypeError(f"Expected np.ndarray instances, got {type(box1)} and {type(box2)}")
+
+    # Calculate the centers
+    x1_center, y1_center = BoxAnalyser.box_center(box1)
+    x2_center, y2_center = BoxAnalyser.box_center(box2)
+
+    # Calculate the Euclidean distance between the centers
+    return distance.euclidean((x1_center, y1_center), (x2_center, y2_center))
 
 
 class BoxManipulator:
@@ -478,7 +542,10 @@ class BoxManipulator:
     #         return True, (x_min, y_min, x_max, y_max)
 
     @staticmethod
-    def analyze_clusters(detection_boxes, eps=30, min_samples=1):
+    def analyze_clusters(detection_boxes: Union[DetectionBoxes, np.ndarray],
+                         eps: int = 30,
+                         min_samples: int = 1,
+                         metric: Callable = boxes_max_distance):
         """
         Analyze clusters using DBSCAN with a custom metric.
 
@@ -486,89 +553,57 @@ class BoxManipulator:
         - detection_boxes (DetectionBoxes): An instance of DetectionBoxes containing bounding boxes.
         - eps (int): The maximum distance between two samples for one to be considered as in the neighborhood of the other.
         - min_samples (int): The number of samples in a neighborhood for a point to be considered as a core point.
+        - metric (function): A custom metric function to calculate the distance between two bounding boxes.
 
         Returns:
-        - Tuple[DetectionBoxes, dict]: A DetectionBoxes instance with boxes around each cluster,
-          and a dictionary with cluster labels as keys and DetectionBoxes instances of boxes belonging to each cluster.
+        - Tuple[DetectionBoxes or np.ndarray, dict]: A DetectionBoxes instance or a np.ndarray with boxes around each cluster,
+          and a dictionary with cluster labels as keys and DetectionBoxes instances or np.ndarrays of boxes belonging to each cluster.
         """
-        if not isinstance(detection_boxes, DetectionBoxes):
+
+        if isinstance(detection_boxes, DetectionBoxes):
+            return_detection_boxes = True
+            try:
+                bboxes = detection_boxes.xyxy
+            except AttributeError:
+                raise AttributeError("DetectionBoxes instance does not have the expected 'xyxy' attribute.")
+        elif isinstance(detection_boxes, np.ndarray):
+            return_detection_boxes = False
+            bboxes = detection_boxes
+        else:
             raise TypeError(f"Expected a DetectionBoxes instance, got {type(detection_boxes)} instead")
 
-        try:
-            bboxes = detection_boxes.xyxy
-        except AttributeError:
-            raise AttributeError("DetectionBoxes instance does not have the expected 'xyxy' attribute.")
-
-        def custom_metric(bbox1, bbox2):
-            return BoxManipulator.bbox_cluster_metric(bbox1, bbox2)
-
-        clustering = DBSCAN(eps=eps, min_samples=min_samples, metric=custom_metric).fit(bboxes)
+        clustering = DBSCAN(eps=eps, min_samples=min_samples, metric=metric).fit(bboxes)
         labels = clustering.labels_
 
         cluster_dict = {}
 
-        # If no clusters could be found even though thereare boxes, which happens when boxes are to large to fit
-        # the eps requirement even on their own create a dictionary with clusters being the boxes.
+        # If no clusters could be found even though there are boxes (happens when boxes are too large to meet
+        # the eps requirement as individual boxes) then create a dictionary with clusters being the boxes.
         if np.all(np.array(labels) == -1):
             for i, box in enumerate(bboxes):
-                cluster_dict[i] = DetectionBoxes(box, detection_boxes.orig_shape, 'xyxy')
+                cluster_dict[i] = DetectionBoxes(box, detection_boxes.orig_shape, 'xyxy') if return_detection_boxes else box
 
         for label in np.unique(labels):
             if label == -1:
                 continue  # Ignore noise
             cluster_bboxes = bboxes[labels == label]
-            cluster_dict[label] = DetectionBoxes(cluster_bboxes, detection_boxes.orig_shape, 'xyxy')
+            cluster_dict[label] = DetectionBoxes(cluster_bboxes, detection_boxes.orig_shape, 'xyxy') if return_detection_boxes else cluster_bboxes
 
         # Create bounding boxes for each cluster
         cluster_boxes = []
         for cluster_label, cluster_detection_boxes in cluster_dict.items():
-            cluster_bboxes = cluster_detection_boxes.xyxy
+            cluster_bboxes = cluster_detection_boxes.xyxy if isinstance(cluster_detection_boxes, DetectionBoxes) else cluster_detection_boxes
             x_min, y_min = np.min(cluster_bboxes[:, :2], axis=0)
             x_max, y_max = np.max(cluster_bboxes[:, 2:4], axis=0)
             cluster_boxes.append([x_min, y_min, x_max, y_max])
-        cluster_detection_boxes = DetectionBoxes(np.array(cluster_boxes), detection_boxes.orig_shape, 'xyxy') if len(
-            cluster_boxes) > 0 else None
+        if not len(cluster_boxes) > 0:
+            cluster_detection_boxes = None
+        elif return_detection_boxes:
+            cluster_detection_boxes = DetectionBoxes(np.array(cluster_boxes), detection_boxes.orig_shape, 'xyxy')
+        else:
+            cluster_detection_boxes = np.array(cluster_boxes)
 
         return cluster_detection_boxes, cluster_dict
-
-    @staticmethod
-    def bbox_cluster_metric(bbox1, bbox2):
-        """
-        Calculate the distance from the center of a bounding box (bbox1) to the furthest point of another bounding box (bbox2).
-        Both bounding boxes are obtained from DetectionBoxes instances.
-
-        Args:
-        - detection_boxes1 (DetectionBoxes): An instance of DetectionBoxes for the first bounding box.
-        - detection_boxes2 (DetectionBoxes): An instance of DetectionBoxes for the second bounding box.
-
-        Returns:
-        - float: Distance from the center of bbox1 to the furthest point of bbox2.
-        """
-
-        if not (isinstance(bbox1, np.ndarray) and isinstance(bbox2, np.ndarray)):
-            raise TypeError(f"Expected np.ndarray instances, got {type(bbox1)} and {type(bbox2)}")
-
-        # Calculate the centers and dimensions
-        x1_center, y1_center = (bbox1[0] + bbox1[2]) / 2, (bbox1[1] + bbox1[3]) / 2
-        x2_center, y2_center = (bbox2[0] + bbox2[2]) / 2, (bbox2[1] + bbox2[3]) / 2
-        width2, height2 = bbox2[2] - bbox2[0], bbox2[3] - bbox2[1]
-
-        # Calculate the corners of the second bbox
-        x2_min = x2_center - width2 / 2
-        x2_max = x2_center + width2 / 2
-        y2_min = y2_center - height2 / 2
-        y2_max = y2_center + height2 / 2
-
-        # Calculate distances from bbox1 center to bbox2 corners
-        distances = [
-            distance.euclidean((x1_center, y1_center), (x2_min, y2_min)),
-            distance.euclidean((x1_center, y1_center), (x2_max, y2_min)),
-            distance.euclidean((x1_center, y1_center), (x2_min, y2_max)),
-            distance.euclidean((x1_center, y1_center), (x2_max, y2_max))
-        ]
-
-        # Return the maximum distance
-        return max(distances)
 
     @staticmethod
     def is_overlap(box1, box2, overlap_threshold=0):
@@ -804,3 +839,61 @@ class BoxManipulator:
             return boxes_coco[0]
         else:
             return boxes_coco
+
+    @staticmethod
+    def combine_boxes(box1: Union[Tuple, List, np.ndarray], box2: Union[Tuple, List, np.ndarray]):
+        """
+        Combine two bounding boxes into a single bounding box that encompasses both.
+        The boxes must be in the format (x_min, y_min, x_max, y_max, [cls, prob, id]).
+
+        Parameters:
+        box1 (np.ndarray): The first bounding box.
+        box2 (np.ndarray): The second bounding box.
+
+        Returns:
+        np.ndarray: A bounding box that encompasses both input boxes.
+        """
+
+        # Extract bounding box dimensions
+        x_min1, y_min1, x_max1, y_max1 = box1[:4]
+        x_min2, y_min2, x_max2, y_max2 = box2[:4]
+
+        # Calculate the new bounding box
+        x_min = min(x_min1, x_min2)
+        y_min = min(y_min1, y_min2)
+        x_max = max(x_max1, x_max2)
+        y_max = max(y_max1, y_max2)
+
+        if np.array(box1).shape[0] > 4:
+            # If additional data is present, preserve it in the new bounding box
+            return np.hstack((x_min, y_min, x_max, y_max, box1[4:]))
+        else:
+            return np.array([x_min, y_min, x_max, y_max])
+
+    @staticmethod
+    def remove_contained_boxes(boxes: Union[DetectionBoxes, np.ndarray, List, Tuple]):
+        non_overlapping_boxes = []
+        orig_shape = None
+
+        if isinstance(boxes, DetectionBoxes):
+            boxes = boxes.xyxy
+            orig_shape = boxes.orig_shape
+            return_detection_boxes = True
+        else:
+            return_detection_boxes = False
+
+        for i in range(len(boxes)):
+            box1 = boxes[i]
+            is_contained = False
+            for j in range(len(boxes)):
+                if i != j:
+                    box2 = boxes[j]
+                    if BoxAnalyser.is_contained(box1, box2):
+                        is_contained = True
+                        break
+            if not is_contained:
+                non_overlapping_boxes.append(box1)
+
+        return DetectionBoxes(np.array(non_overlapping_boxes), orig_shape, "xyxy") if return_detection_boxes else np.array(non_overlapping_boxes)
+
+
