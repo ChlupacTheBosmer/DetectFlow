@@ -876,8 +876,8 @@ class BoxManipulator:
         orig_shape = None
 
         if isinstance(boxes, DetectionBoxes):
-            boxes = boxes.xyxy
             orig_shape = boxes.orig_shape
+            boxes = boxes.xyxy
             return_detection_boxes = True
         else:
             return_detection_boxes = False
