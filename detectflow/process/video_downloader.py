@@ -163,9 +163,9 @@ class VideoDownloader:
 
             if self.delete_after_process:
                 logging.info(f"Deleting video after processing: {destination_path}")
-                # Insert deletion logic here
+                Manipulator.delete_file(destination_path)
 
-            yield (destination_path, callback_result)
+            yield destination_path, callback_result
 
     def download_videos_ordered(self):
         checkpoint = self._read_checkpoint()
