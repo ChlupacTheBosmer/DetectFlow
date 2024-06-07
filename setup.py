@@ -45,8 +45,6 @@ def parse_requirements(file_path: Path):
 
 install_requires, dependency_links = parse_requirements(PARENT / 'requirements.txt')
 
-reqs = install_requires + dependency_links
-
 setup(
     name='detectflow',  # name of pypi package
     version=get_version(),  # version of pypi package
@@ -67,8 +65,8 @@ setup(
         '': ['*.yaml', '*.jpg', '*.json', '*.csv'],  # Add other data file types if needed
     },
     include_package_data=True,
-    install_requires=reqs,
-    #dependency_links=dependency_links,
+    install_requires=install_requires,
+    dependency_links=dependency_links,
     extras_require={
         'ai': [
             'transformers==4.41.0',
