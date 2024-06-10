@@ -12,6 +12,7 @@ from datetime import datetime
 import os
 import shutil
 
+
 def get_grouped_rois_from_frame(frames, unique_rois, grouping_radius_dimensions):
 
     grouped_centers = []
@@ -32,6 +33,7 @@ def get_grouped_rois_from_frame(frames, unique_rois, grouping_radius_dimensions)
             grouped_centers.append(center)
 
     return grouped_centers
+
 
 def get_unique_rois_from_frame(frame, min_confidence: float = 0.2):
 
@@ -78,6 +80,7 @@ def get_unique_rois_from_frame(frame, min_confidence: float = 0.2):
         pass
     return flower_centers
 
+
 def get_text_with_OCR(frame):
 
     if not vision_available:
@@ -108,14 +111,12 @@ def get_text_with_OCR(frame):
     texts = response.text_annotations
 
     # Extract and print the detected text
+    times = None
     for text in texts:
         times = extract_time_from_text(text.description)
 
     if times:
         print(f"Valid time detected with OCR: {times[0].time()}")
-
-
-    if times:
         return True, times[0].time()
     else:
         return False, None
@@ -142,6 +143,7 @@ def extract_time_from_text(text):
         return None  # No valid time found
     else:
         return valid_times
+
 
 def install_google_api_key():
     try:
