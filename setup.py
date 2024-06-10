@@ -66,7 +66,7 @@ setup(
     },
     include_package_data=True,
     install_requires=install_requires,
-    dependency_links=dependency_links,
+    dependency_links=dependency_links, #TODO: SAHI is not being installed correctly
     extras_require={
         'ai': [
             'transformers==4.41.0',
