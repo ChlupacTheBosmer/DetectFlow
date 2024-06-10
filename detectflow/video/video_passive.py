@@ -48,7 +48,7 @@ class VideoFilePassive:
     def check_requirements(self, filepath):
 
         # Check requirements
-        if not filepath.endswith(".mp4") or filepath.endswith(".avi"):
+        if not filepath.endswith(".mp4") and not filepath.endswith(".avi"):
             logging.error("Invalid file type. Provide path to a valid video file.")
 
     def get_data_from_recording_name(self):
