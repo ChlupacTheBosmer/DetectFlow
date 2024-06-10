@@ -59,7 +59,8 @@ class S3Validator(Validator):
         except Exception:
             return False
 
-    def _parse_s3_path(self, s3_path):
+    @staticmethod
+    def _parse_s3_path(s3_path):
         """Utility method to parse an S3 path into bucket and key/prefix."""
         match = re.match(r's3://([^/]+)/?(.*)', s3_path)
         if match:
