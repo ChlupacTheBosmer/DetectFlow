@@ -15,13 +15,12 @@ from detectflow.video.motion_detector import MotionDetector
 from detectflow.validators.video_validator import VideoValidator
 from detectflow.manipulators.box_analyser import BoxAnalyser
 from detectflow.predict.results import DetectionBoxes
-from detectflow.utils.pdf_creator import PDFCreator
-from detectflow.utils.pdf_creator import DiagPDFCreator
+from detectflow.utils.pdf_creator import PDFCreator, DiagPDFCreator
 from detectflow.video.video_inter import VideoFileInteractive
 from PIL import Image as PILImage
 
 
-class VideoDiagnoser():
+class VideoDiagnoser:
     # Define class level constants
     METHOD_MAP = {
         0: 'SOM',
@@ -55,7 +54,7 @@ class VideoDiagnoser():
             self.color_variance_threshold = color_variance_threshold
             self.verbose = verbose
 
-            # Validate attributes, will raise error if soemthing is wrong
+            # Validate attributes, will raise error if something is wrong
             self._validate_attributes()
 
             # Define result data attributes
@@ -152,8 +151,8 @@ class VideoDiagnoser():
             # Prioritize frame readers based on the validation results
             if "decord" in validated_methods:
                 return "decord"
-            elif "cv2" in validated_methods:
-                return "cv2"
+            elif "opencv" in validated_methods:
+                return "opencv"
             elif "imageio" in validated_methods:
                 return "imageio"
             else:
@@ -187,7 +186,7 @@ class VideoDiagnoser():
     def validate_video(self):
         # Run validator on video
         validator = VideoValidator(self.video_path, self.video_origin)
-        result = validator.validate_video()
+        result = validator.validate_video_readers()
 
         # List to hold the keys where the value is True
         self.validated_methods = []
@@ -343,14 +342,17 @@ class VideoDiagnoser():
 
     def analyze_motion_data(self,
                             motion_methods: Optional[Union[str, int, List, Tuple]] = None,
-                            rois: Optional[Union[List, Tuple, np.ndarray]] = None):
+                            rois: Optional[Union[List, Tuple, np.ndarray]] = None,
+                            flowers_model_path: Optional[str] = None,
+                            flowers_model_conf: Optional[float] = None):
 
         if not self._check_attribute("_motion_data") or motion_methods or rois:
 
             # Use passed argument or the class attribute
-            motion_methods = validate_flags(motion_methods, self.METHOD_MAP,
-                                                           True) if motion_methods is not None else self.motion_methods
+            motion_methods = validate_flags(motion_methods, self.METHOD_MAP,True) if motion_methods is not None else self.motion_methods
             rois = rois if rois is not None else self.rois
+            flowers_model_path = flowers_model_path if flowers_model_path is not None else self.flowers_model_path
+            flowers_model_conf = flowers_model_conf if flowers_model_conf is not None else self.flowers_model_conf
 
             # Only continue if any methods were specified
             if motion_methods:
@@ -381,8 +383,8 @@ class VideoDiagnoser():
                                                      high_movement_time=2,
                                                      rois=rois,
                                                      rois_select="all",
-                                                     rois_model_path=self.flowers_model_path,
-                                                     rois_model_conf=self.flowers_model_conf,
+                                                     rois_model_path=flowers_model_path,
+                                                     rois_model_conf=flowers_model_conf,
                                                      visualize=False)
 
                     # Run analysis and retrieve data
@@ -436,7 +438,10 @@ class VideoDiagnoser():
         verbose = verbose if verbose is not None else self.verbose
 
         # Repack Output Data
-        output_data = self._get_output_data()
+        output_data = self._get_output_data(flowers_model_path=flowers_model_path,
+                                            flowers_model_conf=flowers_model_conf,
+                                            motion_methods=motion_methods,
+                                            color_variance_threshold=color_variance_threshold)
 
         # Print output to the console
         if verbose:
@@ -469,7 +474,9 @@ class VideoDiagnoser():
             output_data["basic_data"]["frame_width"] = self.frame_width
             output_data["basic_data"]["frame_height"] = self.frame_height
             output_data["motion_data"] = self._motion_data if self._check_attribute(
-                "_motion_data") else self.analyze_motion_data(motion_methods)
+                "_motion_data") else self.analyze_motion_data(motion_methods=motion_methods,
+                                                              flowers_model_path=flowers_model_path,
+                                                              flowers_model_conf=flowers_model_conf)
             output_data["daytime"] = self._daytime if self._check_attribute("_daytime") else self.analyze_daytime(
                 color_variance_threshold)
             output_data["frames"] = self.example_frames if self._check_attribute(
@@ -537,7 +544,7 @@ class VideoDiagnoser():
             print("Format:", self.file_extension)
             print("Video Origin:", self.video_origin)
             print("Decord Validation:", "decord" in self.validated_methods)
-            print("OpenCV Validation:", "cv2" in self.validated_methods)
+            print("OpenCV Validation:", "opencv" in self.validated_methods)
             print("ImageIO Validation:", "imageio" in self.validated_methods)
             print("Frame Width:", self.frame_width)
             print("Frame Height:", self.frame_height)

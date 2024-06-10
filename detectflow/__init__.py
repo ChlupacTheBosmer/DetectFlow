@@ -39,7 +39,9 @@ from .validators.object_detect_validator import ObjectDetectValidator
 from .validators.s3_validator import S3Validator
 from .validators.validator import Validator
 from .validators.video_validator import VideoValidator
-from .video.frame_reader import FrameReader
+from .video.frame_reader import SimpleFrameReader, FrameReader
+from .video.video_data import Video
+from .video.picture_quality import PictureQualityAnalyzer
 from .video.motion_detector import MotionDetector
 from .video.video_diagnoser import VideoDiagnoser
 from .video.video_inter import VideoFileInteractive
@@ -61,7 +63,7 @@ __all__ = [
 'get_numeric_hash', 'Inspector', 'LogFile', 'PBSJobReport', 'PDFCreator', 'log_function_call', 'profile_function_call',
 'profile_memory', 'profile_cpu', 'Sampler', 'calculate_optimal_threads', 'profile_threads', 'manage_threads',
 'ObjectDetectValidator', 'S3Validator', 'Validator', 'VideoValidator',
-'FrameReader', 'MotionDetector', 'VideoDiagnoser', 'VideoFileInteractive', 'VideoFilePassive',
+    'SimpleFrameReader', 'FrameReader', 'Video', 'PictureQualityAnalyzer', 'MotionDetector', 'VideoDiagnoser', 'VideoFileInteractive', 'VideoFilePassive',
 'get_grouped_rois_from_frame', 'get_unique_rois_from_frame', 'get_text_with_OCR', 'extract_time_from_text',
 'install_google_api_key'
 ]

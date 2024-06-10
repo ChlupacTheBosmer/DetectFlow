@@ -21,14 +21,14 @@ class VideoValidator:
         print(f"INFO: (Video Validator) Starting validation for video: {os.path.basename(self.video_path)}")
 
         results = {
-            'cv2': False,
+            'opencv': False,
             'imageio': False,
             'decord': False
         }
 
         # Attempt to validate with each reader based on the origin
         if self.video_origin in ['VT', 'MS']:
-            results['cv2'] = self._validate_with_cv2(min_duration_sec)
+            results['opencv'] = self._validate_with_cv2(min_duration_sec)
             results['imageio'] = self._validate_with_imageio(min_duration_sec)
             results['decord'] = self._validate_with_decord(min_duration_sec)
         else:
@@ -84,7 +84,7 @@ class VideoValidator:
             cap = cv2.VideoCapture(self.video_path)
             if not cap.isOpened():
                 return False
-            return self._check_video_integrity(cap, min_duration_sec, method='cv2')
+            return self._check_video_integrity(cap, min_duration_sec, method='opencv')
         finally:
             if cap:
                 cap.release()
@@ -108,7 +108,7 @@ class VideoValidator:
     def _check_video_integrity(self, video, min_duration_sec, method):
         try:
             # Check duration and read frames logic
-            if method == 'cv2':
+            if method == 'opencv':
                 fps = video.get(cv2.CAP_PROP_FPS)
                 frame_count = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
             elif method == 'imageio':
@@ -124,7 +124,7 @@ class VideoValidator:
                 return False
 
             # Reading frames
-            if method == 'cv2':
+            if method == 'opencv':
                 success_count = sum(1 for _ in range(2) if video.read()[0])
                 return success_count >= 2
             elif method == 'imageio':

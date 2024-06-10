@@ -6,7 +6,7 @@ from typing import Union, List, Tuple, Optional
 import os
 import random
 import traceback
-from detectflow.video.frame_reader import FrameReader
+from detectflow.video.frame_reader import SimpleFrameReader
 from detectflow.utils.input import validate_flags
 from detectflow.validators.object_detect_validator import ObjectDetectValidator
 from detectflow.predict.predictor import Predictor
@@ -209,14 +209,14 @@ class MotionDetector():
             bool: True if the frame reader is successfully initialized, False otherwise.
         """
 
-        # Load FrameReader
+        # Load SimpleFrameReader
         try:
             if not (self.frame_reader_method == "imageio" or self.frame_reader_method == "decord"):
                 logging.warning("WARN: (Motion Detector): Invalid frame reader method")
                 self.frame_reader_method = "imageio"
 
             # Init Frame Reader
-            self.frame_reader = FrameReader(self.video_path, self.frame_reader_method)
+            self.frame_reader = SimpleFrameReader(self.video_path, self.frame_reader_method)
             return True
 
         except Exception as e:
