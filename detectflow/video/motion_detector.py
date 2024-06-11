@@ -9,13 +9,12 @@ import traceback
 from detectflow.video.frame_reader import SimpleFrameReader
 from detectflow.utils.input import validate_flags
 from detectflow.validators.object_detect_validator import ObjectDetectValidator
-from detectflow.predict.predictor import Predictor
 from detectflow.predict.results import DetectionBoxes
 import logging
 import imageio
 
 
-class MotionDetector():
+class MotionDetector: # TODO: Could use a cleanup and better organization
     """
     A class for detecting motion in video files using various algorithms.
 
@@ -32,8 +31,6 @@ class MotionDetector():
         high_movement_time (int): Minimum duration of high movement to report.
         rois (list): Regions of interest within the video frames.
         rois_select (str): Method for selecting regions of interest ('random', 'all', 'cluster').
-        rois_model_path (str): Path to the model for automatic ROI detection.
-        rois_model_conf (float): Confidence threshold for the ROI model.
         visualize (bool): Whether to visualize the motion data.
 
     Methods:
@@ -73,10 +70,8 @@ class MotionDetector():
                  high_movement: bool = True,
                  high_movement_thresh: Optional[Union[int, float]] = None,
                  high_movement_time: int = 2,
-                 rois: Optional[List] = None,
+                 rois: Optional[Union[List, np.ndarray, DetectionBoxes]] = None,
                  rois_select: str = "random",
-                 rois_model_path: Optional[str] = None,
-                 rois_model_conf: float = 0.3,
                  visualize: bool = True
                  ):
         """
@@ -95,8 +90,6 @@ class MotionDetector():
             high_movement_time (int): Minimum duration in seconds to consider as high movement.
             rois (Optional[List]): List of regions of interest (ROIs).
             rois_select (str): Method for selecting ROIs ('random', 'all', 'cluster').
-            rois_model_path (Optional[str]): Path to a model for detecting ROIs automatically.
-            rois_model_conf (float): Confidence threshold for the ROI model.
             visualize (bool): Enable visualization of results.
         """
 
@@ -111,23 +104,22 @@ class MotionDetector():
         self.high_movement_thresh = high_movement_thresh
         self.high_movement_time = high_movement_time
         self.rois_select = rois_select
-        self.rois_model_path = rois_model_path
-        self.rois_model_conf = rois_model_conf
         self.visualize = visualize
+        self.motion_data = None
+        self.frame_reader = None
 
         # Validate and assign methods
         try:
             self.methods = validate_flags(methods, self.METHOD_MAP, True)
         except (AssertionError, TypeError):
-            methods = ["TA"]
+            self.methods = ["TA"]
 
         #  Validate rois
         try:
-            self.rois = ObjectDetectValidator.validate_rois_object(rois)
+            self.rois = rois.xyxy if isinstance(rois, DetectionBoxes) else ObjectDetectValidator.validate_rois_object(rois)
         except Exception as e:
-            logging.error(f"ERROR: (Motion Detector): ROIs were passed in an incorect format - {rois} - {e}")
-            tb_str = traceback.format_exc()
-            print(tb_str)
+            logging.error(f"ERROR: (Motion Detector): ROIs were passed in an incorrect format - {rois} - {e}")
+            print(traceback.format_exc())
             self.rois = None
 
     def analyze(self):
@@ -141,22 +133,16 @@ class MotionDetector():
             smoothed data, high movement frames, high movement periods, and plot (if visualization is enabled).
         """
 
-        # Laod frame reader, if it fails, return None
+        # Load frame reader, if it fails, return None
         if not self.load_frame_reader():
             return None
-
-        # Automatically detect rois using a YOLOv8 model
-        print(self.rois)
-        if self.rois is None:
-            self.detect_rois()
 
         # Perform motion detection
         try:
             self.motion_data = self.perform_motion_detection()
         except Exception as e:
             logging.error(f"ERROR: (Motion Detector): Failed to calculate motion data - {e}")
-            tb_str = traceback.format_exc()
-            print(tb_str)
+            print(traceback.format_exc())
         finally:
             self.frame_reader.close()
 
@@ -181,10 +167,8 @@ class MotionDetector():
                         f"ERROR: (Motion Detector) KeyError: The key '{key}' was not found in the motion_data dictionary.")
                     data = []
 
-                mean_movement, smoothed_movements, high_movement_frames, high_movement_periods = self.analyze_motion_data(
-                    data, method)
-                plot = self.plot_motion_data(data, method, mean_movement, smoothed_movements, high_movement_periods,
-                                             self.frame_skip)
+                mean_movement, smoothed_movements, high_movement_frames, high_movement_periods = self.analyze_motion_data(data)
+                plot = self.plot_motion_data(data, method, mean_movement, smoothed_movements, high_movement_periods, self.frame_skip)
 
                 # Populate output_data
                 try:
@@ -221,73 +205,15 @@ class MotionDetector():
 
         except Exception as e:
             logging.error(f"ERROR: (Motion Detector): Failed to initiate frame reader - {e}")
-            tb_str = traceback.format_exc()
-            print(tb_str)
+            print(traceback.format_exc())
             return False
 
-    def detect_rois(self):
-        """
-        Automatically detects regions of interest (ROIs) in the video using a specified model if `rois_model_path`
-        is provided. This method is invoked if ROIs are not manually specified.
-
-        Modifies:
-            self.rois (list): Updates the regions of interest based on model predictions.
-        """
-
-        # Automatically detect rois
-        if self.rois_model_path is not None:
-
-            # Get frame size
-            try:
-                tmp_frame = self.frame_reader.get_frame(5)
-                frame_height, frame_width, _ = tmp_frame.shape
-            except Exception as e:
-                logging.error(f"ERROR: (Motion Detector): Failed to load frame and get its shape - {e}")
-                tb_str = traceback.format_exc()
-                print(tb_str)
-                self.rois = None
-                return
-
-            # Get the position of flowers
-            try:
-                # Initiate predictor
-                predictor = Predictor()
-
-                # Detect flowers in the frame
-                flower_boxes = []
-                for result in predictor.detect(frame_numpy_array=tmp_frame,
-                                               model_path=self.rois_model_path,
-                                               detection_conf_threshold=self.rois_model_conf):
-                    # Get boxes object from the result
-                    flower_boxes = result.boxes
-
-                if len(flower_boxes) > 0:
-                    # Check if the first item is an instance of DetectionBoxes
-                    if isinstance(flower_boxes[0], DetectionBoxes):
-                        flower_rois = []
-                        for box in flower_boxes[0].xyxy:
-                            flower_rois.append(box)
-                        self.rois = ObjectDetectValidator.validate_rois_object(flower_rois)
-                    else:
-                        self.rois = None
-                else:
-                    self.rois = None
-            except Exception as e:
-                logging.error(f"ERROR: (Motion Detector): Failed to detect ROIs - {e}")
-                tb_str = traceback.format_exc()
-                print(tb_str)
-                self.rois = None
-            finally:
-                # Inform user
-                logging.info(f"INFO: (Motion Detector): Automatically detected ROIs - {self.rois}")
-
-    def analyze_motion_data(self, motion_data, method_name):
+    def analyze_motion_data(self, motion_data):
         """
         Analyzes motion data to calculate mean movement, apply smoothing, and identify periods of high movement.
 
         Args:
             motion_data (list): List of motion values for each frame.
-            method_name (str): Name of the motion detection method used.
 
         Returns:
             tuple: A tuple containing the mean movement, smoothed movement data, frames identified as high movement, and the periods of high movement.
@@ -301,8 +227,7 @@ class MotionDetector():
                 mean_movement = 0 if len(motion_data) == 0 else sum(motion_data) / len(motion_data)
             except Exception as e:
                 logging.error(f"ERROR: (Motion Detector): Failed to calculate motion data mean - {e}")
-                tb_str = traceback.format_exc()
-                print(tb_str)
+                print(traceback.format_exc())
                 mean_movement = 0
 
             # Calculate smoothed motion data
@@ -312,6 +237,7 @@ class MotionDetector():
 
             # Calculate periods of high movement
             high_movement_periods = []
+            high_movement_frames = []
             if self.high_movement:
                 movement_data = smoothed_movements if len(smoothed_movements) > 0 else motion_data
                 threshold = self.high_movement_thresh if self.high_movement_thresh is not None else self.calculate_threshold(
@@ -334,7 +260,7 @@ class MotionDetector():
         Returns:
             list: Smoothed motion metrics.
         """
-
+        smoothed_movements = []
         if len(movements) > 0:
             try:
                 frame_rate = self.fps
