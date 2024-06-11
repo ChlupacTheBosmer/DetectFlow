@@ -180,5 +180,5 @@ class PictureQualityAnalyzer:
         return np.var(gray)
 
     def get_daytime(self, color_variance_threshold: int = 10):
-        # If the color variance is higher than threshold, it's likely a nighttime infrared video
+        # If the color variance is higher than threshold, it's likely a daytime video
         return bool(self.color_variance > color_variance_threshold)
