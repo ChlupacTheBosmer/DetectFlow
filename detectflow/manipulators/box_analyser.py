@@ -1,9 +1,9 @@
 import cv2
 import numpy as np
 from sklearn.cluster import KMeans
-from detectflow.predict.results import DetectionBoxes
+from detectflow.predict.results import DetectionBoxes, DetectionResults
 from detectflow.predict.tracker import Tracker
-from typing import Optional
+from typing import Optional, List, Union
 
 class BoxAnalyser:
     def __init__(self):
@@ -172,7 +172,7 @@ class BoxAnalyser:
         return box1[0] >= box2[0] and box1[1] >= box2[1] and box1[2] <= box2[2] and box1[3] <= box2[3]
 
     @staticmethod
-    def find_consistent_boxes(detection_results: list, iou_threshold=0.5, min_frames=3):
+    def find_consistent_boxes(detection_results: List[Union[DetectionResults, DetectionBoxes]], iou_threshold=0.5, min_frames=3):
         """ Find boxes that appear consistently across frames. """
         consistent_results = []
         # For each result get boxes object
@@ -180,7 +180,7 @@ class BoxAnalyser:
             consistent_boxes_current = []
 
             # Continue only if the boxes object is not None
-            current_result_boxes = current_result.boxes
+            current_result_boxes = current_result.boxes if isinstance(current_result, DetectionResults) else (current_result if isinstance(current_result, DetectionBoxes) else None)
             if current_result_boxes is not None:
                 orig_shape = current_result_boxes.orig_shape
 
@@ -206,7 +206,10 @@ class BoxAnalyser:
                 # Create an updated boxes object and assign it to the current results boxes attribute
                 det = None if len(consistent_boxes_current) == 0 else DetectionBoxes(consistent_boxes_current,
                                                                                      orig_shape, "xyxy")
-                current_result.boxes = det
+                if isinstance(current_result, DetectionResults):
+                    current_result.boxes = det
+                elif isinstance(current_result, DetectionBoxes):
+                    current_result = det
                 consistent_results.append(current_result)
         return consistent_results
         # return list(set(consistent_boxes))  # Remove duplicates
