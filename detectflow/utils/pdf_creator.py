@@ -137,6 +137,7 @@ class DiagPDFCreator(PDFCreator):
             return
         else:
             data = self.data
+            basic_data = {}
             try:
                 basic_data = data.get("basic_data", {})
             except Exception as e:
