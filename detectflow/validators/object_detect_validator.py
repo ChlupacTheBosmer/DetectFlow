@@ -38,17 +38,17 @@ class ObjectDetectValidator(Validator):
         if isinstance(rois, (list, tuple, np.ndarray)) and len(rois) == 4 and all(
                 isinstance(x, (int, float)) for x in rois):
             return [np.array(rois)]
-
         # List of ROIs validation
-        if isinstance(rois, (list, tuple, np.ndarray)) and all(
+        elif isinstance(rois, (list, tuple, np.ndarray)) and all(
                 isinstance(item, (list, tuple, np.ndarray)) for item in rois):
             for item in rois:
                 if len(item) != 4 or not all(isinstance(x, (int, float)) for x in item):
-                    return None  # Invalid ROI found
+                    #return None  # Invalid ROI found
+                    raise ValueError("Invalid ROIs object: Each ROI must have four integers or floats")
             return [np.array(item) for item in rois]
-
         # Invalid input
-        return None
+        else:
+            raise ValueError("Invalid ROIs object: Must be a single ROI or a list/tuple/numpy.arrays of ROIs with four elements each")
 
     @staticmethod
     def is_valid_rois_object(func):
