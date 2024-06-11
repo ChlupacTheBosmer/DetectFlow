@@ -16,7 +16,7 @@ from detectflow.validators.video_validator import VideoValidator
 from detectflow.manipulators.box_analyser import BoxAnalyser
 from detectflow.predict.results import DetectionBoxes
 from detectflow.utils.pdf_creator import PDFCreator, DiagPDFCreator
-from detectflow.video.video_inter import VideoFileInteractive
+from detectflow.video.video_data import Video
 from PIL import Image as PILImage
 
 
@@ -31,7 +31,6 @@ class VideoDiagnoser:
 
     def __init__(self,
                  video_path: str,
-                 validate: bool = True,
                  flowers_model_path: str = os.path.join('/storage/brno2/home/USER/Flowers/flowers_ours_f2s/weights',
                                                         'best.pt'),
                  flowers_model_conf: float = 0.3,
@@ -46,7 +45,6 @@ class VideoDiagnoser:
             # Set attributes
             self.video_path = video_path
             self.output_path = output_path
-            self.validate = validate
             self.flowers_model_path = flowers_model_path
             self.flowers_model_conf = flowers_model_conf
             self.motion_methods = motion_methods
@@ -63,65 +61,38 @@ class VideoDiagnoser:
             self.frame_width = None
             self.frame_height = None
             self._daytime = None
-            self.example_frames = None
+            self._frames = None
             self._ref_bboxes = None
             self.validated_methods = None
-            self._output_data = None
+            self._report_data = None
 
         except Exception as e:
             raise RuntimeError("ERROR: (Video Diagnoser) A critical error occurred during attribute initiation.") from e
 
-        try:
-            self._init_video_file()
-            self._extract_info()
-        except Exception as e:
-            raise RuntimeError(
-                "ERROR: (Video Diagnoser) A critical error occurred during video file data extraction.") from e
-
-        # Validate video file
-        if self.validate:
-            if not self.validate_video():
-                raise RuntimeError("ERROR: (Video Diagnoser) Video could not be valdiated with any method.")
-
-    def _validate_attributes(self):
-        '''
-         Will validate the potentially wrong attributes. Will raise an error if something is wrong.
-         Motion methods will be fixes if invalid.
-        '''
-        if not Validator.is_valid_file_path(self.video_path):
-            raise ValueError(f"Invalid video file path: {self.video_path}")
-        if self.output_path and not Validator.is_valid_directory_path(self.output_path):
-            raise ValueError(f"Invalid output path: {self.output_path}")
-        if self.motion_methods:
-            self.motion_methods = validate_flags(self.motion_methods, self.METHOD_MAP, True)
-        if not self.flowers_model_path or not Validator.is_valid_file_path(self.flowers_model_path):
-            raise ValueError(f"Invalid model weights file path: {self.flowers_model_path}")
-
-    def _init_video_file(self):
         # Initiate video file
         try:
-            self.video_file = VideoFileInteractive(self.video_path, None, (0, 0))
+            self.video_file = Video(self.video_path)
         except Exception as e:
             raise RuntimeError(
                 f"ERROR: (Video Diagnoser) Failed to initiate video file: {os.path.basename(self.video_path)}.") from e
 
-    def _extract_info(self):
         # Extract basic info and assign attributes
         try:
             # File information
-            self.file_extension = self.video_file.file_extension
-            self.filename = self.video_file.filename
-            self.video_origin = self.video_file.video_origin
+            self.file_extension = self.video_file.extension
+            self.filename = self.video_file.video_name
+            self.video_origin = "MS" if self.video_file.extension == ".avi" else "VT"
 
             # Video information
             self.fps = self.video_file.fps
             self.total_frames = self.video_file.total_frames
-            self.duration = timedelta(seconds=0) if self.fps == 0 else timedelta(
-                seconds=self.total_frames / self.fps)  # timedelta
+            self.duration = self.video_file.duration  # timedelta
+            self.frame_height = self.video_file.frame_height
+            self.frame_width = self.video_file.frame_width
 
             # Recording information
-            self.recording_identifier = self.video_file.recording_identifier
-            self.video_identifier = os.path.splitext(os.path.basename(self.video_path))[0]
+            self.recording_identifier = self.video_file.recording_id
+            self.video_identifier = self.video_file.video_id
 
             # Time Information
             self.start_time = self.video_file.start_time  # datetime
@@ -130,17 +101,49 @@ class VideoDiagnoser:
             raise (
                 f"ERROR: (Video Diagnoser) Failed to extract information from video file: {os.path.basename(self.video_path)}.") from e
 
-    def _check_attribute(self, attribute_name):
+        # Validate video file
+        if not self._validate_video():
+            raise RuntimeError("ERROR: (Video Diagnoser) Video could not be validated with any method.")
 
-        # Check if the attribute exists and is not None
-        return hasattr(self, attribute_name) and getattr(self, attribute_name) is not None
+    def _validate_attributes(self):
+        """
+         Will validate the potentially wrong attributes. Will raise an error if something is wrong.
+         Motion methods will be fixes if invalid.
+        """
+        if not Validator.is_valid_file_path(self.video_path):
+            raise ValueError(f"Invalid video file path: {self.video_path}")
+        if self.output_path and not Validator.is_valid_directory_path(self.output_path):
+            try:
+                os.makedirs(self.output_path, exist_ok=True)
+            except Exception as e:
+                raise ValueError(f"Invalid output path: {self.output_path}. Error: {e}")
+        if self.motion_methods:
+            self.motion_methods = validate_flags(self.motion_methods, self.METHOD_MAP, True)
+        if not self.flowers_model_path or not Validator.is_valid_file_path(self.flowers_model_path):
+            raise ValueError(f"Invalid model weights file path: {self.flowers_model_path}")
+
+    def _validate_video(self):
+        try:
+            result = VideoValidator(self.video_path).validate_video_readers()
+        except Exception as e:
+            logging.warning(f"INFO: (Video Diagnoser) Error during video validation: {e}.")
+            result = {}
+
+        self.validated_methods = [method for method, status in result.items() if status]
+
+        if any(result.values()):
+            logging.info("INFO: (Video Diagnoser) Video validated with at least one method.")
+            return True
+        elif all(result.values()):
+            logging.info("INFO: (Video Diagnoser) Video validated with all methods.")
+            return True
+        else:
+            logging.error("ERROR: (Video Diagnoser) Video could not be validated with any method.")
+            return False
 
     def _check_frames(self):
-        # Check if the self.example_frames attribute exists and is not empty
-        if not hasattr(self, 'example_frames') or not self.example_frames:
-            self._get_frames()
-        # Further check if all elements in self.example_frames are NumPy arrays
-        elif not ObjectDetectValidator.is_valid_ndarray_list(self.example_frames):
+        # Check if the self.example_frames attribute exists and is not empty and if all elements in self.example_frames are NumPy arrays
+        if not hasattr(self, '_frames') or self._frames is None or not ObjectDetectValidator.is_valid_ndarray_list(self._frames):
             self._get_frames()
 
     def _choose_frame_reader(self):
@@ -163,92 +166,49 @@ class VideoDiagnoser:
             logging.info("Validated methods not set. Using default frame reader.")
             return "decord"
 
+    @property
+    def frames(self):
+        if self._frames is None:
+            self._frames = self._get_frames()
+        return self._frames
+
     def _get_frames(self):
         # Read 12 evenly distributed frames
         try:
-
             # Get frames
-            self.example_frames = Sampler.sample_frames(self.video_path,
-                                                        num_frames=12,
-                                                        output_format='list',
-                                                        distribution='even',
-                                                        reader=self._choose_frame_reader())
-
-            # Get frame dimensions
-            if ObjectDetectValidator.is_valid_ndarray_list(self.example_frames):
-                self.frame_height, self.frame_width, _ = self.example_frames[0].shape
-
+            frames = Sampler.sample_frames(self.video_path,
+                                           num_frames=12,
+                                           output_format='list',
+                                           distribution='even',
+                                           reader=self._choose_frame_reader())
         except Exception as e:
             logging.error(
                 f"ERROR: (Video Diagnoser) Failed to extract frames from video file: {os.path.basename(self.video_path)}. Error: {e}")
             traceback.print_exc()
+            frames = None
+        return frames
 
-    def validate_video(self):
-        # Run validator on video
-        validator = VideoValidator(self.video_path, self.video_origin)
-        result = validator.validate_video_readers()
+    @property
+    def daytime(self):
+        if self._daytime is None:
+            self._daytime = self.get_daytime()
+        return self._daytime
 
-        # List to hold the keys where the value is True
-        self.validated_methods = []
+    def get_daytime(self, color_variance_threshold: Optional[int] = None):
 
-        # Iterate over the dictionary and check each value
-        for method, status in result.items():
-            if status:
-                self.validated_methods.append(method)
-
-        if any(result.values()):
-            logging.info("INFO: (Video Diagnoser) Video valdiated with at least one method.")
-            return True
-        elif all(result.values()):
-            logging.info("INFO: (Video Diagnoser) Video valdiated with all methods.")
-            return True
-        else:
-            logging.error("ERROR: (Video Diagnoser) Video could not be valdiated with any method.")
-            return False
-
-    def _is_nighttime(self, frame, threshold=10):
-
-        # Convert the frame to grayscale
-        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-        # Calculate the variance of the grayscale image
-        color_variance = np.var(gray_frame)
-
-        # If the color variance is low, it's likely a nighttime infrared video
-        return color_variance < threshold
-
-    def analyze_daytime(self, color_variance_threshold: Optional[int] = None):
-
-        # Overide default attribute or get default
+        # Override default attribute or get default
         color_variance_threshold = color_variance_threshold if color_variance_threshold is not None else self.color_variance_threshold
 
         # Check if the self.example_frames attribute exists
         self._check_frames()
 
         try:
-            if ObjectDetectValidator.is_valid_ndarray_list(self.example_frames):
-                if self._is_nighttime(self.example_frames[0], color_variance_threshold):
-                    self._daytime = "Night"
-                else:
-                    self._daytime = "Day"
-                return self._daytime
+            self._daytime = self.video_file.get_picture_quality(24).get_daytime(color_variance_threshold)
         except Exception as e:
             logging.error(
                 f"ERROR: (Video Diagnoser) Failed to analyze whether video is day or night: {os.path.basename(self.video_path)}. Error: {e}")
-            return None  # Or handle the error as needed
-
-    @property
-    def daytime(self):
-
-        if self._check_attribute("_daytime"):
-
-            # Return the attribute
-            return self._daytime
-
-        else:
-
-            # Run the analysis method
-            return self.analyze_daytime()
+            self._daytime = None
+        return self._daytime
 
     @property
     def ref_bboxes(self):
@@ -256,63 +216,34 @@ class VideoDiagnoser:
         Will return the DetectionBoxes objects detected with the specified model in the first and last sampled frame.
         '''
         # Run the diagnostics again only if not run before
-        if self._check_attribute("_ref_bboxes"):
+        if not self._ref_bboxes:
+            self._ref_bboxes = self.get_ref_bboxes()
+        return self._ref_bboxes[0] if len(self._ref_bboxes) > 0 else None
 
-            return self._ref_bboxes
+    def get_ref_bboxes(self):
+        # Check if the frames list is valid for processing
+        if ObjectDetectValidator.is_valid_ndarray_list(self.frames):  # Assuming frames is a class attribute
+            try:
+                ref_bboxes = []
 
+                # Init Predictor
+                predictor = Predictor()
+
+                # Detect flowers in the sliced frames
+                for result in predictor.detect(frame_numpy_array=np.array(self.frames),
+                                               model_path=self.flowers_model_path,
+                                               detection_conf_threshold=self.flowers_model_conf):
+
+                    # Store detected boxes for further analysis
+                    ref_bboxes.append(result.boxes)
+            except Exception as e:
+                logging.error(
+                    f"ERROR: (Video Diagnoser) Failed constructing reference boxes for {os.path.basename(self.video_path)}. Error: {e}")
+                traceback.print_exc()
+                ref_bboxes = None
         else:
-
-            # Check if the self.example_frames attribute exists
-            self._check_frames()
-
-            # Check if the frames list is valid for processing
-            if ObjectDetectValidator.is_valid_ndarray_list(self.example_frames):  # Assuming frames is a class attribute
-
-                try:
-                    # Select only the first and last frame for analysis, if multiple frames are present
-                    frames_slice = [self.example_frames[0], self.example_frames[-1]] if len(
-                        self.example_frames) > 1 else [self.example_frames[0]]
-
-                    # Init list and dict
-                    self._ref_bboxes = []
-
-                    # Init Predictor
-                    predictor = Predictor()
-
-                    # Detect flowers in the sliced frames
-                    for result in predictor.detect(frame_numpy_array=frames_slice,
-                                                   model_path=self.flowers_model_path,
-                                                   detection_conf_threshold=self.flowers_model_conf):
-                        # Get boxes object from the result
-                        flower_boxes = result.boxes
-
-                        # Store detected boxes for further analysis
-                        self._ref_bboxes.append(flower_boxes)
-
-                    return self._ref_bboxes
-
-                except Exception as e:
-                    logging.error(
-                        f"ERROR: (Video Diagnoser) Failed constructing reference boxes for {os.path.basename(self.video_path)}. Error: {e}")
-                    traceback.print_exc()
-                    return None
-
-    @property
-    def rois(self):
-
-        # Run the diagnostics again only if not run before
-        if not self._check_attribute("_rois"):
-            # Get the boxes if not already available
-            if not self._check_attribute("_ref_bboxes"):
-                ref_bboxes = self.ref_bboxes
-            else:
-                ref_bboxes = self._ref_bboxes
-
-            # Define ROIs from the first frame's detected flower boxes
-            self._rois = ref_bboxes[0].xyxy if len(ref_bboxes) > 0 and isinstance(ref_bboxes[0],
-                                                                                  DetectionBoxes) else None
-
-        return self._rois
+            ref_bboxes = None
+        return ref_bboxes
 
     def analyze_ref_bboxes(self):
         '''
@@ -320,37 +251,41 @@ class VideoDiagnoser:
         '''
         labels = ("Start", "End")
         results = {}
-
-        if not self._check_attribute("_ref_bboxes"):
-            ref_bboxes = self.ref_bboxes
-        else:
-            ref_bboxes = self._ref_bboxes
+        ref_bboxes = [self._ref_bboxes[0], self._ref_bboxes[-1]] if len(self._ref_bboxes) > 0 else None
 
         try:
             if ref_bboxes is not None:
                 for boxes, label in zip(ref_bboxes, labels):
                     if isinstance(boxes, DetectionBoxes):
                         results[label] = BoxAnalyser.analyze_boxes(boxes)
-                return results
             else:
                 logging.error(f"Reference boxes analysis could not be performed: Reference boxes are not available.")
-                return None
+                results = None
         except Exception as e:
             logging.error(f"Reference boxes analysis could not be performed: Error: {e}")
             traceback.print_exc()
-            return None
+            results = None
+        return results
+
+    @property
+    def motion_data(self):
+
+        if not self._motion_data:
+            self._motion_data = self.analyze_motion_data()
+        return self._motion_data
 
     def analyze_motion_data(self,
                             motion_methods: Optional[Union[str, int, List, Tuple]] = None,
-                            rois: Optional[Union[List, Tuple, np.ndarray]] = None,
+                            rois: Optional[Union[List, Tuple, np.ndarray, DetectionBoxes]] = None,
                             flowers_model_path: Optional[str] = None,
                             flowers_model_conf: Optional[float] = None):
 
-        if not self._check_attribute("_motion_data") or motion_methods or rois:
+        motion_data = None
+        if not self._motion_data or motion_methods or rois:
 
             # Use passed argument or the class attribute
             motion_methods = validate_flags(motion_methods, self.METHOD_MAP,True) if motion_methods is not None else self.motion_methods
-            rois = rois if rois is not None else self.rois
+            rois = rois if rois is not None else self.ref_bboxes
             flowers_model_path = flowers_model_path if flowers_model_path is not None else self.flowers_model_path
             flowers_model_conf = flowers_model_conf if flowers_model_conf is not None else self.flowers_model_conf
 
@@ -388,21 +323,55 @@ class VideoDiagnoser:
                                                      visualize=False)
 
                     # Run analysis and retrieve data
-                    self._motion_data = motion_detector.analyze()
+                    motion_data = motion_detector.analyze()
                 except Exception as e:
                     logging.error(f"Motion analysis could not be performed: Error: {e}")
                     traceback.print_exc()
-                    return None
 
-        return self._motion_data
+        return motion_data
 
     @property
-    def motion_data(self):
+    def report_data(self):
+        if not self._report_data:
+            self._report_data = self._get_report_data()
+        return self._report_data
 
-        if not self._check_attribute("_motion_data"):
-            return self.analyze_motion_data()
-        else:
-            return self._motion_data
+    def _get_report_data(self,
+                         flowers_model_path: str = os.path.join(
+                             '/storage/brno2/home/USER/Flowers/flowers_ours_f2s/weights', 'best.pt'),
+                         flowers_model_conf: float = 0.3,
+                         motion_methods: Optional[Union[str, List, Tuple]] = None,
+                         color_variance_threshold: int = 10):
+        # Pack data
+        output_data = {}
+        try:
+            _ = self.ref_bboxes
+            output_data["basic_data"] = {}
+            output_data["basic_data"]["duration"] = self.duration
+            output_data["basic_data"]["start_time"] = self.start_time
+            output_data["basic_data"]["end_time"] = self.end_time
+            output_data["basic_data"]["video_id"] = self.video_identifier
+            output_data["basic_data"]["recording_id"] = self.recording_identifier
+            output_data["basic_data"]["total_frames"] = self.total_frames
+            output_data["basic_data"]["frame_rate"] = int(self.fps)
+            output_data["basic_data"]["format"] = self.file_extension
+            output_data["basic_data"]["video_origin"] = self.video_origin
+            output_data["basic_data"]["validated_methods"] = self.validated_methods
+            output_data["roi_bboxes"] = [self._ref_bboxes[0], self._ref_bboxes[-1]] if len(self._ref_bboxes) > 0 else [self.ref_bboxes, self.ref_bboxes]
+            output_data["roi_data"] = self.analyze_ref_bboxes()
+            output_data["basic_data"]["frame_width"] = self.frame_width
+            output_data["basic_data"]["frame_height"] = self.frame_height
+            output_data["motion_data"] = self._motion_data if self._motion_data else self.analyze_motion_data(motion_methods=motion_methods,
+                                                                                                              flowers_model_path=flowers_model_path,
+                                                                                                              flowers_model_conf=flowers_model_conf)
+            output_data["daytime"] = self._daytime if self._daytime is not None else self.get_daytime(
+                color_variance_threshold)
+            output_data["frames"] = self.frames if self.frames is not None else self._get_frames()
+        except Exception as e:
+            logging.error(f"ERROR: (Video Diagnoser) Error packing output data. Error: {e}")
+            traceback.print_exc()
+
+        return output_data
 
     def pdf_report(self, output_path: Optional[str] = None):
 
@@ -413,10 +382,10 @@ class VideoDiagnoser:
         if output_path:
             try:
                 # Repack Output Data
-                output_data = self._get_output_data()
+                report_data = self._get_report_data()
 
-                if output_data:
-                    self._create_pdf(output_data, output_path)
+                if report_data:
+                    self._create_pdf(report_data, output_path)
                 else:
                     raise ValueError(f"No output data available")
             except Exception as e:
@@ -438,65 +407,15 @@ class VideoDiagnoser:
         verbose = verbose if verbose is not None else self.verbose
 
         # Repack Output Data
-        output_data = self._get_output_data(flowers_model_path=flowers_model_path,
-                                            flowers_model_conf=flowers_model_conf,
-                                            motion_methods=motion_methods,
+        report_data = self._get_report_data(flowers_model_path=flowers_model_path,
+                                            flowers_model_conf=flowers_model_conf, motion_methods=motion_methods,
                                             color_variance_threshold=color_variance_threshold)
 
         # Print output to the console
         if verbose:
             self._print_report()
 
-        return output_data
-
-    def _get_output_data(self,
-                         flowers_model_path: str = os.path.join(
-                             '/storage/brno2/home/USER/Flowers/flowers_ours_f2s/weights', 'best.pt'),
-                         flowers_model_conf: float = 0.3,
-                         motion_methods: Optional[Union[str, List, Tuple]] = None,
-                         color_variance_threshold: int = 10):
-        # Pack data
-        output_data = {}
-        try:
-            output_data["basic_data"] = {}
-            output_data["basic_data"]["duration"] = self.duration
-            output_data["basic_data"]["start_time"] = self.start_time
-            output_data["basic_data"]["end_time"] = self.end_time
-            output_data["basic_data"]["video_id"] = self.video_identifier
-            output_data["basic_data"]["recording_id"] = self.recording_identifier
-            output_data["basic_data"]["total_frames"] = self.total_frames
-            output_data["basic_data"]["frame_rate"] = int(self.fps)
-            output_data["basic_data"]["format"] = self.file_extension
-            output_data["basic_data"]["video_origin"] = self.video_origin
-            output_data["basic_data"]["validated_methods"] = self.validated_methods
-            output_data["roi_bboxes"] = self._ref_bboxes if self._check_attribute("_ref_bboxes") else self.ref_bboxes
-            output_data["roi_data"] = self.analyze_ref_bboxes()
-            output_data["basic_data"]["frame_width"] = self.frame_width
-            output_data["basic_data"]["frame_height"] = self.frame_height
-            output_data["motion_data"] = self._motion_data if self._check_attribute(
-                "_motion_data") else self.analyze_motion_data(motion_methods=motion_methods,
-                                                              flowers_model_path=flowers_model_path,
-                                                              flowers_model_conf=flowers_model_conf)
-            output_data["daytime"] = self._daytime if self._check_attribute("_daytime") else self.analyze_daytime(
-                color_variance_threshold)
-            output_data["frames"] = self.example_frames if self._check_attribute(
-                "example_frames") else self._get_frames()
-        except Exception as e:
-            logging.error(f"ERROR: (Video Diagnoser) Error packing output data. Error: {e}")
-            traceback.print_exc()
-
-        # Assign to attribute, for caching
-        self._output_data = output_data
-
-        return output_data
-
-    @property
-    def report_data(self):
-
-        if not self._check_attribute("_output_data"):
-            return self._get_output_data()
-        else:
-            return self._output_data
+        return report_data
 
     def _print_report(self):
 
@@ -565,42 +484,13 @@ class VideoDiagnoser:
         # Check if the self.example_frames attribute exists
         self._check_frames()
 
-        # Check that _ref_bboxes exists
-        if not self._check_attribute("_ref_bboxes"):
-            _ = self.ref_bboxes
-
-        if self._check_attribute("_ref_bboxes") and self._check_attribute("example_frames"):
-            try:
-                frames = self.example_frames
-                if not isinstance(frames, list):
-                    raise TypeError("frames is not a list")
-
-                # Create a list from DetectionBoxes objects
-                flower_boxes = [boxes.xyxy.tolist() for boxes in self._ref_bboxes if isinstance(boxes, DetectionBoxes)]
-
-                # Ensure flower_boxes is a list and has the expected structure
-                if not isinstance(flower_boxes, list) or not all(isinstance(box, list) and box for box in flower_boxes):
-                    raise ValueError("flower_boxes is not properly structured or empty")
-
-                # plot the frames with bboxes
-                if len(flower_boxes) > 0:
-                    try:
-                        detection_boxes_list = [self._ref_bboxes[0] for _ in range(len(frames) - 1)] + self._ref_bboxes[
-                                                                                                       -1:]
-                        Inspector.display_frames_with_boxes(frames, detection_boxes_list)
-                    except AttributeError as ae:
-                        logging.error(
-                            f"ERROR: (Video Diagnoser) AttributeError: Missing or incorrect attributes in flower_boxes objects. {ae}")
-                    except Exception as e:
-                        logging.error(f"ERROR: (Video Diagnoser) An error occurred while plotting frames. Error: {e}")
-            except KeyError:
-                logging.error("ERROR: (Video Diagnoser) 'frames' key not found in output_data")
-            except TypeError as te:
-                logging.error(f"ERROR: (Video Diagnoser) TypeError: {te}")
-            except ValueError as ve:
-                logging.error(f"ERROR: (Video Diagnoser) ValueError: {ve}")
-            except Exception as e:
-                logging.error(f"ERROR: (Video Diagnoser) Unexpected error occurred. Error: {e}")
+        if self.ref_bboxes and self.frames:
+            # plot the frames with bboxes
+            if len(self._ref_bboxes) > 0:
+                try:
+                    Inspector.display_frames_with_boxes(self.frames, [self._ref_bboxes[i] if i < len(self._ref_bboxes) else self._ref_bboxes[-1] for i in range(len(self.frames))])
+                except Exception as e:
+                    logging.error(f"ERROR: (Video Diagnoser) An error occurred while plotting frames. Error: {e}")
 
             try:
                 for key, values in self.analyze_ref_bboxes().items():
@@ -615,8 +505,6 @@ class VideoDiagnoser:
                         name = ' '.join([word.capitalize() for word in sub_key.split('_')])
                         print(f"  {name}: {sub_value}")
                     print()
-            except ValueError as ve:
-                logging.error(f"ERROR: (Video Diagnoser) Value Error: {ve}")
             except Exception as e:
                 logging.error(f"ERROR: (Video Diagnoser) An unexpected error occurred: {e}")
             print()
@@ -624,7 +512,7 @@ class VideoDiagnoser:
     def _print_motion_data(self):
 
         # Check attributes, it is safe to assume they will exist at this point, runs after data packing
-        if self._check_attribute("_motion_data"):
+        if self._motion_data:
             # Motion data and plots
             print("Motion Detection Summary")
             try:
@@ -676,3 +564,4 @@ class VideoDiagnoser:
             logging.info(f"INFO: (Video Diagnoser) Build PDF successfully.")
         else:
             logging.error(f"ERROR: (Video Diagnoser) Error building PDF.")
+
