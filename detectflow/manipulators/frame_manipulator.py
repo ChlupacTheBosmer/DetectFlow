@@ -13,6 +13,7 @@ class FrameManipulator:
 
     @staticmethod
     def get_frame_dimensions(frames):
+        frame_height, frame_width = None, None
         if isinstance(frames, np.ndarray):
             if frames.ndim == 3:
                 # Single 3D frame (height, width, channels)
@@ -27,13 +28,16 @@ class FrameManipulator:
         elif isinstance(frames, list) and frames:
             # Handle a list of frames; assume all frames have the same dimensions
             first_frame = frames[0]
-            if first_frame.ndim == 3:
-                frame_height, frame_width, _ = first_frame.shape
-            elif first_frame.ndim == 2:
-                frame_height, frame_width = first_frame.shape
-                frame_width, frame_height = 1, frame_height  # Adjust for compatibility if needed
+            if isinstance(first_frame, np.ndarray):
+                if first_frame.ndim == 3:
+                    frame_height, frame_width, _ = first_frame.shape
+                elif first_frame.ndim == 2:
+                    frame_height, frame_width = first_frame.shape
+                    frame_width, frame_height = 1, frame_height  # Adjust for compatibility if needed
+            else:
+                raise ValueError(f"Frames in the list must be numpy arrays. Check the data format. Type: {type(first_frame)}")
         else:
-            raise ValueError("Unsupported data format or empty list provided.")
+            raise ValueError(f"Unsupported data format or empty list provided. Type: {type(frames)}")
         return frame_height, frame_width
 
     @staticmethod
