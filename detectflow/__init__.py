@@ -28,6 +28,7 @@ from .process.dataset_source_processor import DatasetSourceProcessor
 from .process.frame_generator import FrameGenerator, FrameGeneratorTask
 from .process.orchestrator import Orchestrator, Task
 from .process.scheduler import Scheduler
+from .process.video_downloader import VideoDownloader
 from .utils.hash import get_numeric_hash
 from .utils.inspector import Inspector
 from .utils.log_file import LogFile
@@ -61,7 +62,7 @@ __all__ = [
 'MotionEnrich', 'MotionEnrichResult', 'SmartCrop', 'CropResult',
 'BoxAnalyser', 'BoxManipulator', 'DatabaseManipulator', 'Dataloader', 'FrameManipulator', 'InputManipulator', 'Manipulator', 'S3Manipulator', 'VideoManipulator',
 'Ensembler', 'Predictor', 'DetectionBoxes', 'DetectionResults', 'Tracker',
-'DatabaseManager', 'DatasetMotionEnricher', 'DatasetSourceProcessor', 'FrameGenerator', 'FrameGeneratorTask', 'Orchestrator', 'Task', 'Scheduler',
+'DatabaseManager', 'DatasetMotionEnricher', 'DatasetSourceProcessor', 'FrameGenerator', 'FrameGeneratorTask', 'Orchestrator', 'Task', 'Scheduler', 'VideoDownloader',
 'get_numeric_hash', 'Inspector', 'LogFile', 'PBSJobReport', 'PDFCreator', 'log_function_call', 'profile_function_call',
 'profile_memory', 'profile_cpu', 'Sampler', 'calculate_optimal_threads', 'profile_threads', 'manage_threads',
 'ObjectDetectValidator', 'S3Validator', 'Validator', 'VideoValidator',
