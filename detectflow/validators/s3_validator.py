@@ -5,7 +5,7 @@ from detectflow.utils.s3.cfg import parse_s3_config
 
 
 class S3Validator:
-    def __init__(self, cfg_file: str = "/storage/brno2/home/USER/.s3.cfg"):
+    def __init__(self, cfg_file: str = "detectflow/config/.s3.cfg"):
         """Initialize the S3 client."""
         self.endpoint_url, self.aws_access_key_id, self.aws_secret_access_key = parse_s3_config(cfg_file)
         region_name = 'eu-west-2'
