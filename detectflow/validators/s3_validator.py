@@ -31,6 +31,7 @@ class S3Validator:
 
     def is_s3_directory(self, input_data):
         """Check if the input_data is an S3 directory."""
+        input_data = input_data if input_data.startswith('s3://') else f's3://{input_data}'
         bucket_name, prefix = self._parse_s3_path(input_data)
         if not bucket_name:
             return False
@@ -43,6 +44,7 @@ class S3Validator:
 
     def is_s3_file(self, input_data):
         """Check if the input_data is an S3 file."""
+        input_data = input_data if input_data.startswith('s3://') else f's3://{input_data}'
         bucket_name, key = self._parse_s3_path(input_data)
         if not bucket_name:
             return False
