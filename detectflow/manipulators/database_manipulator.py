@@ -6,6 +6,7 @@ import threading
 import traceback
 import time
 import logging
+from typing import List, Optional, Tuple, Union
 from detectflow.utils.hash import get_numeric_hash
 from detectflow.manipulators.manipulator import Manipulator
 
@@ -34,9 +35,9 @@ class DatabaseManipulator:
         with self.lock:
             try:
                 self.conn = sqlite3.connect(self.db_file)
-                print(f"SQLite connection is opened to {self.db_file}")
-            except Error as e:
-                print(f"Error connecting to database: {e}")
+                print(f"SQLite connection is opened to {self._db_name}")
+            except Exception as e:
+                raise RuntimeError(f"Error connecting to database: {self._db_name} - {e}")
 
     def close_connection(self):
         """
@@ -46,7 +47,7 @@ class DatabaseManipulator:
             if self.conn:
                 self.conn.close()
                 self.conn = None
-                print("The SQLite connection is closed.")
+                print(f"The SQLite connection is closed for {self._db_name}")
 
     def execute_query(self, query, params=None):
         """
@@ -69,44 +70,70 @@ class DatabaseManipulator:
                     cur.execute(query)
                 self.conn.commit()
                 return cur
-            except Error as e:
+            except Exception as e:
                 self.conn.rollback()
-                print(f"An error occurred: {e}")
+                raise RuntimeError(f"Failed to execute SQL query: {self._db_name} - {e}")
 
-    def safe_execute(self, sql: str, data: tuple = None, retries: int = 3, use_transaction: bool = True):
+    def safe_execute(self,
+                     sql: str,
+                     data: Optional[Union[Tuple, List]] = None,
+                     retries: int = 3,
+                     use_transaction: bool = True,
+                     enable_emergency_dumps: bool = True,
+                     sustain_emergency_dumps: bool = False):
         """
         Execute a SQL command with error handling, retry mechanism, and optional transaction control.
 
         :param sql: SQL command to be executed.
-        :param data: Tuple of data to be used in the SQL command.
+        :param data: Tuple of data to be used in the SQL command or a List of tuples to use executemany.
         :param retries: Number of retry attempts before failing.
         :param use_transaction: Whether to use transaction control (commit/rollback).
-        :return: True if successful, False otherwise.
+        :param enable_emergency_dumps: Whether to enable emergency dumps to CSV on final failure.
+        :param sustain_emergency_dumps: Whether to sustain emergency dumps to CSV or raise an error.
         """
-        for attempt in range(retries):
-            try:
-                with self.lock:
-                    if not self.conn:
-                        self.create_connection()
-                    cur = self.conn.cursor()
-                    if use_transaction:
-                        cur.execute("BEGIN;")
-                    if data:
-                        cur.execute(sql, data)
-                    else:
-                        cur.execute(sql)
-                    if use_transaction:
+        try:
+            for attempt in range(retries):
+                try:
+                    with self.lock:
+                        if not self.conn:
+                            self.create_connection()
+                        cur = self.conn.cursor()
+                        if use_transaction:
+                            cur.execute("BEGIN;")
+                        if data:
+                            if isinstance(data, list) and all(isinstance(d, tuple) for d in data):
+                                # data is a list of tuples, use executemany
+                                cur.executemany(sql, data)
+                            else:
+                                # data is a single tuple, use execute
+                                cur.execute(sql, data)
+                        else:
+                            cur.execute(sql)
                         self.conn.commit()
-                    return True
-            except sqlite3.Error as e:
-                print(f"SQLite error on attempt {attempt + 1}: {e}")
-                print("Traceback:", traceback.format_exc())
-                if use_transaction:
-                    self.conn.rollback()
-                if attempt == retries - 1 and data:
-                    self.dump_to_csv(data)  # Dump data to CSV on final failure
-                    return False
-                time.sleep(1)  # Wait before retrying
+                    break  # Exit the loop if the query was successful
+                except sqlite3.Error as e:
+                    print(f"SQLite error on attempt {attempt + 1}: {e}")
+                    print("Traceback:", traceback.format_exc())
+                    if use_transaction:
+                        self.conn.rollback()
+                    if attempt == retries - 1:
+                        if data and enable_emergency_dumps:
+                            if isinstance(data, list) and all(isinstance(d, tuple) for d in data):
+                                for d in data:
+                                    self.dump_to_csv(d)  # Dump data to CSV on final failure
+                            else:
+                                self.dump_to_csv(data)  # Dump data to CSV on final failure
+                            print(f"Data dumped to CSV file: {self._db_name}")
+                            if not sustain_emergency_dumps:
+                                raise RuntimeError(f"Failed to execute SQL query: {self._db_name} - {e}")
+                        else:
+                            raise RuntimeError(f"Failed to execute SQL query: {self._db_name} - {e}")
+                    time.sleep(1)  # Wait before retrying
+        except Exception as e:
+            raise RuntimeError(f"Failed to execute SQL query: {self._db_name} - {e}") from e
+        finally:
+            self.close_connection()
+
 
     def dump_to_csv(self, data):
         """ Dump data to a CSV file as a fallback """
@@ -160,8 +187,8 @@ class DatabaseManipulator:
             # Execute the SQL statement
             self.safe_execute(query, use_transaction=True)
             print("Table created successfully.")
-        except sqlite3.Error as e:
-            print(f"Failed to create table: {e}")
+        except Exception as e:
+            raise RuntimeError(f"Failed to create table in {self._db_name}: {e}")
 
     def insert(self, table, data, use_transaction=False):
         """
@@ -169,13 +196,14 @@ class DatabaseManipulator:
 
         :param table: A string specifying the table to insert data into.
         :param data: A dictionary where the keys are column names and the values are data to be inserted.
-        Example: {'name': 'Alice', 'age': 25}
+                     Example data: {'name': 'Alice', 'age': 25}
+        :param use_transaction: If True, a transaction will be used to ensure data integrity.
         """
-        with self.lock:
-            columns = ', '.join(data.keys())
-            placeholders = ', '.join('?' for _ in data)
-            query = f"INSERT INTO {table} ({columns}) VALUES ({placeholders})"
-            self.safe_execute(query, tuple(data.values()), use_transaction=use_transaction)
+        columns = ', '.join(data.keys())
+        placeholders = ', '.join('?' for _ in data)
+        query = f"INSERT INTO {table} ({columns}) VALUES ({placeholders})"
+        print(query, tuple(data.values()))
+        self.safe_execute(query, tuple(data.values()), use_transaction=use_transaction)
 
     def update(self, table, data, condition, use_transaction=False):
         """
@@ -186,10 +214,9 @@ class DatabaseManipulator:
         :param condition: A string specifying the SQL condition for updating records.
         Example: 'id = 1'
         """
-        with self.lock:
-            updates = ', '.join(f"{k} = ?" for k in data.keys())
-            query = f"UPDATE {table} SET {updates} WHERE {condition}"
-            self.safe_execute(query, tuple(data.values()), use_transaction=use_transaction)
+        updates = ', '.join(f"{k} = ?" for k in data.keys())
+        query = f"UPDATE {table} SET {updates} WHERE {condition}"
+        self.safe_execute(query, tuple(data.values()), use_transaction=use_transaction)
 
     def delete(self, table, condition, use_transaction=False):
         """
@@ -199,9 +226,8 @@ class DatabaseManipulator:
         :param condition: A string specifying the SQL condition for deleting records.
         Example: 'id = 1'
         """
-        with self.lock:
-            query = f"DELETE FROM {table} WHERE {condition}"
-            self.safe_execute(query, use_transaction=use_transaction)
+        query = f"DELETE FROM {table} WHERE {condition}"
+        self.safe_execute(query, use_transaction=use_transaction)
 
     def add_to_batch(self, table, data):
         """
@@ -226,7 +252,10 @@ class DatabaseManipulator:
             self.batch_table = table
             self.batch_data.append(data)
             if len(self.batch_data) >= self.batch_size:
-                self.flush_batch()
+                try:
+                    self.flush_batch()
+                except Exception as e:
+                    print(f"Failed to insert batch data into {self._db_name} - {table}: {e}")
 
     def flush_batch(self):
         """
@@ -239,32 +268,17 @@ class DatabaseManipulator:
         """
         if not self.batch_data:
             return
-        with self.lock:
-            try:
-                if not self.conn:
-                    self.create_connection()
-                cur = self.conn.cursor()
-                columns = ', '.join(self.batch_data[0].keys())
-                placeholders = ', '.join('?' for _ in self.batch_data[0])
-                query = f"INSERT INTO {self.batch_table} ({columns}) VALUES ({placeholders})"
-                cur.executemany(query, [tuple(d.values()) for d in self.batch_data])
-                self.conn.commit()
-                self.batch_data = []  # Clear the batch after successful insertion
-                print(f"Batch data inserted into {self.batch_table}.")
-            except sqlite3.Error as e:
-                self.conn.rollback()
-                print(f"Error inserting batch data: {e}")
-
-                # Dump each row of the batch data to CSV individually
-                for data in self.batch_data:
-                    self.dump_to_csv(list(data.values()))  # Ensure data is in list format for writerow
-
-                # Clear the batch data after dumping
-                self.batch_data = []
-            finally:
-
-                # Close the connection
-                self.close_connection()
+        try:
+            columns = ', '.join(self.batch_data[0].keys())
+            placeholders = ', '.join('?' for _ in self.batch_data[0])
+            query = f"INSERT INTO {self.batch_table} ({columns}) VALUES ({placeholders})"
+            data = [tuple(d.values()) for d in self.batch_data]
+            self.safe_execute(query, data, use_transaction=True, enable_emergency_dumps=True, sustain_emergency_dumps=True)
+            self.batch_data = []  # Clear the batch after successful insertion
+            print(f"Batch data inserted into {self._db_name} - {self.batch_table}.")
+        except sqlite3.Error as e:
+            self.conn.rollback()
+            raise RuntimeError(f"Error inserting batch data: {self._db_name} - {e}")
 
     def get_table_names(self):
         """
@@ -281,14 +295,14 @@ class DatabaseManipulator:
             table_names = [name[0] for name in table_names]
 
             return table_names
-        except sqlite3.Error as e:
-            print(f"Error accessing SQLite database: {e}")
+        except Exception as e:
+            print(f"Error accessing SQLite database: {self._db_name} - {e}")
             return []
 
     def get_column_names(self, table_name, exclude_autoincrement_pks: bool = True):
         """Fetches column names for a given table excluding autoincrement primary key."""
         columns = []
-        print(self.fetch_all(f"PRAGMA table_info({table_name})"))
+        #print(self.fetch_all(f"PRAGMA table_info({table_name})"))
         for column in self.fetch_all(f"PRAGMA table_info({table_name})"):
             # Column format: (cid, name, type, notnull, dflt_value, pk)
             # We exclude columns that are primary key and autoincrement
@@ -299,7 +313,7 @@ class DatabaseManipulator:
                 columns.append(column[1])
         return columns
 
-    def gather_dump_data(self, table_name=None, delete_dumps=False):
+    def gather_dump_data(self, table_name: Optional[str] = None, dumps_folder: str = "dumps", delete_dumps: bool = False):
         """
         Retrieve data from CSV files in the "dumps" folder and insert it into the SQLite database.
         """
@@ -311,13 +325,12 @@ class DatabaseManipulator:
                     raise RuntimeError(
                         f"Table name not specified and cannot be extracted from the database. Table name: {table_name}")
         except Exception as e:
-            logging.error(f"Error when accessing database table: {e}")
+            raise RuntimeError(f"Error when accessing database table: {self._db_name} - {e}")
 
         column_names = self.get_column_names(table_name)
         columns_str = ', '.join(column_names)
         placeholders = ', '.join('?' for _ in column_names)
 
-        dumps_folder = "dumps"
         try:
             # Check if the dumps folder exists
             if not Manipulator.is_valid_directory_path(dumps_folder):
@@ -341,8 +354,7 @@ class DatabaseManipulator:
                             for row in reader:
                                 query = f"INSERT INTO {table_name} ({columns_str}) VALUES ({placeholders})"
                                 # Using safe_execute to handle the SQL execution
-                                if not self.safe_execute(query, tuple(row), use_transaction=True):
-                                    raise Exception("Failed to insert all rows from the CSV.")
+                                self.safe_execute(query, tuple(row), use_transaction=True, enable_emergency_dumps=False)
                         # Delete the CSV file after inserting its data into the database
                         if delete_dumps:
                             Manipulator.delete_file(csv_file)
@@ -352,8 +364,11 @@ class DatabaseManipulator:
                     except Exception as e:
                         print(f"Error processing CSV file {csv_file}: {e}")
         except Exception as e:
-            print(f"Error accessing dumps folder: {e}")
+            print(f"Error accessing dumps folder: {self._db_name} - {e}")
 
     def __del__(self):
         # Cleanup code here
-        self.flush_batch()
+        try:
+            self.flush_batch()
+        except Exception as e:
+            print(f"Failed to insert batch data into {self._db_name} - {self.batch_table}: {e}")
