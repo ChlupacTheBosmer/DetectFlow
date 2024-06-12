@@ -295,13 +295,13 @@ class S3Manipulator(S3Validator):
             return []
 
 
-    def check_file_exists_s3(self, bucket_name, file_name):
-        """Check if a file exists in S3."""
-        try:
-            self.s3_client.head_object(Bucket=bucket_name, Key=file_name)
-            return True
-        except botocore.exceptions.ClientError:
-            return False
+    # def check_file_exists_s3(self, bucket_name, file_name):
+    #     """Check if a file exists in S3."""
+    #     try:
+    #         self.s3_client.head_object(Bucket=bucket_name, Key=file_name)
+    #         return True
+    #     except botocore.exceptions.ClientError:
+    #         return False
 
     def create_directory_s3(self, bucket_name: str, directory_path: str):
         """
@@ -477,7 +477,7 @@ class S3Manipulator(S3Validator):
                     s3_file_path = os.path.join(s3_path, relative_path).replace('\\', '/')
                     local_files.add(s3_file_path)
 
-                    if not self.check_file_exists_s3(bucket_name, s3_file_path) or self._is_file_modified(local_path,
+                    if not self.is_s3_file(f"{bucket_name}/{s3_file_path}") or self._is_file_modified(local_path,
                                                                                                           bucket_name,
                                                                                                           s3_file_path):
                         self.upload_file_s3(bucket_name, local_path, s3_file_path)
