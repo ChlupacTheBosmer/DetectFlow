@@ -3,7 +3,7 @@ import numpy as np
 from sklearn.cluster import KMeans
 from detectflow.predict.results import DetectionBoxes, DetectionResults
 from detectflow.predict.tracker import Tracker
-from typing import Optional, List, Union
+from typing import Optional, List, Union, Tuple
 
 class BoxAnalyser:
     def __init__(self):
@@ -123,6 +123,80 @@ class BoxAnalyser:
         distribution_index = non_empty_cells / total_cells
 
         return distribution_index
+
+    @staticmethod
+    def get_union_of_boxes(boxes: np.ndarray, max_width, max_height):
+        """
+        Create a mask representing the union of multiple bounding boxes.
+
+        Parameters:
+            boxes (np.ndarray): Array of bounding boxes (xyxy).
+            max_width (int): The width of the mask.
+            max_height (int): The height of the mask.
+
+        Returns:
+            np.ndarray: Binary mask representing the union of the bounding boxes.
+        """
+        if len(boxes) == 0:
+            return np.zeros((max_height, max_width), dtype=np.uint8)
+
+        # Create an empty mask
+        mask = np.zeros((max_height, max_width), dtype=np.uint8)
+
+        # Draw the boxes on the mask
+        for box in boxes:
+            x1, y1, x2, y2 = box.astype(int)
+            mask[y1:y2, x1:x2] = 1
+
+        return mask
+
+    @staticmethod
+    def calculate_coverage(interest_bboxes: Union[Tuple, List, np.ndarray, DetectionBoxes], reference_bboxes: Union[Tuple, List, np.ndarray, DetectionBoxes]):
+        """
+        Quantify the exact proportion of the area of the bounding boxes of interest that is covered by reference boxes.
+
+        Parameters:
+            interest_bboxes (np.ndarray): Array of bounding boxes (xyxy) for areas of interest.
+            reference_bboxes (np.ndarray): Array of bounding boxes (xyxy) for areas of reference boxes.
+
+        Returns:
+            float: Proportion of area of interest that is covered by thew reference boxes.
+        """
+
+        # Ensure the input boxes are numpy arrays
+        for boxes_name in ['interest_bboxes', 'reference_bboxes']:
+            boxes = locals()[boxes_name]
+            if isinstance(boxes, DetectionBoxes):
+                locals()[boxes_name] = boxes.xyxy
+            elif isinstance(boxes, (list, tuple)):
+                locals()[boxes_name] = np.array(boxes)
+            elif isinstance(boxes, np.ndarray):
+                pass
+            else:
+                raise ValueError(f"Invalid input type for {boxes_name}")
+
+        interest_bboxes = locals()['interest_bboxes']
+        reference_bboxes = locals()['reference_bboxes']
+
+        # Determine the size of the image that can contain all boxes
+        max_x = int(max(np.max(interest_bboxes[:, [0, 2]]), np.max(reference_bboxes[:, [0, 2]])))
+        max_y = int(max(np.max(interest_bboxes[:, [1, 3]]), np.max(reference_bboxes[:, [1, 3]])))
+
+        # Create masks for the union of interest areas and reference areas
+        interest_mask = BoxAnalyser.get_union_of_boxes(interest_bboxes, max_x, max_y)
+        reference_mask = BoxAnalyser.get_union_of_boxes(reference_bboxes, max_x, max_y)
+
+        # Calculate the total area of interest
+        total_interest_area = np.sum(interest_mask)
+
+        # Calculate the intersection of interest areas and reference areas
+        intersection_mask = cv2.bitwise_and(interest_mask, reference_mask)
+        total_covered_area = np.sum(intersection_mask)
+
+        if total_interest_area == 0:
+            return 0.0
+
+        return total_covered_area / total_interest_area
 
     @staticmethod
     def calculate_iou(box1, box2):
