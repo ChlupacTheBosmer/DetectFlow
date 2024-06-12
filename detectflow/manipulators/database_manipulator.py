@@ -224,6 +224,8 @@ class DatabaseManipulator:
 
         :param table: A string specifying the table to delete from.
         :param condition: A string specifying the SQL condition for deleting records.
+        :param use_transaction: If True, a transaction will be used to ensure data integrity.
+
         Example: 'id = 1'
         """
         query = f"DELETE FROM {table} WHERE {condition}"
