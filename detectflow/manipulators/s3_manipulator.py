@@ -12,7 +12,7 @@ from detectflow.utils.s3.cfg import parse_s3_config
 
 
 class S3Manipulator(S3Validator):
-    def __init__(self, cfg_file: str = "/storage/brno2/home/USER/.s3.cfg"):
+    def __init__(self, cfg_file: str = "detectflow/config/.s3.cfg"): # TODO: Add find file automatic location of the config file
 
         # Run the init method of S3Validator parent class
         S3Validator.__init__(self, cfg_file)
