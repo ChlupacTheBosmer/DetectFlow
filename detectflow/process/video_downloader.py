@@ -4,6 +4,7 @@ import json
 import logging
 from detectflow.manipulators.s3_manipulator import S3Manipulator
 from detectflow.manipulators.manipulator import Manipulator
+from detectflow.utils import DOWNLOADS_DIR, CHECKPOINTS_DIR
 
 
 class VideoDownloader:
@@ -57,12 +58,12 @@ class VideoDownloader:
 
     def __init__(self,
                  manipulator: S3Manipulator,
-                 checkpoint_file='video_downloader_checkpoint.json',
+                 checkpoint_file=os.path.join(CHECKPOINTS_DIR, 'video_downloader_checkpoint.json'),
                  whitelist_buckets=None,
                  blacklist_buckets=None,
                  whitelist_directories=None,
                  blacklist_directories=None,
-                 parent_directory='/storage/brno2/home/USER/video_processing',
+                 parent_directory=DOWNLOADS_DIR,
                  maintain_structure=True,
                  delete_after_process=False,
                  processing_callback=None):
