@@ -31,8 +31,7 @@ class VideoDiagnoser:
 
     def __init__(self,
                  video_path: str,
-                 flowers_model_path: str = os.path.join('/storage/brno2/home/USER/Flowers/flowers_ours_f2s/weights',
-                                                        'best.pt'),
+                 flowers_model_path: str = 'detectflow/models/flowers.pt',
                  flowers_model_conf: float = 0.3,
                  motion_methods: Optional[Union[str, int, List, Tuple]] = "SOM",
                  frame_skip: int = 1,
