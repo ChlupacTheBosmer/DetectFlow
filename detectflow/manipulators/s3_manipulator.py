@@ -9,10 +9,11 @@ from typing import List, Optional, Tuple, Union
 import time
 from detectflow.validators.s3_validator import S3Validator
 from detectflow.utils.s3.cfg import parse_s3_config
+from detectflow import S3_CONFIG
 
 
 class S3Manipulator(S3Validator):
-    def __init__(self, cfg_file: str = "detectflow/config/.s3.cfg"): # TODO: Add find file automatic location of the config file
+    def __init__(self, cfg_file: str = S3_CONFIG): # TODO: Add find file automatic location of the config file
 
         # Run the init method of S3Validator parent class
         S3Validator.__init__(self, cfg_file)

@@ -1,4 +1,5 @@
 # Re-exporting submodules and classes for ease of access
+from .config import S3_CONFIG
 from .handlers.checkpoint_handler import CheckpointHandler
 from .handlers.config_handler import ConfigHandler
 from .handlers.custom_chat_handler import CustomChatHandler
@@ -48,6 +49,7 @@ from .video.video_inter import VideoFileInteractive
 from .video.video_passive import VideoFilePassive
 from .video.vision_AI import get_grouped_rois_from_frame, get_unique_rois_from_frame, get_text_with_OCR, extract_time_from_text, install_google_api_key
 
+
 # Package metadata
 __version__ = '0.1.0'
 __author__ = 'Petr Chlup'
@@ -55,7 +57,7 @@ __email__ = 'USER@natur.cuni.cz'
 
 # Defining the public API of the package
 __all__ = [
-'CheckpointHandler', 'ConfigHandler', 'CustomChatHandler', 'EmailHandler', 'JobHandler', 'OpenAIChatHandler', 'SSHHandler',
+'S3_CONFIG', 'CheckpointHandler', 'ConfigHandler', 'CustomChatHandler', 'EmailHandler', 'JobHandler', 'OpenAIChatHandler', 'SSHHandler',
 'MotionEnrich', 'MotionEnrichResult', 'SmartCrop', 'CropResult',
 'BoxAnalyser', 'BoxManipulator', 'DatabaseManipulator', 'Dataloader', 'FrameManipulator', 'InputManipulator', 'Manipulator', 'S3Manipulator', 'VideoManipulator',
 'Ensembler', 'Predictor', 'DetectionBoxes', 'DetectionResults', 'Tracker',
