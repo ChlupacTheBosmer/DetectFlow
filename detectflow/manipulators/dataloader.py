@@ -1,15 +1,16 @@
 import os
+import logging
+from typing import List, Tuple, Union, Optional
+from detectflow.config import S3_CONFIG
 from detectflow.manipulators.s3_manipulator import S3Manipulator
 from detectflow.manipulators.manipulator import Manipulator
 from detectflow.validators.video_validator import VideoValidator
-import logging
-from typing import List, Tuple, Union, Optional
 
 
 class Dataloader(S3Manipulator, Manipulator):
     def __init__(
             self,
-            cfg_file: str = "/storage/brno2/home/USER/.s3.cfg"):
+            cfg_file: str = S3_CONFIG):
 
         # Call the __init__ method of the S3Manipulator
         S3Manipulator.__init__(self, cfg_file)
