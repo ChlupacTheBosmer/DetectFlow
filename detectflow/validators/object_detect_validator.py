@@ -1,6 +1,7 @@
 from detectflow.validators.validator import Validator
 import numpy as np
 import datetime
+import re
 
 class ObjectDetectValidator(Validator):
     def __init__(self):
@@ -124,3 +125,70 @@ class ObjectDetectValidator(Validator):
             return result
 
         return wrapper
+
+    @staticmethod
+    def validate_frame_number(frame_number):
+
+        # Frame number should not be larger than 30K ussually
+        if not isinstance(frame_number, int):
+            try:
+                frame_number = int(frame_number)
+            except Exception as e:
+                print(f"Error when validating frame_number: {e}")
+
+        if not frame_number < 30000:
+            print(f"The frame number '{frame_number}' is larger than expected.")
+
+        return frame_number
+
+    @staticmethod
+    def validate_video_time(video_time):
+
+        # Video time will not usually be higher than 960 s
+        try:
+            if not isinstance(video_time, datetime.timedelta):
+                raise TypeError(
+                    f"Unexpected format in video_time. Expected <timedelta>, got <{type(video_time)}> instead.")
+
+            if video_time < datetime.timedelta(seconds=0):
+                raise ValueError(f"Unexpected video_time value '{video_time}.' Expected value larger than 0.")
+        except Exception as e:
+            print(f"Error when validating video time: {e}")
+
+        return video_time
+
+    @staticmethod
+    def validate_video_ids(recording_id, video_id):
+        # Video IDS
+        try:
+            # Recording ID has a format of XX(X)0_X0_XXXXXX00
+            recording_id_pattern = r'^[A-Za-z]{2,3}\d_[A-Za-z]\d_[A-Za-z]{6}\d{2}$'
+
+            if re.match(recording_id_pattern, recording_id) is None:
+                raise ValueError(f"The string '{recording_id}' does not match the expected format.")
+
+            # Video ID has a format of XX(X)0_X0_XXXXXX00_00000000_00_00
+            video_id_pattern = (r'^[A-Za-z]{2,3}\d_[A-Za-z]\d_[A-Za-z]{6}\d{2}_'
+                                r'(\d{4})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])_'
+                                r'([01]\d|2[0-3])_([0-5]\d)$')
+
+            if re.match(video_id_pattern, video_id) is None:
+                raise ValueError(f"The string '{video_id}' does not match the expected format.")
+
+        except Exception as e:
+            print(f"Error when validating video IDs: {e}")
+            # Decide what to do to handle these errors.
+
+        return recording_id, video_id
+
+    @staticmethod
+    def validate_video_path(video_path):
+        # Path validation
+        try:
+            if not Validator.is_valid_file_path(video_path):
+                raise ValueError(f"The video path '{video_path}' is not a valid file.")
+        except Exception as e:
+            print(f"Error when validating video filepath: {e}")
+            # Decide what to do to handle this error.
+
+        return video_path
