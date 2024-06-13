@@ -1,6 +1,7 @@
 import os
 from detectflow.manipulators.manipulator import Manipulator
 
+
 def validate_and_process_input(input_data, s3_manipulator):
 
     if isinstance(input_data, str):
@@ -9,6 +10,7 @@ def validate_and_process_input(input_data, s3_manipulator):
         return process_multiple_inputs(input_data, s3_manipulator)
     else:
         raise ValueError("Invalid input format")
+
 
 def process_single_input(input_data, s3_manipulator):
 
@@ -34,6 +36,7 @@ def process_single_input(input_data, s3_manipulator):
 
     else:
         raise FileNotFoundError(f"File or directory not found: {input_data}")
+
 
 def process_multiple_inputs(input_data, s3_manipulator):
     directories = []
