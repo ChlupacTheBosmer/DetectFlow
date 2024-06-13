@@ -38,3 +38,4 @@ class InputManipulator:
                 string = prefix + zero_padded_number + string[len(prefix) + len(number):]
 
         return string
+
