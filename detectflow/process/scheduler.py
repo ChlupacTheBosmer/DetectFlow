@@ -32,6 +32,20 @@ class Scheduler(ConfigHandler):
         self.database_path = database_path
         self.database_manipulator = None
 
+        # Assign attributes
+        self.bucket_name = None
+        self.directories = None
+        self.python_script = None
+        self.use_gpu = None
+        self.resources = None
+        self.job_config_path = None
+        self.config_path = None
+        self.job_config = None
+        self.python_script = None
+        self.username = None
+        self.remote_host = None
+        self.directory_filter = None
+
         # Init the DB
         self.setup_database()
 
@@ -71,7 +85,7 @@ class Scheduler(ConfigHandler):
         directories = s3_manipulator.list_directories_s3(self.bucket_name, regex=self.directory_filter, full_path=True)
 
         # Filter directories based on the provided list of directory names
-        directories = [dir for dir in directories if dir.rstrip('/').split('/')[-1] in self.directories] if len(
+        directories = [d for d in directories if d.rstrip('/').split('/')[-1] in self.directories] if len(
             self.directories) > 0 else directories
 
         return directories
