@@ -1,13 +1,13 @@
 from ultralytics.engine.results import Boxes, Results  # Import the Boxes class from module
 from sahi.prediction import PredictionResult, ObjectPrediction
 import copy
-from typing import List, Optional
 import numpy as np
-from datetime import datetime, timedelta
 import os
 import cv2
 from detectflow.video.video_inter import VideoFileInteractive
 from detectflow.video.video_passive import VideoFilePassive
+from typing import List, Optional
+from datetime import timedelta, datetime
 
 
 class DetectionBoxes(Boxes):
@@ -729,6 +729,7 @@ def determine_source_type(path):
     else:
         return "unknown"
 
+
 def is_valid_url(path):
 
     import urllib.parse
@@ -738,3 +739,4 @@ def is_valid_url(path):
         return all([result.scheme, result.netloc])
     except ValueError:
         return False
+
