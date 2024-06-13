@@ -11,6 +11,7 @@ from detectflow.validators.s3_validator import S3Validator
 from detectflow.validators.video_validator import VideoValidator
 from detectflow.video.frame_reader import FrameReader
 from detectflow.video.picture_quality import PictureQualityAnalyzer
+from functools import lru_cache
 
 
 class Video(FrameReader):
@@ -271,6 +272,7 @@ class Video(FrameReader):
 
         return frame_width, frame_height
 
+    @lru_cache(maxsize=64)
     def get_picture_quality(self, frame_number: int = 0):
         frame_number = max(0, frame_number if frame_number < self.total_frames else self.total_frames - 1)
         frame = self.read_video_frame(frame_indices=frame_number, stream=False)[0].get("frame")
