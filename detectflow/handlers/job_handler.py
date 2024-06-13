@@ -47,7 +47,7 @@ class JobHandler:
             self.handle_failed_job(job_info)
 
     def handle_successful_job(self, job_info):
-        job_name = job_info.get('job_name')  # Assuming this is how you track which job it is
+        job_name = job_info.get('job_name')
         results = {"result_database": False,
                    "training_data": False
                    }
@@ -102,7 +102,7 @@ class JobHandler:
             self.print_text_notification(job_info, data_stats, results)
 
     def handle_failed_job(self, job_info):
-        job_name = job_info.get('job_name')  # Assuming this is how you track which job it is
+        job_name = job_info.get('job_name')
         results = {"result_database": False,
                    "training_data": False
                    }
@@ -269,7 +269,7 @@ class JobHandler:
                     return root
         return None
 
-    def upload_db_to_s3(self, local_file_path, job_name):
+    def upload_db_to_s3(self, local_file_path, job_name): # TODO: Could be more robust like in DatabaseManager
         try:
             # Specify the bucket and directory names
             bucket_name, directory_name = job_name.split('_', 1)
