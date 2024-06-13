@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 from detectflow import DetectionBoxes, BoxManipulator
 from detectflow.manipulators.box_manipulator import boxes_centers_distance
+from functools import lru_cache
 
 
 class PictureQualityAnalyzer:
@@ -32,6 +33,7 @@ class PictureQualityAnalyzer:
             self._focus, _ = self.get_focus()
         return self._focus
 
+    @lru_cache(maxsize=None)
     def get_focus(self, threshold: float = 0.5, sobel_kernel_size: int = 3):
 
         # Make sure sobel_kernel_size is odd
@@ -133,7 +135,7 @@ class PictureQualityAnalyzer:
 
         # Get focus regions
         highlighted_frame = self.frame.copy()
-        bboxes = self.focus_regions(highlighted_frame, focus_area, contour_threshold, merge_threshold)
+        bboxes = self.get_focus_regions(focus_area, contour_threshold, merge_threshold)
 
         if bboxes is not None:
             for (x1, y1, x2, y2) in bboxes.xyxy:
