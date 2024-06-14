@@ -2,8 +2,7 @@ import numpy as np
 import random
 from detectflow.predict.results import DetectionResults, DetectionBoxes
 from ultralytics.engine.results import Results
-from detectflow.video.video_passive import VideoFilePassive
-from detectflow.utils.input import validate_flags
+from detectflow.video.video_data import Video
 
 
 class Sampler:
@@ -65,12 +64,12 @@ class Sampler:
         #         if not cap.isOpened():
         #             raise IOError("Could not open video file")
 
-        # Validate input
-        reader = validate_flags(reader, ('opencv', 'imageio', 'decord'), True)
+        # Fix input
+        reader = reader if reader in ('opencv', 'imageio', 'decord') else 'decord'
 
         try:
             # Init video file
-            video = VideoFilePassive(video_path)
+            video = Video(video_path, reader_method=reader)
 
         except Exception as e:
             raise RuntimeError("Error when initializing video file.") from e
@@ -80,7 +79,7 @@ class Sampler:
             frame_numbers = Sampler.get_frame_numbers(video.total_frames, num_frames, distribution, 'list')
 
             #  Read frames
-            frames = [sublist[3] for sublist in video.read_video_frame(frame_numbers, False, reader) if
+            frames = [np.array(sublist[3]) for sublist in video.read_video_frame(frame_numbers, False) if
                       len(sublist) >= 4]
         except Exception as e:
             raise RuntimeError("Error when reading frames.") from e
