@@ -48,7 +48,7 @@ class Inspector:
         - figsize (tuple): Size of the figure for each image plot.
         """
         # Ensure input is iterable (list); if not, make it a list
-        if not isinstance(images, list) or not (isinstance(images, np.ndarray) and images.ndim == 4):
+        if not isinstance(images, (list, tuple)) and not (isinstance(images, np.ndarray) and images.ndim == 4):
             images = [images]
 
         for image in images:
