@@ -86,6 +86,7 @@ class Predictor:
                sliced=True,
                save: bool = False,
                save_txt: bool = False,
+               device: Optional[str] = None,
                yolo_config: Optional[dict] = {},
                sahi_config: Optional[dict] = {},
                **kwargs):
@@ -137,6 +138,9 @@ class Predictor:
         else:
             raise ValueError(f"Frames passed in an invalid format. Type: {type(frame_numpy_array)}")
 
+        if len(list_of_frames) == 0:
+            raise ValueError("No frames found in the source input.")
+
         # Validate and fix kwargs dictionary and sort it into yolo and sahi arg dicts
         yolo_kwargs = {}
         sahi_kwargs = {}
@@ -162,7 +166,7 @@ class Predictor:
             logging.debug(f"(Predictor): Key 'roi_number' not found in metadata dictionary.")
 
         # Check for available CUDA devices and assign value
-        device = 0 if torch.cuda.is_available() and torch.cuda.device_count() > 0 else "cpu"
+        device = device if device else (0 if torch.cuda.is_available() and torch.cuda.device_count() > 0 else "cpu")
         logging.debug(f"(Predictor): Detected <{torch.cuda.device_count()}> CUDA devices.")
 
         # Run inference on the source
