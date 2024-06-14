@@ -13,7 +13,7 @@ from detectflow.video.frame_reader import FrameReader
 from detectflow.video.picture_quality import PictureQualityAnalyzer
 from functools import lru_cache
 
-
+# TODO: Make validation opttional
 class Video(FrameReader):
     """
     A class for managing all video data.
@@ -61,7 +61,7 @@ class Video(FrameReader):
         self._color_variance = None
 
         # Call the __init__ method of FrameReader
-        FrameReader.__init__(self, video_path, reader_method=None)
+        FrameReader.__init__(self, video_path, reader_method=reader_method)
         self.reader_method = next((reader for reader in self.READERS if reader in self.readers), "opencv") if not reader_method else reader_method # Has to be updated after the init of the FrameReader
 
     @property
