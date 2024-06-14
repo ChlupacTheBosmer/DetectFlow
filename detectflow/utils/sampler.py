@@ -79,27 +79,9 @@ class Sampler:
             frame_numbers = Sampler.get_frame_numbers(video.total_frames, num_frames, distribution, 'list')
 
             #  Read frames
-            frames = [np.array(sublist[3]) for sublist in video.read_video_frame(frame_numbers, False) if
-                      len(sublist) >= 4]
+            frames = [np.array(result.get('frame', None)) for result in video.read_video_frame(frame_numbers, False)]
         except Exception as e:
             raise RuntimeError("Error when reading frames.") from e
-
-        #         # List to store the frames
-        #         frames = []
-
-        #         for frame_number in frame_numbers:
-        #             # Set the current frame position
-        #             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
-
-        #             # Read the frame
-        #             ret, frame = cap.read()
-        #             if not ret:
-        #                 continue  # Skip if frame could not be read
-
-        #             frames.append(frame)
-
-        #         # Close the video file
-        #         cap.release()
 
         # Convert to 4D numpy array if requested
         if output_format == 'array':

@@ -31,7 +31,8 @@ class VideoDiagnoser:
         4: 'TA'}
 
     def __init__(self,
-                 video_path: str,
+                 video_path: Optional[str] = None,
+                 video_file: Optional[Video] = None,
                  flowers_model_path: str = os.path.join(ROOT, 'models', 'flowers.pt'),
                  flowers_model_conf: float = 0.3,
                  motion_methods: Optional[Union[str, int, List, Tuple]] = "SOM",
@@ -41,9 +42,12 @@ class VideoDiagnoser:
                  output_path: Optional[str] = None
                  ):
 
+        if video_path is None and video_file is None:
+            raise ValueError("Either 'video_path' or 'video_file' must be provided.")
+
         try:
             # Set attributes
-            self.video_path = video_path
+            self.video_path = video_path if video_path else video_file.video_path
             self.output_path = output_path
             self.flowers_model_path = flowers_model_path
             self.flowers_model_conf = flowers_model_conf
@@ -63,6 +67,9 @@ class VideoDiagnoser:
             self._daytime = None
             self._frames = None
             self._ref_bboxes = None
+            self._focus_regions = None
+            self._focus_accuracies = None
+            self._thumbnails = None
             self.validated_methods = None
             self._report_data = None
 
@@ -71,7 +78,7 @@ class VideoDiagnoser:
 
         # Initiate video file
         try:
-            self.video_file = Video(self.video_path)
+            self.video_file = video_file if video_file else Video(self.video_path)
         except Exception as e:
             raise RuntimeError(
                 f"ERROR: (Video Diagnoser) Failed to initiate video file: {os.path.basename(self.video_path)}.") from e
@@ -218,7 +225,7 @@ class VideoDiagnoser:
         # Run the diagnostics again only if not run before
         if not self._ref_bboxes:
             self._ref_bboxes = self.get_ref_bboxes()
-        return self._ref_bboxes[0] if len(self._ref_bboxes) > 0 else None
+        return self._ref_bboxes[0] if self._ref_bboxes and len(self._ref_bboxes) > 0 else None
 
     def get_ref_bboxes(self):
         # Check if the frames list is valid for processing
@@ -230,7 +237,7 @@ class VideoDiagnoser:
                 predictor = Predictor()
 
                 # Detect flowers in the sliced frames
-                for result in predictor.detect(frame_numpy_array=np.array(self.frames),
+                for result in predictor.detect(frame_numpy_array=self.frames,
                                                model_path=self.flowers_model_path,
                                                detection_conf_threshold=self.flowers_model_conf):
 
@@ -242,6 +249,7 @@ class VideoDiagnoser:
                 traceback.print_exc()
                 ref_bboxes = None
         else:
+            logging.warning("WARNING: (Video Diagnoser) Frames are not valid for processing.")
             ref_bboxes = None
         return ref_bboxes
 
@@ -268,6 +276,75 @@ class VideoDiagnoser:
         return results
 
     @property
+    def focus_regions(self):
+        if not self._focus_regions:
+            self._focus_regions = self.get_focus_regions()
+        return self._focus_regions[0] if self._focus_regions is not None and len(self._focus_regions) > 0 else None
+
+    def get_focus_regions(self):
+        focus_regions = []
+        try:
+            for frame_number in Sampler.get_frame_numbers(self.total_frames, 12, 'even', 'list'):
+                focus_regions.append(self.video_file.get_picture_quality(frame_number).focus_regions)
+        except Exception as e:
+            logging.error(f"Focus regions could not be extracted: Error: {e}")
+            traceback.print_exc()
+            focus_regions = None
+        return focus_regions
+
+    @property
+    def focus_accuracy(self):
+        if not self._focus_accuracies:
+            self._focus_accuracies = self.get_focus_accuracies()
+        return self._focus_accuracies[0] if self._focus_accuracies is not None and len(self._focus_accuracies) > 0 else None
+
+    def get_focus_accuracies(self):
+
+        if not self._ref_bboxes:
+            _ = self.ref_bboxes
+
+        if not self._focus_regions:
+            _ = self.focus_regions
+
+        focus_accuracies = []
+        focus_regions = []
+        if self._ref_bboxes:
+            try:
+                for frame_regions, boxes in zip(self._focus_regions, self._ref_bboxes):
+                    focus_accuracy = BoxAnalyser.calculate_coverage(boxes, frame_regions)
+                    focus_accuracies.append(focus_accuracy)
+            except Exception as e:
+                logging.error(f"Focus accuracy could not be calculated: Error: {e}")
+                traceback.print_exc()
+                focus_accuracies = None
+        return focus_accuracies
+
+    @property
+    def thumbnail(self):
+        if not self._thumbnails:
+            self._thumbnails = self.get_thumbnails()
+        return self._thumbnails[0] if self._thumbnails is not None and len(self._thumbnails) > 0 else None
+
+    def get_thumbnails(self):
+        if not self._ref_bboxes:
+            _ = self.ref_bboxes
+
+        thumbnails = []
+        try:
+            for frame_number, boxes in zip(Sampler.get_frame_numbers(self.total_frames, 12, 'even', 'list'), self._ref_bboxes):
+                _, focus_area = self.video_file.get_picture_quality(frame_number).get_focus()
+                thumbnail = self.video_file.get_picture_quality(frame_number).get_focus_inspection(focus_area)
+                if boxes is not None and isinstance(boxes, DetectionBoxes):
+                    for (x1, y1, x2, y2) in boxes.xyxy:
+                        cv2.rectangle(thumbnail, (int(x1), int(y1)), (int(x2), int(y2)), (255, 0, 0), 2)
+                thumbnails.append(thumbnail)
+        except Exception as e:
+            logging.error(f"Thumbnails could not be extracted: Error: {e}")
+            traceback.print_exc()
+            thumbnails = None
+        return thumbnails
+
+    @property
     def motion_data(self):
 
         if not self._motion_data:
@@ -276,9 +353,7 @@ class VideoDiagnoser:
 
     def analyze_motion_data(self,
                             motion_methods: Optional[Union[str, int, List, Tuple]] = None,
-                            rois: Optional[Union[List, Tuple, np.ndarray, DetectionBoxes]] = None,
-                            flowers_model_path: Optional[str] = None,
-                            flowers_model_conf: Optional[float] = None):
+                            rois: Optional[Union[List, Tuple, np.ndarray, DetectionBoxes]] = None):
 
         motion_data = None
         if not self._motion_data or motion_methods or rois:
@@ -286,8 +361,6 @@ class VideoDiagnoser:
             # Use passed argument or the class attribute
             motion_methods = validate_flags(motion_methods, self.METHOD_MAP,True) if motion_methods is not None else self.motion_methods
             rois = rois if rois is not None else self.ref_bboxes
-            flowers_model_path = flowers_model_path if flowers_model_path is not None else self.flowers_model_path
-            flowers_model_conf = flowers_model_conf if flowers_model_conf is not None else self.flowers_model_conf
 
             # Only continue if any methods were specified
             if motion_methods:
@@ -318,8 +391,6 @@ class VideoDiagnoser:
                                                      high_movement_time=2,
                                                      rois=rois,
                                                      rois_select="all",
-                                                     rois_model_path=flowers_model_path,
-                                                     rois_model_conf=flowers_model_conf,
                                                      visualize=False)
 
                     # Run analysis and retrieve data
@@ -361,9 +432,7 @@ class VideoDiagnoser:
             output_data["roi_data"] = self.analyze_ref_bboxes()
             output_data["basic_data"]["frame_width"] = self.frame_width
             output_data["basic_data"]["frame_height"] = self.frame_height
-            output_data["motion_data"] = self._motion_data if self._motion_data else self.analyze_motion_data(motion_methods=motion_methods,
-                                                                                                              flowers_model_path=flowers_model_path,
-                                                                                                              flowers_model_conf=flowers_model_conf)
+            output_data["motion_data"] = self._motion_data if self._motion_data else self.analyze_motion_data(motion_methods=motion_methods)
             output_data["daytime"] = self._daytime if self._daytime is not None else self.get_daytime(
                 color_variance_threshold)
             output_data["frames"] = self.frames if self.frames is not None else self._get_frames()

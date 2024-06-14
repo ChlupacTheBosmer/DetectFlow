@@ -146,7 +146,7 @@ class PictureQualityAnalyzer:
                 cv2.circle(highlighted_frame, (int(cx), int(cy)), 5, (255, 0, 0), -1)
 
         if show_heatmap:
-            heatmap = self.focus_heatmap(focus_area_resized, blur_amount)
+            heatmap = self.get_focus_heatmap(focus_area_resized, blur_amount)
             highlighted_frame = cv2.addWeighted(highlighted_frame, 0.6, heatmap, 0.4, 0)
 
         return highlighted_frame

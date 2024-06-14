@@ -164,19 +164,21 @@ class BoxAnalyser:
         """
 
         # Ensure the input boxes are numpy arrays
+        results = {}
         for boxes_name in ['interest_bboxes', 'reference_bboxes']:
             boxes = locals()[boxes_name]
+            results[boxes_name] = boxes
             if isinstance(boxes, DetectionBoxes):
-                locals()[boxes_name] = boxes.xyxy
+                results[boxes_name] = boxes.xyxy
             elif isinstance(boxes, (list, tuple)):
-                locals()[boxes_name] = np.array(boxes)
+                results[boxes_name] = np.array(boxes)
             elif isinstance(boxes, np.ndarray):
                 pass
             else:
                 raise ValueError(f"Invalid input type for {boxes_name}")
 
-        interest_bboxes = locals()['interest_bboxes']
-        reference_bboxes = locals()['reference_bboxes']
+        interest_bboxes = results['interest_bboxes']
+        reference_bboxes = results['reference_bboxes']
 
         # Determine the size of the image that can contain all boxes
         max_x = int(max(np.max(interest_bboxes[:, [0, 2]]), np.max(reference_bboxes[:, [0, 2]])))
