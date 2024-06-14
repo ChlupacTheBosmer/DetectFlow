@@ -9,7 +9,42 @@ import pandas as pd
 from detectflow.manipulators.video_manipulator import VideoManipulator
 from detectflow.video.video_passive import VideoFilePassive
 from detectflow.validators.validator import Validator
+import sqlite3
 #TODO: Add imports for video classes and functions dealing with the excel fiel and dataframe
+
+
+def read_dataframe_from_db(
+        folder_path: str,
+        db_name: str,
+        table_name: str = "metadata"
+):
+    """
+    Reads a DataFrame from a SQLite database table.
+
+    Args:
+    folder_path (str): The directory where the SQLite database is located.
+    db_name (str): The name of the SQLite database file.
+    table_name (str): The name of the table to read the data from. Defaults to 'metadata'.
+
+    Returns:
+    pd.DataFrame: The DataFrame read from the specified database table.
+
+    This function creates a connection to a SQLite database located at the specified folder path and
+    reads data from the specified table into a pandas DataFrame. The function closes the database connection
+    after reading the data.
+    """
+
+    # Create a connection object
+    conn = sqlite3.connect(os.path.join(folder_path, db_name))
+
+    # Using the connection, the SQL table is read into a dataframe
+    dataframe = pd.read_sql(f"SELECT * FROM {table_name}", conn)
+
+    # Close the connection
+    conn.close()
+
+    return dataframe
+
 
 class FrameGeneratorTask:
     def __init__(self, frames_array, metadata):
@@ -118,8 +153,9 @@ class FrameGenerator:
                                                    f"{os.path.basename(excel_path)[:-5]}.db")
             except Exception as e:
                 logging.error(f"Exception when reading .db: {e}")
-                excel = anno_data.Annotation_watcher_file(excel_path, True, True, True, True)
-                dataframe = excel.dataframe
+                # excel = anno_data.Annotation_watcher_file(excel_path, True, True, True, True)
+                # dataframe = excel.dataframe
+                dataframe = None
 
         return dataframe
 
@@ -174,6 +210,7 @@ class FrameGenerator:
                                                                                         video_data)
 
             # If following Watchers file append also visitor id
+            visitor_id = None # TODO: Fix this, just made sure it runs
             for annotation, vis_id in zip(valid_annotations_array, visitor_id):
                 annotation += vis_id
 
