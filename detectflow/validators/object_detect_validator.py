@@ -14,7 +14,7 @@ class ObjectDetectValidator(Validator):
         """
         Check if a list is not empty and contains only np.ndarrays.
         """
-        if not isinstance(ndarray_list, list) or not ndarray_list:
+        if not isinstance(ndarray_list, list) or ndarray_list is None:
             return False
         return all(isinstance(item, np.ndarray) for item in ndarray_list)
 
