@@ -33,7 +33,7 @@ class PictureQualityAnalyzer:
             self._focus, _ = self.get_focus()
         return self._focus
 
-    @lru_cache(maxsize=None)
+    #@lru_cache(maxsize=None)
     def get_focus(self, threshold: float = 0.5, sobel_kernel_size: int = 3):
 
         # Make sure sobel_kernel_size is odd
