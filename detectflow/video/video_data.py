@@ -13,7 +13,7 @@ from detectflow.video.frame_reader import FrameReader
 from detectflow.video.picture_quality import PictureQualityAnalyzer
 from functools import lru_cache
 
-# TODO: Make validation opttional
+
 class Video(FrameReader):
     """
     A class for managing all video data.
