@@ -3,369 +3,355 @@ import traceback
 import os
 import threading
 import csv
-from typing import Dict, List
-from detectflow.utils.hash import get_numeric_hash
+from typing import Dict, List, Optional, Type, Any
 from detectflow.utils.profile import profile_function_call
 from detectflow.manipulators.s3_manipulator import S3Manipulator
-from detectflow.validators.validator import Validator
 import time
-import re
 from datetime import timedelta, datetime
 from queue import Queue
 import logging
 from detectflow.predict.results import DetectionResults
-import json
+from detectflow.utils import DOWNLOADS_DIR
 
 
 class DatabaseManager:
-    def __init__(self, database_paths: Dict = {}, batch_size: int = 100):
+
+    VISITS_SQL = """
+                CREATE TABLE IF NOT EXISTS visits (
+                    frame_number integer,
+                    video_time text NOT NULL,
+                    life_time text,
+                    year integer,
+                    month integer,
+                    day integer,
+                    recording_id text,
+                    video_id text,
+                    video_path text,
+                    flower_bboxes text,
+                    rois text,
+                    all_visitor_bboxes text,
+                    relevant_visitor_bboxes text,
+                    visit_ids text,
+                    on_flower boolean,
+                    flags text
+                );
+            """
+
+    VISITS_COLS = [
+        ("frame_number", "integer", "NOT NULL"),
+        ("video_time", "text", "NOT NULL"),
+        ("life_time", "text", ""),
+        ("year", "integer", ""),
+        ("month", "integer", ""),
+        ("day", "integer", ""),
+        ("recording_id", "text", ""),
+        ("video_id", "text", "NOT NULL"),
+        ("video_path", "text", ""),
+        ("flower_bboxes", "text", ""),
+        ("rois", "text", ""),
+        ("all_visitor_bboxes", "text", ""),
+        ("relevant_visitor_bboxes", "text", ""),
+        ("visit_ids", "text", ""),
+        ("on_flower", "boolean", ""),
+        ("flags", "text", "")
+    ]
+
+    VIDEOS_SQL = """
+                CREATE TABLE IF NOT EXISTS videos (
+                    recording_id text,
+                    video_id text PRIMARY KEY,
+                    s3_bucket text,
+                    s3_directory text,
+                    format text,
+                    start_time text,
+                    end_time text,
+                    length integer,
+                    total_frames integer,
+                    fps integer,
+                    focus real,
+                    blur real,
+                    contrast real,
+                    brightness real,
+                    daytime text,
+                    thumbnail blob,
+                    focus_regions_start text,
+                    flowers_start text,
+                    focus_acc_start text,
+                    focus_regions_end text,
+                    flowers_end text,
+                    focus_acc_end text,
+                    motion real
+                );
+            """
+
+    VIDEOS_COLS = [
+        ("recording_id", "text", ""),
+        ("video_id", "text", "PRIMARY KEY"),
+        ("s3_bucket", "text", ""),
+        ("s3_directory", "text", ""),
+        ("format", "text", ""),
+        ("start_time", "text", ""),
+        ("end_time", "text", ""),
+        ("length", "integer", ""),
+        ("total_frames", "integer", ""),
+        ("fps", "integer", ""),
+        ("focus", "real", ""),
+        ("blur", "real", ""),
+        ("contrast", "real", ""),
+        ("brightness", "real", ""),
+        ("daytime", "text", ""),
+        ("thumbnail", "blob", ""),
+        ("focus_regions_start", "text", ""),
+        ("flowers_start", "text", ""),
+        ("focus_acc_start", "text", ""),
+        ("focus_regions_end", "text", ""),
+        ("flowers_end", "text", ""),
+        ("focus_acc_end", "text", ""),
+        ("motion", "real", "")
+    ]
+
+    def __init__(self,
+                 db_manipulators: Optional[Dict[str, Type['DatabaseManipulator']]] = None,
+                 batch_size: int = 100,
+                 backup_interval: int = 500,
+                 s3_manipulator: Optional[S3Manipulator] = None):
         """
         Initialize the DatabaseManager instance.
 
         Args:
-        database_paths (dict): A dictionary mapping video IDs to their respective database file paths.
+        db_manipulators (Optional[Dict[str, Type['DatabaseManipulator']]]): A dictionary of database manipulators.
+        batch_size (int): The size of each batch for processing.
+        s3_manipulator (Optional[Type[S3Manipulator]]): An instance or subclass of S3Manipulator.
         """
-        self.database_paths = database_paths
+        self.db_manipulators = db_manipulators
         self.lock = threading.Lock()
-        self.processed_videos = set()
-        self.initialize_all_databases()
+        self.processed_databases = set()
+        self.backup_interval = backup_interval
+        self.backup_counters = {}
+        if self.db_manipulators is not None:
+            for recording_id, db_manipulator in self.db_manipulators.items():
+                db_manipulator.batch_size = batch_size
+                self.init_database(db_manipulator)
+                self.backup_counters[recording_id] = 0
         self.batch_size = batch_size
-        self.data_batches = {video_id: [] for video_id in database_paths}
+        self.data_batches = {recording_id: [] for recording_id in db_manipulators}
         self.queue = None
-        self.s3manipulator = S3Manipulator()
+        self.s3_manipulator = s3_manipulator
 
-    def create_connection(self, db_file):
-        """ Create a database connection to a SQLite database """
-        conn = None
-        try:
-            conn = sqlite3.connect(db_file)
-        except sqlite3.Error as e:
-            print(f"Error connecting to database {db_file}: {e}")
-            print(traceback.format_exc())
-        return conn
-
-    def create_table(self, conn, create_table_sql):
-        """ Create a table from the create_table_sql statement """
-        try:
-            c = conn.cursor()
-            c.execute(create_table_sql)
-        except sqlite3.Error as e:
-            print(f"Error creating table in database: {e}")
-            print(traceback.format_exc())
-
-    def initialize_all_databases(self):
-        for video_id, db_path in self.database_paths.items():
-            self.add_and_initialize_database(video_id, db_path)
-
-    def add_and_initialize_database(self, video_id, db_path):
+    def init_database(self, db_manipulator):
         """
-        Add a new database for the given video ID and initialize it.
+        Initialize the database and required tables for the given recording ID.
         """
-        if video_id in self.database_paths:
-            print(f"Database for video ID {video_id} already exists.")
+        for table_name, columns in [("visits", self.VISITS_COLS), ("videos", self.VIDEOS_COLS)]:
+            db_manipulator.create_table(table_name, columns)
+
+    def add_database(self, recording_id: str, db_manipulator: Type["DatabaseManipulator"]):
+        """
+        Add a new database for the given recording ID and initialize it.
+        """
+        if recording_id in self.db_manipulators:
+            print(f"Database for recording ID {recording_id} already exists.")
             return
 
-        self.database_paths[video_id] = db_path
-        self.data_batches[video_id] = []
-        if not os.path.exists(db_path):
-            conn = self.create_connection(db_path)
-            if conn is not None:
-                self.create_visits_table(conn)
-                self.create_videos_table(conn)
-                conn.close()
-            else:
-                print(f"Failed to create database for video ID {video_id}")
+        self.db_manipulators[recording_id] = db_manipulator
+        self.data_batches[recording_id] = []
+        self.backup_counters[recording_id] = 0
 
-    def create_visits_table(self, conn):
-        """ Create the 'visits' table in the given database connection """
-        sql_create_visits_table = """
-            CREATE TABLE IF NOT EXISTS visits (
-                frame_number integer PRIMARY KEY,
-                video_time text NOT NULL,
-                life_time text,
-                year integer,
-                month integer,
-                day integer,
-                recording_id text,
-                video_ID text,
-                video_path text,
-                flower_bboxes text,
-                rois text,
-                all_visitor_bboxes text,
-                relevant_visitor_bboxes text,
-                visit_ids text,
-                on_flower boolean,
-                flags text
-            );
+        # Initialize the database and required tables
+        self.init_database(db_manipulator)
+
+    def get_database(self, recording_id: str) -> Optional["DatabaseManipulator"]:
         """
-        self.create_table(conn, sql_create_visits_table)
-
-    def create_videos_table(self, conn):
-        """ Create the 'videos' table in the given database connection """
-        sql_create_videos_table = """
-            CREATE TABLE IF NOT EXISTS videos (
-                s3_bucket text,
-                s3_directory text,
-                recording_id text,
-                video_id text PRIMARY KEY,
-                length real,
-                total_frames integer,
-                fps real,
-                format text,
-                day_night text,
-                flowers_start integer,
-                flowers_end integer,
-                motion_all real,
-                motion_rois real
-            );
+        Get the database for the given recording ID.
         """
-        self.create_table(conn, sql_create_videos_table)
+        return self.db_manipulators.get(recording_id)
 
-    def safe_execute(self, conn, sql, data, retries=3):
-        """ Safely execute a SQL command with robust error handling and retry mechanism """
-        for attempt in range(retries):
-            try:
-                with self.lock:
-                    cur = conn.cursor()
-                    cur.execute(sql, data)
-                    conn.commit()
-                    return True  # Successful execution
-            except sqlite3.Error as e:
-                print(f"SQLite error on attempt {attempt + 1}: {e}")
-                print("Traceback:", traceback.format_exc())
-                if attempt == retries - 1:
-                    self.dump_to_csv(data)  # Final attempt failed, dump data to CSV
-                    return False
-                time.sleep(1)  # Wait before retrying
-
-    def dump_to_csv(self, data):
+    def dump_to_csv(self, data_entry: Dict[str, Any]):
         """ Dump data to a CSV file as a fallback """
-        filename = f"emergency_dump_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-        with open(filename, 'a', newline='') as file:
+        from detectflow.manipulators.manipulator import Manipulator
+        from detectflow.utils.hash import get_numeric_hash
+
+        destination_folder = Manipulator.create_folders(directories="dumps")[0]
+        filepath = os.path.join(destination_folder, f"emergency_dump_{data_entry.get('recording_id', 'unknown')}_{get_numeric_hash()}.csv")
+        with open(filepath, 'a', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow(data)
-            print(f"Data dumped to {filename}")
+            writer.writerow(data_entry)
+            print(f"Data dumped to {filepath}")
 
-    def insert_visits_batch(self, video_id, visits_data_batch):
-        """ Insert a batch of visits data into the database """
-        db_path = self.database_paths.get(video_id)
-        if not db_path:
-            print(f"No database path found for video ID {video_id}")
-            return False
+    def check_backup_interval(self, recording_id: str):
+        # Check if the backup should be performed
+        self.backup_counters[recording_id] += 1
+        if self.backup_interval and self.backup_counters[recording_id] >= self.backup_interval:
+            self.backup_to_s3(recording_id)
+            self.backup_counters[recording_id] = 0
 
-        conn = self.create_connection(db_path)
-        if conn is None:
-            print(f"Failed to connect to database for video ID {video_id}")
-            return False
+    def backup_to_s3(self, recording_id: str, validate_upload: bool = True):
+        from detectflow.manipulators.input_manipulator import InputManipulator
 
-        sql = ''' INSERT OR REPLACE INTO visits(frame_number, video_time, life_time, year, month, day, recording_id, video_ID, video_path, flower_bboxes, rois, all_visitor_bboxes, relevant_visitor_bboxes, visit_ids, on_flower, flags)
-                  VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) '''
+        if self.s3_manipulator is None:
+            logging.warning("No S3 manipulator provided. Skipping database S3 backup.")
+            return
 
-        success = True
-        for visit_data in visits_data_batch:
-            if not self.safe_execute(conn, sql, visit_data):
-                success = False
+        db_manipulator = self.get_database(recording_id)
+        if not db_manipulator:
+            logging.error(f"Database manipulator for recording ID {recording_id} not found. Skipping S3 backup.")
+            return
 
-        conn.close()
-        return success
+        # Close db connection for safety
+        db_manipulator.close_connection()
 
-    def insert_video(self, video_id, video_data):
-        """ Insert a single video data entry into the database """
-        db_path = self.database_paths.get(video_id)
-        if not db_path:
-            print(f"No database path found for video ID {video_id}")
-            return False
+        # Get the local file path
+        local_file_path = db_manipulator.db_path
 
-        conn = self.create_connection(db_path)
-        if conn is None:
-            print(f"Failed to connect to database for video ID {video_id}")
-            return False
+        # Specify the bucket and directory names
+        bucket_name = InputManipulator.get_bucket_name_from_id(recording_id)
+        directory_name = f"{InputManipulator.zero_pad_id(recording_id)}/"
 
-        sql = ''' INSERT OR REPLACE INTO videos(s3_bucket, s3_directory, recording_id, video_id, length, total_frames, fps, format, day_night, flowers_start, flowers_end, motion_all, motion_rois)
-                  VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) '''
+        try:
+            if not self.s3_manipulator.is_s3_bucket(bucket_name):
+                logging.warning(f"Bucket {bucket_name} does not exist. Attempting backup into the 'data' bucket.")
+                bucket_name = 'data'
+                self.s3_manipulator.create_bucket_s3(bucket_name)
+        except Exception as e:
+            logging.error(f"Error during bucket resolution. Attempted to create bucket: {bucket_name}: {e}")
+            bucket_name = 'data'
+            if self.s3_manipulator.is_s3_bucket(bucket_name):
+                logging.warning(f"Bucket {bucket_name} exists. Proceeding with backup into the 'data' bucket.")
 
-        success = self.safe_execute(conn, sql, video_data)
-        conn.close()
-        return success
+        try:
+            if not self.s3_manipulator.is_s3_directory(f"{bucket_name}/{directory_name}"):
+                logging.warning(f"Directory {directory_name} does not exist. File backed up into the 'data' bucket.")
+                bucket_name = 'data'
+                self.s3_manipulator.create_directory_s3(bucket_name, directory_name)
+        except Exception as e:
+            logging.error(f"Error during directory resolution. Attempted to create directory: {bucket_name}/{directory_name}: {e}")
+            bucket_name = 'data'
+            if self.s3_manipulator.is_s3_directory(f"{bucket_name}/{directory_name}"):
+                logging.warning(f"Directory {bucket_name}/{directory_name} exists. Proceeding with backup into the 'data' bucket.")
 
-    def backup_to_s3(self, video_id): #TODO: Implement S3 backup logic - take inspiration in JobHandler
-        db_path = self.database_paths.get(video_id)
-        if db_path and os.path.exists(db_path):
-            try:
-                # Use S3Manipualtor to upload the file
-                bucket_name = "data"
-                directory_name = "visits"
-                s3.upload_file(db_path, s3_bucket, os.path.join(s3_directory, os.path.basename(db_path)))
+        s3_file_path = f"{directory_name}{os.path.basename(local_file_path)}"  # Path in the bucket where the file will be uploaded
+        try:
+            # Upload a file to the specified directory
+            self.s3_manipulator.upload_file_s3(bucket_name, local_file_path, s3_file_path)
+            logging.info(f"Uploaded {local_file_path} to S3 bucket {bucket_name}/{s3_file_path}.")
+        except Exception as e:
+            logging.error(f"Failed to upload {local_file_path} to S3: {e}")
 
-                # Upload file
-                self.s3manipulator.upload_file_s3(bucket_name, db_path,
-                                                  os.path.join(directory_name, os.path.basename(db_path)),
-                                                  max_attempts=3, delay=2)
-                print(f"Database for video ID {video_id} backed up to S3.")
-            except Exception as e:
-                print(f"Failed to backup database for video ID {video_id} to S3: {e}")
-                print(traceback.format_exc())
+        if validate_upload:
+            self.validate_backup_to_s3(bucket_name, s3_file_path, local_file_path)
+
+    def validate_backup_to_s3(self, bucket_name: str, s3_file_path: str, db_file_path: str):
+        from detectflow.utils.file import compare_file_sizes
+
+        tmp_folder = os.path.join(DOWNLOADS_DIR, os.path.dirname(db_file_path))
+        tmp_file_path = os.path.join(tmp_folder, os.path.basename(db_file_path))
+        os.makedirs(tmp_folder, exist_ok=True)
+
+        try:
+            # Validate the upload
+            if self.s3_manipulator.is_s3_file(f"s3://{bucket_name}/{s3_file_path}"):
+                self.s3_manipulator.download_file_s3(bucket_name, s3_file_path, tmp_file_path)
+                if compare_file_sizes(db_file_path, tmp_file_path, 0.05): # Tolerance of 5%
+                    logging.info(f"Successfully validated the upload of {db_file_path} to S3 bucket {bucket_name}/{s3_file_path}.")
+                    # TODO: Could add additional validation by constructing a manipulator and reading something from the database
+                else:
+                    logging.warning(f"Partially validated the upload of {db_file_path} to S3 bucket {bucket_name}/{s3_file_path}. Size discrepancy found.")
+            else:
+                logging.error(f"Failed to validate the upload of {db_file_path} to S3 bucket {bucket_name}/{s3_file_path}.")
+        except Exception as e:
+            logging.error(f"Failed to validate the upload of {db_file_path} to S3: {e}")
 
     def process_queue(self, queue: Queue):
         """ Process tasks from the queue """
+        # TODO: Consider handling errors here to avoid crashing the whole process.
+        #  Come up with a good way to fix errors. Test the script to see what errors may occur and then address them.
+        mark_keys = {'id', 'status'}
         self.queue = queue
         while True:
-            detection_result = queue.get()
-            if detection_result is None:
+            data_entry = queue.get()
+            if data_entry is None:
                 # Signal to stop processing
                 self.flush_all_batches()
                 break
-
-            self.process_detection_result(detection_result)
+            elif not isinstance(data_entry, dict):
+                raise RuntimeError(f"Invalid data type supplied to database manager: {type(data_entry)}")
+            else:
+                if isinstance(data_entry, dict) and set(data_entry.keys()) == mark_keys:
+                    # Mark the recording as processed and flush its batch
+                    self.mark_recording_processed(data_entry['id'])
+                    continue
+                try:
+                    self.process_input_data(data_entry)
+                except Exception as e:
+                    raise RuntimeError(f"Error processing input data dictionary: {e} - {traceback.format_exc()}")
+                finally:
+                    self.queue.task_done() # TODO: Test this to see if it works as expected
 
     @profile_function_call(logging.getLogger(__name__))
-    def process_detection_result(self, detection_result):
-        """ Process a single DetectionResult object """
-        video_id = detection_result.video_id
-        data = self.extract_data_from_result(detection_result)
+    def process_input_data(self, data_entry: Dict[str, Any]):
+        """ Process a single DetectionResult object. Should be overwritten by subclasses to address specific
+        structure of database tables and entries."""
+        recording_id = data_entry.get("recording_id")
 
-        if video_id not in self.data_batches:
-            print(f"Video ID {video_id} not found in database paths. Emergency data dump initiated.")
-            self.dump_to_csv(data)
+        # Get the appropriate db_manipulator for the recording ID
+        db_manipulator = self.get_database(recording_id)
+
+        if not db_manipulator:
+            print(f"Recording ID {recording_id} not found in managed databases. Emergency data dump initiated.")
+            self.dump_to_csv(data_entry)
             return
 
-        self.data_batches[video_id].append(data)
-        if len(self.data_batches[video_id]) >= self.batch_size:
-            self.insert_visits_batch(video_id, self.data_batches[video_id])
-            self.data_batches[video_id] = []
-
-    def extract_data_from_result(self, result) -> List:
-        """ Extract relevant data from a DetectionResult object """
-        # Implement extraction logic based on the structure of DetectionResults
-        # TODO: This function should be left not implement so it can be implemented by subclassing the class
-
-        print(type(result))
-
-        if isinstance(result, DetectionResults):
-
-            # Data from the result
-            frame_number = result.frame_number if result.frame_number is not None else get_numeric_hash()
-            video_time = timedelta(seconds=result.video_time) if result.video_time is not None else timedelta(seconds=0)
-            life_time = result.real_time
-            year = life_time.year if isinstance(life_time, datetime) else 0
-            month = life_time.month if isinstance(life_time, datetime) else 0
-            day = life_time.day if isinstance(life_time, datetime) else 0
-            recording_id = result.recording_id
-            video_id = result.video_id
-            video_path = result.source_path
-            flower_bboxes = result.ref_boxes.to_list() if result.ref_boxes is not None else None
-            all_visitor_bboxes = result.boxes.to_list() if result.boxes is not None else None
-            relevant_visitor_bboxes = result.fil_boxes.to_list() if result.fil_boxes is not None else None
-            visit_ids = result.boxes.id.tolist() if result.boxes is not None and result.boxes.id is not None else None
-            on_flower = result.on_flowers
-
-            # I dont remember
-            rois = ""
-            flags = ""  # TODO: Data preprocessing and evaluate where there is a visitor likely and where not. Based on prob and so on
-
-            # Validation
-            self._validate_data_values(frame_number, video_time, recording_id, video_id, video_path)
-
-            return [int(frame_number),
-                    str(video_time),
-                    str(life_time.time() if isinstance(life_time, datetime) else None),
-                    int(year),
-                    int(month),
-                    int(day),
-                    str(recording_id),
-                    str(video_id),
-                    str(video_path),
-                    json.dumps(flower_bboxes),
-                    rois,
-                    json.dumps(all_visitor_bboxes),
-                    json.dumps(relevant_visitor_bboxes),
-                    json.dumps(visit_ids),
-                    json.dumps(on_flower),
-                    flags]
-
+        if any(["total_frames", "fps", "focus", "blur", "contrast", "brightness"]) in data_entry.keys():
+            # Add data to the manipulators batch
+            db_manipulator.insert("videos", data_entry)
         else:
-            frame_number = get_numeric_hash()
-            video_time = timedelta(seconds=0)
-            flags = f"Got instance of {str(type(result))} instead of DetectionResults"
-            placeholders = ["" for i in range(1, 13)]
-            data_values = [frame_number] + [video_time] + placeholders + [flags]
+            # Add data to the manipulators batch
+            db_manipulator.add_to_batch("visits", data_entry)
 
-            # Validation #ERROR: Fix this flawed logic
-            self._validate_data_values(frame_number, video_time, recording_id, video_id, video_path)
+        # Check if the backup should be performed
+        self.check_backup_interval(recording_id)
 
-            return data_values
+    def mark_recording_processed(self, recording_id):
+        """ Mark a recording as processed and flush its batch """
+        # Add the recording to the list of processed databases
+        self.processed_databases.add(recording_id)
+        self.flush_batch(recording_id)
+        self.backup_to_s3(recording_id)
 
-    def mark_video_processed(self, video_id):
-        """ Mark a video as processed and flush its batch """
-        with self.lock:
-            self.processed_videos.add(video_id)
-            self.flush_batch(video_id)
-            self.backup_to_s3(video_id)
-
-    def flush_batch(self, video_id):
+    def flush_batch(self, recording_id):
         """ Insert remaining data from the batch of a specific video to its database """
-        if video_id in self.data_batches and self.data_batches[video_id]:
-            self.insert_visits_batch(video_id, self.data_batches[video_id])
-            self.data_batches[video_id] = []
-            print(f"Flushed batch for <{video_id}>.")
+        db_manipulator = self.get_database(recording_id)
+
+        if not db_manipulator:
+            print(f"Recording ID {recording_id} not found in managed databases.")
+            return
+
+        # Flush the batch of the recording
+        db_manipulator.flush_batch()
+        print(f"Flushed batch for <{recording_id}>.")
 
     def flush_all_batches(self):
-        for video_id, db_path in self.database_paths.items():
-            self.flush_batch(video_id)
-        print("Flushed all batches.")
+        for recording_id, _ in self.db_manipulators.items():
+            self.flush_batch(recording_id)
+        logging.info("Flushed all batches.")
 
-    def _validate_data_values(self,
-                              frame_number,
-                              video_time,
-                              recording_id,
-                              video_id,
-                              video_path):
+    def clean_up(self):
+        if self.queue is not None:
+            self.queue.join()
+            self.queue = None
 
-        # Frame number should not be larger than 30K ussually
-        if not isinstance(frame_number, int):
-            try:
-                frame_number = int(frame_number)
-            except Exception as e:
-                print(f"Error when validating frame_number: {e}")
+        for recording_id, db_manipulator in self.db_manipulators.items():
+            self.flush_batch(recording_id)
+            self.backup_to_s3(recording_id)
+            if recording_id not in self.processed_databases:
+                logging.warning(f"Recording ID {recording_id} was not marked as processed before cleanup.")
+            self.db_manipulators.pop(recording_id, None)
+        logging.info("Database manager cleaned up.")
 
-        if not frame_number < 30000:
-            print(f"The frame number '{frame_number}' is larger than expected.")
+    def __del__(self):
+        self.clean_up()
 
-        # Video time will not ussually be higher than 960 s
-        try:
-            if not isinstance(video_time, timedelta):
-                raise TypeError(
-                    f"Unexpected format in video_time. Expected <timedelta>, got <{type(video_time)}> instead.")
 
-            if video_time <= timedelta(seconds=0):
-                raise ValueError(f"Unexpected video_time value '{video_time}.' Expected value larger than 0.")
-        except Exception as e:
-            print(f"Error when validating video time: {e}")
 
-        # Video IDS
-        try:
-            # Recording ID has a format of XX(X)0_X0_XXXXXX00
-            recording_id_pattern = r'^[A-Za-z]{2,3}\d_[A-Za-z]\d_[A-Za-z]{6}\d{2}$'
 
-            if re.match(recording_id_pattern, recording_id) is None:
-                raise ValueError(f"The string '{recording_id}' does not match the expected format.")
 
-            # Video ID has a format of XX(X)0_X0_XXXXXX00_00000000_00_00
-            video_id_pattern = (r'^[A-Za-z]{2,3}\d_[A-Za-z]\d_[A-Za-z]{6}\d{2}_'
-                                r'(\d{4})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])_'
-                                r'([01]\d|2[0-3])_([0-5]\d)$')
-
-            if re.match(video_id_pattern, video_id) is None:
-                raise ValueError(f"The string '{video_id}' does not match the expected format.")
-
-        except Exception as e:
-            print(f"Error when validating video IDs: {e}")
-            # Decide what to do to handle these errors.
-
-        # Path validation
-        try:
-            if not Validator.is_valid_file_path(video_path):
-                raise ValueError(f"The video path '{video_path}' is not a valid file.")
-        except Exception as e:
-            print(f"Error when validating video filepath: {e}")
-            # Decide what to do to handle this error.
