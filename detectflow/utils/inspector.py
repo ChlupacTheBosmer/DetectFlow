@@ -4,31 +4,65 @@ import numpy as np
 from PIL import Image as PILImage
 import io
 from detectflow.predict.results import DetectionBoxes
+from typing import List, Tuple, Union, Optional
+
 
 class Inspector:
     def __init__(self):
         pass
 
     @staticmethod
-    def display_frames_with_boxes(frames, detection_boxes_list=[], figsize=(12, 8)):
+    def display_frames_with_boxes(frames: Union[List[np.ndarray], Tuple[np.ndarray, ...], np.ndarray],
+                                  detection_boxes_list: Optional[Union[DetectionBoxes, List, Tuple, np.ndarray]] = None,
+                                  figsize: Tuple[int, int] = (12, 8)):
         """
         Displays multiple frames each with their corresponding bounding boxes.
 
         Args:
-        - frames (List[np.ndarray] or np.ndarray): A list or 4D numpy array of frames.
-        - detection_boxes_list (List[DetectionBoxes]): A list of DetectionBoxes objects corresponding to each frame.
-        - figsize (tuple): Size of the figure for each frame plot.
+        - frames (Union[List[np.ndarray], Tuple[np.ndarray, ...], np.ndarray]): A list or 4D numpy array of frames.
+        - detection_boxes_list (Optional[Union[DetectionBoxes, List, Tuple, np.ndarray]]): A list of DetectionBoxes objects corresponding to each frame.
+        - figsize (Tuple[int, int]): Size of the figure for each frame plot.
         """
         if isinstance(frames, np.ndarray):
-            frames = list(frames)
+            if frames.ndim == 3:
+                frames = list([frames])
+            elif frames.ndim == 4:
+                frames = list(frames)
+            else:
+                raise ValueError("Invalid shape of the frames array. Expected 4D or 3D array.")
+        elif not isinstance(frames, (tuple, list)) or not all(isinstance(frame, np.ndarray) for frame in frames):
+            raise ValueError("Invalid type of the frames. Expected list, tuple or numpy array.")
+
+        # If is single DetectionBoxes object, convert to list
+        if isinstance(detection_boxes_list, DetectionBoxes):
+            detection_boxes_list = [detection_boxes_list.xyxy]
+        # If is a collection of objects
+        elif isinstance(detection_boxes_list, (np.ndarray, tuple, list)):
+            # if is a collection of DetectionBoxes objects convert to list
+            if all(isinstance(detection_boxes, DetectionBoxes) for detection_boxes in detection_boxes_list):
+                detection_boxes_list = [detection_boxes.xyxy for detection_boxes in detection_boxes_list]
+            # If it is a collection of numpy arrays or lists or tuples
+            elif all(isinstance(detection_boxes, (np.ndarray, tuple, list)) for detection_boxes in detection_boxes_list):
+                if all(isinstance(coords, (int, float)) for coords in detection_boxes_list[0]):
+                    detection_boxes_list = [detection_boxes_list]
+                elif all(isinstance(detection_boxes, (np.ndarray, tuple, list)) for detection_boxes in detection_boxes_list[0]):
+                    pass
+                else:
+                    raise ValueError("Invalid type of the detection_boxes_list.")
+            else:
+                raise ValueError("Invalid type of the detection_boxes_list.")
+        elif detection_boxes_list is None:
+            detection_boxes_list = []
+        else:
+            raise ValueError("Invalid type of the detection_boxes_list.")
 
         for i, frame in enumerate(frames):
             detection_boxes = None if len(detection_boxes_list) < i + 1 else detection_boxes_list[i]
             fig, ax = plt.subplots(1, figsize=figsize)
             ax.imshow(frame)
 
-            if detection_boxes is not None and isinstance(detection_boxes, DetectionBoxes):
-                for bbox in detection_boxes.xyxy:
+            if detection_boxes is not None:
+                for bbox in detection_boxes:
                     x_min, y_min, x_max, y_max = bbox[:4]
                     width, height = x_max - x_min, y_max - y_min
                     rect = patches.Rectangle((x_min, y_min), width, height, linewidth=2, edgecolor='r',
@@ -70,3 +104,4 @@ class Inspector:
             ax.imshow(img)
             plt.axis('off')  # Hide the axis
             plt.show()
+
