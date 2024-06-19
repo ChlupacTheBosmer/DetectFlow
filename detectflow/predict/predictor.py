@@ -9,6 +9,7 @@ from ultralytics.models.yolo import YOLO
 from detectflow.predict.results import DetectionResults
 from detectflow.manipulators.frame_manipulator import FrameManipulator
 from detectflow.validators.validator import Validator
+from detectflow.config import ROOT
 from ultralytics.engine.results import Results
 from sahi.prediction import PredictionResult
 
@@ -70,7 +71,7 @@ class Predictor:
     }
 
     def __init__(self,
-                 model_path: str = os.path.join('resources', 'yolo', 'best.pt'),
+                 model_path: str = os.path.join(ROOT, 'models', 'visitors.pt'),
                  detection_conf_threshold: float = 0.5):
 
         # Assign attributes
@@ -194,7 +195,7 @@ class Predictor:
                               # TODO: Move to kwargs dictionary passed to the function when confirmed that it works
                               verbose=0,
                               **sahi_merged_config
-                              );
+                              )
         else:
             # Load a pretrained YOLOv8n model
             model = YOLO(model_path)
