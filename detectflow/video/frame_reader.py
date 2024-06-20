@@ -36,7 +36,7 @@ class SimpleFrameReader:
             del self.reader
 
 
-class FrameReader:
+class FrameReader: # TODO: Bitch be reading in wrong channels
 
     def __init__(self, video_path: str, reader_method: Optional[str] = None):
         self.video_path = video_path
@@ -83,6 +83,7 @@ class FrameReader:
                 success, frame = cap.read()
 
                 if success:
+                    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
                     yield {"frame_number": frame_number, "frame": frame}
         except Exception as e:
             logging.warning(f"Error reading frame number: {frame_number} with OpenCV: {e}")
@@ -99,7 +100,7 @@ class FrameReader:
             for frame_number in frame_indices:
                 # Read the frame
                 frame = video.get_data(frame_number)
-                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                #frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
                 yield {"frame_number": frame_number, "frame": frame}
         except Exception as e:
@@ -122,6 +123,7 @@ class FrameReader:
             for frame_number in frame_indices:
                 frame = vr[frame_number]  # read an image from the capture
                 frame = np.ndarray(frame)
+                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
                 yield {"frame_number": frame_number, "frame": frame}
         except Exception as e:
             # If reading fails continue using the fallback opencv reader
