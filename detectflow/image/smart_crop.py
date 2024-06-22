@@ -2,12 +2,11 @@ from typing import List, Optional, Tuple, Union
 from detectflow.predict.results import DetectionResults, DetectionBoxes
 import numpy as np
 import logging
-from detectflow.manipulators.box_manipulator import BoxManipulator
 from detectflow.utils.inspector import Inspector
 from sahi.slicing import slice_image
 from sahi.utils.coco import CocoAnnotation
 from detectflow.manipulators.frame_manipulator import FrameManipulator
-from detectflow.manipulators.box_analyser import BoxAnalyser
+from detectflow.manipulators.box_manipulator import BoxManipulator
 
 class CropResult:
     def __init__(self,
@@ -20,7 +19,7 @@ class CropResult:
 class SmartCrop:
     def __init__(self,
                  image: Optional[np.ndarray] = None,
-                 annotations: Optional[Union[DetectionBoxes, np.ndarray]] = None,
+                 annotations: Optional[DetectionBoxes] = None,
                  crop_size: Tuple = (640, 640),
                  handle_overflow: str = "expand",
                  max_expansion_limit: Tuple = (1000, 1000),
@@ -99,18 +98,9 @@ class SmartCrop:
         multiple_rois = self.multiple_rois if multiple_rois is None else multiple_rois
 
         # Calculate the roi(s) for cropping
-        rois = BoxManipulator.calculate_optimal_roi(self.annotations,
-                                                    self.image_size,
-                                                    crop_size,
-                                                    handle_overflow,
-                                                    max_expansion_limit,
-                                                    margin,
-                                                    exhaustive_search,
-                                                    permutation_limit,
-                                                    multiple_rois,
-                                                    ignore_empty,
-                                                    partial_overlap,
-                                                    iou_threshold)
+        rois = BoxManipulator.get_optimal_roi(self.annotations, self.image_size, crop_size, handle_overflow,
+                                              max_expansion_limit, margin, exhaustive_search, permutation_limit,
+                                              multiple_rois, ignore_empty, partial_overlap, iou_threshold)
 
         crops = []
         annotations = []
@@ -128,9 +118,7 @@ class SmartCrop:
                     # Adjust bboxes for the crop
                     if included_boxes is not None:
                         # logging.info(f"Original boxes: {self.annotations}")
-                        adjusted_boxes = BoxManipulator._adjust_boxes(boxes=self.annotations,
-                                                                      roi=roi,
-                                                                      orig_shape=self.image_size)
+                        adjusted_boxes = BoxManipulator.adjust_boxes_to_roi(boxes=self.annotations, roi=roi)
 
                     # Display crops with adjusted bboxes
                     #                     if inspect:
@@ -142,9 +130,9 @@ class SmartCrop:
                         orig_crop_size = crop.shape[::-1][1:]
                         crop = FrameManipulator.resize_frames(crop, crop_size)[0]
                         if adjusted_boxes is not None:
-                            adjusted_boxes = BoxManipulator._adjust_boxes_for_resize(boxes=adjusted_boxes,
-                                                                                     orig_shape=orig_crop_size,
-                                                                                     new_shape=crop_size)
+                            adjusted_boxes = BoxManipulator.adjust_boxes_for_resize(boxes=adjusted_boxes,
+                                                                                    orig_shape=orig_crop_size,
+                                                                                    new_shape=crop_size)
 
                     # Print result
                     # logging.info(f"Adjusted boxes: {adjusted_boxes}")
@@ -179,8 +167,8 @@ class SmartCrop:
             # Upscale frame and adjust annotations
             image = FrameManipulator.resize_frames([self.image], target_size, preference='balance')[0]
             print(image.shape[::-1][1:])
-            orig_annotations = BoxManipulator._adjust_boxes_for_resize(self.annotations, self.image_size[::-1],
-                                                                       image.shape[::-1][1:])
+            orig_annotations = BoxManipulator.adjust_boxes_for_resize(self.annotations, self.image_size[::-1],
+                                                                      image.shape[::-1][1:])
         else:
             image = self.image
             orig_annotations = self.annotations
@@ -189,7 +177,9 @@ class SmartCrop:
 
         # Convert each bounding box to a CocoAnnotation object
         if orig_annotations is not None:
-            for bbox, cls in zip(orig_annotations.xyxy, orig_annotations.cls):
+            orig_classes = orig_annotations.cls if orig_annotations.cls is not None else [0 for _ in orig_annotations]
+            orig_confs = orig_annotations.conf if orig_annotations.conf is not None else [1.0 for _ in orig_annotations]
+            for bbox, cls, conf in zip(orig_annotations.xyxy, orig_classes, orig_confs):
                 #                 x_min, y_min, x_max, y_max = bbox
                 #                 width, height = x_max - x_min, y_max - y_min
                 #                 coco_bbox = [x_min, y_min, width, height]
@@ -199,7 +189,7 @@ class SmartCrop:
                 annotation = CocoAnnotation.from_coco_bbox(
                     bbox=coco_bbox,
                     category_id=cls,
-                    category_name=cls,
+                    category_name=conf,
                     iscrowd=0
                 )
                 annotation.image_id = 1  # Setting the image ID
@@ -233,14 +223,23 @@ class SmartCrop:
 
             # Extract annotations from coco annotations
             annotations = [coco_annotation.bbox for coco_annotation in sliced_image.coco_image.annotations]
-            logging.info(annotations)
+            confs = [float(coco_annotation.category.name) for coco_annotation in sliced_image.coco_image.annotations]
+            classes = [int(coco_annotation.category.id) for coco_annotation in sliced_image.coco_image.annotations]
 
-            if len(annotations) > 0:
+            # Stack the lists as columns into a 2D array
+            data = np.column_stack((annotations, confs, classes))
+
+            logging.debug(annotations)
+
+            if len(data) > 0:
                 # Create detection boxes for slice
-                xyxy_annotations = BoxManipulator.coco_to_xyxy(annotations)
-                detection_boxes = DetectionBoxes(np.array(xyxy_annotations), sliced_image.image.shape[:2], 'xyxy')
+                xyxy_data = BoxManipulator.coco_to_xyxy(data)
+                detection_boxes = DetectionBoxes(np.array(xyxy_data), sliced_image.image.shape[:2])
             else:
                 detection_boxes = None
+
+            # Append annotations
+            sliced_annotations.append(detection_boxes)
 
             # Display sliced frame if applicable
             if inspect:
@@ -272,7 +271,7 @@ class SmartCrop:
 
         # Upscale frame and adjust annotations
         crop = FrameManipulator.resize_frames([image], self.crop_size, preference='balance')[0]
-        annotations = BoxManipulator._adjust_boxes_for_resize(orig_annotations, image.shape[::-1][1:], self.crop_size)
+        annotations = BoxManipulator.adjust_boxes_for_resize(orig_annotations, image.shape[::-1][1:], self.crop_size)
 
         if inspect:
             Inspector.display_frames_with_boxes([crop], detection_boxes_list=[annotations])
@@ -307,7 +306,7 @@ class SmartCrop:
                    partial_overlap: bool = False,
                    iou_threshold: float = 0.5,
                    allow_slicing: bool = True,
-                   eveness_threshold: float = 0.66,
+                   evenness_threshold: float = 0.66,
                    force_slice_empty: bool = True,
                    inspect: bool = False):
         '''
@@ -331,14 +330,14 @@ class SmartCrop:
         empty = True if self.annotations is None else False
 
         grid_dim = max(min(self.image_size) // 2, min(self.crop_size) // 2)  # grid dims based on img or crop dims
-        box_dist_idx = 0 if empty else BoxAnalyser.analyze_bbox_distribution(self.annotations.xyxy, self.image_size,
-                                                                             grid_size=(grid_dim,
-                                                                                        grid_dim))  # analyse distribution of bboxes
-        even_dist = box_dist_idx >= eveness_threshold  # are boxes distributed in more than set proportion of grid cells?
+        box_dist_idx = 0 if empty else BoxManipulator.get_boxes_distribution_index(self.annotations.xyxy,
+                                                                                   self.image_size, grid_size=(grid_dim,
+                                                                                                               grid_dim))  # analyse distribution of bboxes
+        even_dist = box_dist_idx >= evenness_threshold  # are boxes distributed in more than set proportion of grid cells?
 
         box_size_limit = self.max_expansion_limit if self.handle_overflow == "expand" else self.crop_size
         any_large_box = False if empty else any(box_dim >= crop_dim for box_dim, crop_dim in
-                                                [(BoxAnalyser.box_dimensions(box), box_size_limit) for box in
+                                                [(BoxManipulator.get_box_dimensions(box), box_size_limit) for box in
                                                  self.annotations.xyxy])  # is any box higher or wider than the crop size?
 
         # If empty and force slice empties is True then slice

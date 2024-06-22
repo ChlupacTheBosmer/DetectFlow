@@ -128,7 +128,7 @@ def extract_data_from_result(result: DetectionResults) -> Dict[str, Any]:
 
     # Required attributes
     results = {}
-    required_attrs = ["frame_number", "video_time", "real_time", "recording_id", "video_id", "source_path", "ref_boxes", "boxes", "fil_boxes", "on_flowers"]
+    required_attrs = ["frame_number", "video_time", "real_time", "recording_id", "video_id", "source_path", "reference_boxes", "boxes", "filtered_boxes", "on_flowers"]
     for a in required_attrs:
         try:
             results[a] = getattr(result, a)
@@ -150,12 +150,13 @@ def extract_data_from_result(result: DetectionResults) -> Dict[str, Any]:
     else:
         life_time, year, month, day = None, 0, 0, 0
 
-    results['recording_id'], results['video_id'] = ObjectDetectValidator.validate_video_ids(safe_str(results.get('recording_id')), safe_str(results.get('video_id')))
-    results['video_path'] = ObjectDetectValidator.validate_video_path(safe_str(results.get('source_path')))
+    results['recording_id'] = safe_str(results.get('recording_id'))
+    results['video_id'] = safe_str(results.get('video_id'))
+    results['video_path'] = safe_str(results.get('source_path'))
 
-    reference_bboxes = safe_json(results.get('ref_boxes'))
+    reference_bboxes = safe_json(results.get('reference_boxes'))
     visitor_bboxes = safe_json(results.get('boxes'))
-    filtered_visitor_bboxes = safe_json(results.get('fil_boxes'))
+    filtered_visitor_bboxes = safe_json(results.get('filtered_boxes'))
     visit_ids = safe_json(results.get('boxes').id if hasattr(results.get('boxes'), 'id') else None)
     on_flower = safe_json(results.get('on_flowers'))
 

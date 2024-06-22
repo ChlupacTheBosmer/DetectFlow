@@ -110,7 +110,7 @@ def test_callback(**kwargs): #TODO: Rename the callback function
                 smart_result = smc.smart_crop(partial_overlap=True,
                                               iou_threshold=0.3,
                                               allow_slicing=True,
-                                              eveness_threshold=0.66,
+                                              evenness_threshold=0.66,
                                               force_slice_empty=False,
                                               inspect=inspect)
 
@@ -153,7 +153,7 @@ def test_callback(**kwargs): #TODO: Rename the callback function
 
             # Add attributes
             result._real_start_time = video_start_time
-            result.ref_boxes = det_results[0].boxes
+            result.reference_boxes = det_results[0].boxes
             result.frame_number = frame_numbers[i] if len(frame_numbers) >= i + 1 else None
             result.source_path = video_filepath
 

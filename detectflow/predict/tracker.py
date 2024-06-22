@@ -60,20 +60,17 @@ class Tracker:
                 for detection_result in detection_results:
                     if not persist:
                         self.trackers[i].reset()
-                    else:
-                        if detection_result is None or detection_result.boxes is None:  # Check for None values
-                            print("No detection")
-                            updated_detections.append(detection_result)
-                            continue
-                        detection = detection_result.boxes.cpu().numpy()
-                        # print(detection)
-                        if len(detection) == 0:
-                            print("No detection")
-                            updated_detections.append(detection_result)
-                            continue
 
-                    # print(detection_result.orig_img)
-                    tracks = self.trackers[i].update(detection, detection_result.orig_img) # TODO: Should be more robust to make sure dtection is defined
+                    if detection_result is None or detection_result.boxes is None or len(detection_result.boxes) == 0:  # Check for None values
+                        print("No detection")
+                        updated_detections.append(detection_result)
+                        continue
+                    else:
+                        detection = detection_result.boxes.data
+                        # print(detection)
+                        # print(detection_result.orig_img)
+
+                    tracks = self.trackers[i].update(detection, detection_result.orig_img)
 
                     if len(tracks) == 0:
                         print("No tracks")
@@ -82,9 +79,8 @@ class Tracker:
 
                     idx = tracks[:, -1].astype(int)
                     detection = detection.data[idx]
-                    # print(tracks[:,:-1])
-                    detection_result.boxes = DetectionBoxes(tracks[:, :-1], detection_result.boxes.orig_shape,
-                                                            "xyxytpc")
+                    # print(tracks[:,:-1]) # TODO: Check how this works
+                    detection_result.boxes = DetectionBoxes.from_custom_format(tracks[:, :-1], detection_result.boxes.orig_shape,"xyxytpc")
                     updated_detections.append(detection_result)
 
             return updated_detections

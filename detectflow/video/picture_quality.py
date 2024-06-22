@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 from detectflow import DetectionBoxes, BoxManipulator
-from detectflow.manipulators.box_manipulator import boxes_centers_distance
+from detectflow.manipulators.box_manipulator import boxes_center_center_distance
 from functools import lru_cache
 
 
@@ -88,12 +88,11 @@ class PictureQualityAnalyzer:
         if not len(bboxes) > 0:
             final_bboxes = None
         else:
-            merged_bboxes, _ = BoxManipulator.analyze_clusters(detection_boxes=np.array(bboxes),
-                                                               eps=merge_threshold,
-                                                               metric=boxes_centers_distance)
+            merged_bboxes, _ = BoxManipulator.get_clusters(detection_boxes=np.array(bboxes), eps=merge_threshold,
+                                                           metric=boxes_center_center_distance)
 
             # Create DetectionBoxes object
-            merged_bboxes = DetectionBoxes(merged_bboxes, (self.frame.shape[0], self.frame.shape[1]), "xyxy")
+            merged_bboxes = DetectionBoxes(merged_bboxes, (self.frame.shape[0], self.frame.shape[1]))
 
             # Remove smaller boxes completely inside larger boxes
             final_bboxes = BoxManipulator.remove_contained_boxes(merged_bboxes)

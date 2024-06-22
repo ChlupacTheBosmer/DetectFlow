@@ -1,10 +1,12 @@
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+from itertools import cycle
 import numpy as np
 from PIL import Image as PILImage
 import io
 from detectflow.predict.results import DetectionBoxes
 from typing import List, Tuple, Union, Optional
+import os
 
 
 class Inspector:
@@ -104,4 +106,64 @@ class Inspector:
             ax.imshow(img)
             plt.axis('off')  # Hide the axis
             plt.show()
+
+    @staticmethod
+    def display_frame_with_multiple_boxes(frame: np.ndarray,
+                                          detection_boxes_list: Union[List['DetectionBoxes'], List[np.ndarray], Tuple[np.ndarray, ...]] = None,
+                                          figsize: Tuple[int, int] = (12, 8),
+                                          show: bool = True,
+                                          save: bool = False,
+                                          filename: Optional[str] = None,
+                                          save_dir: Optional[str] = None):
+        """
+        Displays a single frame with several sets of bounding boxes, each with a different color.
+
+        Args:
+        - frame (np.ndarray): A single frame to display.
+        - detection_boxes_list (Union[List['DetectionBoxes'], List[np.ndarray], Tuple[np.ndarray, ...]]): A list of DetectionBoxes objects or lists/tuples of bounding boxes.
+        - figsize (Tuple[int, int]): Size of the figure for the plot.
+        - save_path (Optional[str]): Path to save the plot. If None, the plot is saved to self.save_dir.
+        """
+        if frame.ndim != 3:
+            raise ValueError("Invalid shape of the frame array. Expected 3D array.")
+
+        if detection_boxes_list is None:
+            detection_boxes_list = []
+
+        colors = cycle(['r', 'g', 'b', 'c', 'm', 'y', 'k'])
+
+        fig, ax = plt.subplots(1, figsize=figsize)
+        ax.imshow(frame)
+
+        for detection_boxes, color in zip(detection_boxes_list, colors):
+            if isinstance(detection_boxes, DetectionBoxes):
+                detection_boxes = detection_boxes.xyxy
+
+            for bbox in detection_boxes:
+                x_min, y_min, x_max, y_max = bbox[:4]
+                conf = bbox[4] if len(bbox) > 4 else None
+                width, height = x_max - x_min, y_max - y_min
+                rect = patches.Rectangle((x_min, y_min), width, height, linewidth=2, edgecolor=color, facecolor='none')
+                ax.add_patch(rect)
+
+                if conf is not None:
+                    # Draw a rectangle for the confidence score
+                    conf_rect = patches.Rectangle((x_min, y_min - 15), width=50, height=15, linewidth=1, edgecolor=color,
+                                                  facecolor=color, alpha=0.5)
+                    ax.add_patch(conf_rect)
+                    ax.text(x_min, y_min - 5, f'{conf:.2f}', color='white', fontsize=8, verticalalignment='center')
+
+        if show:
+            plt.show()
+
+        if save:
+            save_dir = save_dir or os.getcwd()
+            if not os.path.exists(save_dir):
+                os.makedirs(save_dir)
+            if filename is None:
+                filename = "frame_with_boxes"
+            save_path = os.path.join(save_dir, f"{filename}.png")
+            fig.savefig(save_path)
+
+        plt.close(fig)
 

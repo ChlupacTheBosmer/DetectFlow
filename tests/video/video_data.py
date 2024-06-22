@@ -33,8 +33,9 @@ class TestVideo(unittest.TestCase):
         self.assertIsNone(video.s3_path)
 
     def test_parse_recording_name(self):
+        from detectflow.utils.name import parse_recording_name
         video = Video(video_path=self.video_path)
-        parsed_data = video.parse_recording_name(self.video_path)
+        parsed_data = parse_recording_name(self.video_path)
         self.assertEqual(parsed_data['recording_id'], 'GR2_L1_TolUmb2')
         self.assertEqual(parsed_data['timestamp'], '20220524_07_44')
         self.assertEqual(parsed_data['locality'], 'GR2')
