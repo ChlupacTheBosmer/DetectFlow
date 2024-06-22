@@ -13,7 +13,7 @@ from detectflow.predict.predictor import Predictor
 from detectflow.utils.inspector import Inspector
 from detectflow.video.motion_detector import MotionDetector
 from detectflow.validators.video_validator import VideoValidator
-from detectflow.manipulators.box_analyser import BoxAnalyser
+from detectflow import BoxManipulator
 from detectflow.predict.results import DetectionBoxes
 from detectflow.utils.pdf_creator import PDFCreator, DiagPDFCreator
 from detectflow.video.video_data import Video
@@ -265,7 +265,7 @@ class VideoDiagnoser:
             if ref_bboxes is not None:
                 for boxes, label in zip(ref_bboxes, labels):
                     if isinstance(boxes, DetectionBoxes):
-                        results[label] = BoxAnalyser.analyze_boxes(boxes)
+                        results[label] = BoxManipulator.get_boxes_summary(boxes)
             else:
                 logging.error(f"Reference boxes analysis could not be performed: Reference boxes are not available.")
                 results = None
@@ -311,7 +311,7 @@ class VideoDiagnoser:
         if self._ref_bboxes:
             try:
                 for frame_regions, boxes in zip(self._focus_regions, self._ref_bboxes):
-                    focus_accuracy = BoxAnalyser.calculate_coverage(boxes, frame_regions)
+                    focus_accuracy = BoxManipulator.get_coverage(boxes, frame_regions)
                     focus_accuracies.append(focus_accuracy)
             except Exception as e:
                 logging.error(f"Focus accuracy could not be calculated: Error: {e}")
@@ -446,7 +446,7 @@ class VideoDiagnoser:
 
         # Get and validate output path
         output_path = output_path if output_path is not None and Validator.is_valid_directory_path(
-            self.output_path) else self.output_path
+            output_path) else self.output_path
 
         if output_path:
             try:

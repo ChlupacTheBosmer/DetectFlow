@@ -165,9 +165,29 @@ class Settings(dict):
         self.save()
 
 
+class BaseClass:
+    """Base class providing string representation.
+    """
+
+    def __str__(self):
+        """Return a human-readable string representation of the object."""
+        attr = []
+        for a in dir(self):
+            v = getattr(self, a)
+            if not callable(v) and not a.startswith("_"):
+                if isinstance(v, BaseClass):
+                    # Display only the module and class name for subclasses
+                    s = f"{a}: {v.__module__}.{v.__class__.__name__} object"
+                else:
+                    s = f"{a}: {repr(v)}"
+                attr.append(s)
+        return f"{self.__module__}.{self.__class__.__name__} object with attributes:\n\n" + "\n".join(attr)
+
+
 # init of some global constants
 SETTINGS = Settings()
 DOWNLOADS_DIR = SETTINGS['downloads_dir']
 CHECKPOINTS_DIR = SETTINGS['checkpoints_dir']
 CONFIG_DIR = SETTINGS['config_dir']
 
+# TODO: Create checkpoints directory

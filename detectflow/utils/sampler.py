@@ -175,7 +175,7 @@ class Sampler:
 
         if as_detection_boxes:
             image_size = grid_size * square_size
-            return DetectionBoxes(boxes, (image_size, image_size), "xyxy")
+            return DetectionBoxes(boxes, (image_size, image_size))
         else:
             return boxes
 
@@ -210,8 +210,8 @@ class Sampler:
 
         # Assign test attributes
         result.boxes = boxes
-        result.ref_boxes = Sampler.create_sample_bboxes(grid_size=8, square_size=24, num_boxes=2,
-                                                        as_detection_boxes=True)
+        result.reference_boxes = Sampler.create_sample_bboxes(grid_size=8, square_size=24, num_boxes=2,
+                                                              as_detection_boxes=True)
         result.frame_number = random.randint(1, 30000)
         result.source_path = "/storage/brno2/home/USER/videos/first_batch/CZ1_M2_MyoPar03/CZ1_M2_MyoPar03_20210519_12_07.mp4"
         result.source_name = "CZ1_M2_MyoPar03_20210519_12_07"

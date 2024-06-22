@@ -9,7 +9,6 @@ from .handlers.openai_chat_handler import OpenAIChatHandler
 from .handlers.ssh_handler import SSHHandler
 from .image.motion_enrich import MotionEnrich, MotionEnrichResult
 from .image.smart_crop import SmartCrop, CropResult
-from .manipulators.box_analyser import BoxAnalyser
 from .manipulators.box_manipulator import BoxManipulator
 from .manipulators.database_manipulator import DatabaseManipulator
 from .manipulators.dataloader import Dataloader
@@ -58,6 +57,7 @@ __version__ = '0.1.0'
 __author__ = 'Petr Chlup'
 __email__ = 'USER@natur.cuni.cz'
 
+
 # Defining the public API of the package
 __all__ = ['S3_CONFIG',
            'CheckpointHandler',
@@ -71,8 +71,6 @@ __all__ = ['S3_CONFIG',
            'MotionEnrichResult',
            'SmartCrop',
            'CropResult',
-           'BoxAnalyser',
-           'BoxManipulator',
            'DatabaseManipulator',
            'Dataloader',
            'FrameManipulator',
@@ -135,4 +133,5 @@ __all__ = ['S3_CONFIG',
            'extract_time_from_text',
            'install_google_api_key'
            ]
+
 

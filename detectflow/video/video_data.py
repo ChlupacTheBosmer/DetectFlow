@@ -11,7 +11,7 @@ from detectflow.validators.s3_validator import S3Validator
 from detectflow.validators.video_validator import VideoValidator
 from detectflow.video.frame_reader import FrameReader
 from detectflow.video.picture_quality import PictureQualityAnalyzer
-from functools import lru_cache
+from detectflow.utils.name import parse_recording_name
 
 
 class Video(FrameReader):
@@ -29,7 +29,7 @@ class Video(FrameReader):
         Initializes the Video class.
         """
         # Parse the recording name
-        parsed_data = self.parse_recording_name(video_path)
+        parsed_data = parse_recording_name(video_path)
 
         # Set the attributes
         self.recording_id = parsed_data.get("recording_id", None)
@@ -80,40 +80,6 @@ class Video(FrameReader):
 
         # return list of validated reader methods
         return [method for method, status in result.items() if status]
-
-    def parse_recording_name(self, video_path: str):
-
-        filename = os.path.basename(video_path)
-
-        # Prepare name elements
-        try:
-            locality, transect, plant_id, date, hour, minutes = filename[:-4].split("_")
-            file_extension = os.path.splitext(filename)[-1]
-        except Exception as e:
-            logging.warning(f'Unable to parse video recording name: {self.video_path}. Exception: {e}')
-            return {"recording_id": filename,
-                    "timestamp": None,
-                    "locality": None,
-                    "transect": None,
-                    "plant_id": None,
-                    "date": None,
-                    "hour": None,
-                    "minute": None,
-                    "extension": os.path.splitext(filename)[-1]}
-
-        # Define compound info
-        recording_identifier = "_".join([locality, transect, plant_id])
-        timestamp = "_".join([date, hour, minutes])
-
-        return {"recording_id": recording_identifier,
-                "timestamp": timestamp,
-                "locality": locality,
-                "transect": transect,
-                "plant_id": plant_id,
-                "date": date,
-                "hour": hour,
-                "minute": minutes,
-                "extension": file_extension}
 
     @property
     def fps(self):
