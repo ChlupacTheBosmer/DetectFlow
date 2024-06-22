@@ -330,7 +330,7 @@ class FrameManipulator:
             roi_width = img_width
             roi_height = int(possible_height)
 
-        return (roi_width, roi_height)
+        return roi_width, roi_height
 
     @staticmethod
     def save_frame(frame, filename, directory, extension='png'):
