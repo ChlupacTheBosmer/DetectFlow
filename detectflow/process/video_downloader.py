@@ -185,9 +185,9 @@ class VideoDownloader:
             file_pairs = [(self.manipulator._parse_s3_path(video_path)[1], os.path.join(download_path, os.path.basename(video_path))) for video_path in videos_to_download_chunk]
 
             # Download logic - use multithreading to download multiple videos at once
-            downloaded_videos = self.manipulator.download_files_s3_batch(bucket_name=bucket, file_pairs=file_pairs, max_workers=calculate_optimal_threads(), max_attempts=3)
+            downloaded_videos = self.manipulator.download_files_s3_batch(bucket_name=bucket, file_pairs=file_pairs, max_workers=batch_size, max_attempts=3)
 
-            with ProcessPoolExecutor(max_workers=calculate_optimal_threads()) as executor:
+            with ProcessPoolExecutor(max_workers=batch_size) as executor:
                 future_to_video = {
                     executor.submit(self._process_callback, self.processing_callback, destination_path, video_path): (destination_path, video_path)
                     for destination_path in downloaded_videos
@@ -243,7 +243,7 @@ class VideoDownloader:
                         checkpoint["downloaded_videos"].append(os.path.basename(destination_path))
                         self._update_checkpoint(bucket, directory, checkpoint["downloaded_videos"])
 
-                        yield (destination_path, callback_result)
+                        yield destination_path, callback_result
 
         self._remove_checkpoint()
 
@@ -275,5 +275,6 @@ class VideoDownloader:
                         checkpoint["downloaded_videos"].append(os.path.basename(destination_path))
                         self._update_checkpoint(bucket, directory, checkpoint["downloaded_videos"])
 
-                        yield (destination_path, callback_result)
+                        yield destination_path, callback_result
         self._remove_checkpoint()
+
