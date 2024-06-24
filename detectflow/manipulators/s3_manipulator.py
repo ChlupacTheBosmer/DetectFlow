@@ -13,7 +13,7 @@ from detectflow import S3_CONFIG
 
 
 class S3Manipulator(S3Validator):
-    def __init__(self, cfg_file: str = S3_CONFIG): # TODO: Add find file automatic location of the config file
+    def __init__(self, cfg_file: str = S3_CONFIG, client_config=None): # TODO: Add find file automatic location of the config file
 
         # Run the init method of S3Validator parent class
         S3Validator.__init__(self, cfg_file)
@@ -27,7 +27,8 @@ class S3Manipulator(S3Validator):
             endpoint_url=self.endpoint_url,
             aws_access_key_id=self.aws_access_key_id,
             aws_secret_access_key=self.aws_secret_access_key,
-            region_name=region_name
+            region_name=region_name,
+            config=client_config
         )
 
     def list_files_s3(self, bucket_name: str, folder_name: str, regex: str = None, return_full_path: bool = True) -> \
