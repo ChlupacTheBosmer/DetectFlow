@@ -180,7 +180,8 @@ class VideoDownloader:
         # Define pairs of video s3 paths and destination paths
         download_path = self._get_download_path(bucket, directory)
 
-        for videos_to_download_chunk in iter(lambda: list(itertools.islice(iter(videos_to_download), batch_size)), []):
+        iterable_videos_to_download = iter(videos_to_download)
+        for videos_to_download_chunk in iter(lambda: list(itertools.islice(iterable_videos_to_download, batch_size)), []):
 
             file_pairs = [(self.manipulator._parse_s3_path(video_path)[1], os.path.join(download_path, os.path.basename(video_path))) for video_path in videos_to_download_chunk]
 
