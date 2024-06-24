@@ -23,7 +23,8 @@ class VideoDownloader:
         parent_directory (str): The root directory where downloaded videos are stored.
         maintain_structure (bool): If True, maintains the bucket and directory structure in the parent directory.
         delete_after_process (bool): If True, deletes videos after post-download processing is complete.
-        post_download_callback (callable): An optional callback function that is executed on each downloaded video file.
+        processing_callback (callable): An optional callback function that is executed on each downloaded video file.
+                                        It should accept two keyword arguments: video_path and s3_path.
 
     The callback function should accept a single argument, the path to the downloaded video, and perform any desired operations.
 
@@ -51,7 +52,7 @@ class VideoDownloader:
         ...     parent_directory="/path/to/download/directory",
         ...     maintain_structure=True,
         ...     delete_after_process=False,
-        ...     post_download_callback=log_video_path
+        ...     processing_callback=log_video_path
         ... )
         >>> downloader.download_videos_ordered()
     """
@@ -158,7 +159,7 @@ class VideoDownloader:
             callback_result = None
             if self.processing_callback:
                 try:
-                    callback_result = self.processing_callback(destination_path)
+                    callback_result = self.processing_callback(video_path=destination_path, s3_path=video_path)
                 except Exception as e:
                     logging.error(f"Error during post-download callback for {destination_path}: {str(e)}")
 
