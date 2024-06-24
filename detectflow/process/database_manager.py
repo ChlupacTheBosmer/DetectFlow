@@ -1,4 +1,3 @@
-import sqlite3
 import traceback
 import os
 import threading
@@ -6,146 +5,163 @@ import csv
 from typing import Dict, List, Optional, Type, Any
 from detectflow.utils.profile import profile_function_call
 from detectflow.manipulators.s3_manipulator import S3Manipulator
-import time
-from datetime import timedelta, datetime
-from queue import Queue
+from detectflow.config import S3_CONFIG
 import logging
-from detectflow.predict.results import DetectionResults
 from detectflow.utils import DOWNLOADS_DIR
+import multiprocessing
+import time
+
+VISITS_SQL = """
+            CREATE TABLE IF NOT EXISTS visits (
+                frame_number integer,
+                video_time text NOT NULL,
+                life_time text,
+                year integer,
+                month integer,
+                day integer,
+                recording_id text,
+                video_id text,
+                video_path text,
+                flower_bboxes text,
+                rois text,
+                all_visitor_bboxes text,
+                relevant_visitor_bboxes text,
+                visit_ids text,
+                on_flower boolean,
+                flags text
+            );
+            """
+
+VISITS_COLS = [
+    ("frame_number", "integer", "NOT NULL"),
+    ("video_time", "text", "NOT NULL"),
+    ("life_time", "text", ""),
+    ("year", "integer", ""),
+    ("month", "integer", ""),
+    ("day", "integer", ""),
+    ("recording_id", "text", ""),
+    ("video_id", "text", "NOT NULL"),
+    ("video_path", "text", ""),
+    ("flower_bboxes", "text", ""),
+    ("rois", "text", ""),
+    ("all_visitor_bboxes", "text", ""),
+    ("relevant_visitor_bboxes", "text", ""),
+    ("visit_ids", "text", ""),
+    ("on_flower", "boolean", ""),
+    ("flags", "text", "")
+]
+
+VIDEOS_SQL = """
+            CREATE TABLE IF NOT EXISTS videos (
+                recording_id text,
+                video_id text PRIMARY KEY,
+                s3_bucket text,
+                s3_directory text,
+                format text,
+                start_time text,
+                end_time text,
+                length integer,
+                total_frames integer,
+                fps integer,
+                focus real,
+                blur real,
+                contrast real,
+                brightness real,
+                daytime text,
+                thumbnail blob,
+                focus_regions_start text,
+                flowers_start text,
+                focus_acc_start text,
+                focus_regions_end text,
+                flowers_end text,
+                focus_acc_end text,
+                motion real
+            );
+        """
+
+VIDEOS_COLS = [
+    ("recording_id", "text", ""),
+    ("video_id", "text", "PRIMARY KEY"),
+    ("s3_bucket", "text", ""),
+    ("s3_directory", "text", ""),
+    ("format", "text", ""),
+    ("start_time", "text", ""),
+    ("end_time", "text", ""),
+    ("length", "integer", ""),
+    ("total_frames", "integer", ""),
+    ("fps", "integer", ""),
+    ("focus", "real", ""),
+    ("blur", "real", ""),
+    ("contrast", "real", ""),
+    ("brightness", "real", ""),
+    ("daytime", "text", ""),
+    ("thumbnail", "blob", ""),
+    ("focus_regions_start", "text", ""),
+    ("flowers_start", "text", ""),
+    ("focus_acc_start", "text", ""),
+    ("focus_regions_end", "text", ""),
+    ("flowers_end", "text", ""),
+    ("focus_acc_end", "text", ""),
+    ("motion", "real", "")
+]
 
 
 class DatabaseManager:
 
-    VISITS_SQL = """
-                CREATE TABLE IF NOT EXISTS visits (
-                    frame_number integer,
-                    video_time text NOT NULL,
-                    life_time text,
-                    year integer,
-                    month integer,
-                    day integer,
-                    recording_id text,
-                    video_id text,
-                    video_path text,
-                    flower_bboxes text,
-                    rois text,
-                    all_visitor_bboxes text,
-                    relevant_visitor_bboxes text,
-                    visit_ids text,
-                    on_flower boolean,
-                    flags text
-                );
-            """
-
-    VISITS_COLS = [
-        ("frame_number", "integer", "NOT NULL"),
-        ("video_time", "text", "NOT NULL"),
-        ("life_time", "text", ""),
-        ("year", "integer", ""),
-        ("month", "integer", ""),
-        ("day", "integer", ""),
-        ("recording_id", "text", ""),
-        ("video_id", "text", "NOT NULL"),
-        ("video_path", "text", ""),
-        ("flower_bboxes", "text", ""),
-        ("rois", "text", ""),
-        ("all_visitor_bboxes", "text", ""),
-        ("relevant_visitor_bboxes", "text", ""),
-        ("visit_ids", "text", ""),
-        ("on_flower", "boolean", ""),
-        ("flags", "text", "")
-    ]
-
-    VIDEOS_SQL = """
-                CREATE TABLE IF NOT EXISTS videos (
-                    recording_id text,
-                    video_id text PRIMARY KEY,
-                    s3_bucket text,
-                    s3_directory text,
-                    format text,
-                    start_time text,
-                    end_time text,
-                    length integer,
-                    total_frames integer,
-                    fps integer,
-                    focus real,
-                    blur real,
-                    contrast real,
-                    brightness real,
-                    daytime text,
-                    thumbnail blob,
-                    focus_regions_start text,
-                    flowers_start text,
-                    focus_acc_start text,
-                    focus_regions_end text,
-                    flowers_end text,
-                    focus_acc_end text,
-                    motion real
-                );
-            """
-
-    VIDEOS_COLS = [
-        ("recording_id", "text", ""),
-        ("video_id", "text", "PRIMARY KEY"),
-        ("s3_bucket", "text", ""),
-        ("s3_directory", "text", ""),
-        ("format", "text", ""),
-        ("start_time", "text", ""),
-        ("end_time", "text", ""),
-        ("length", "integer", ""),
-        ("total_frames", "integer", ""),
-        ("fps", "integer", ""),
-        ("focus", "real", ""),
-        ("blur", "real", ""),
-        ("contrast", "real", ""),
-        ("brightness", "real", ""),
-        ("daytime", "text", ""),
-        ("thumbnail", "blob", ""),
-        ("focus_regions_start", "text", ""),
-        ("flowers_start", "text", ""),
-        ("focus_acc_start", "text", ""),
-        ("focus_regions_end", "text", ""),
-        ("flowers_end", "text", ""),
-        ("focus_acc_end", "text", ""),
-        ("motion", "real", "")
-    ]
+    DEFAULT_STRUCTURE = {
+        "visits": {'columns': VISITS_COLS,
+                   'batching': True},
+        "videos": {'columns': VIDEOS_COLS,
+                   'batching': False}
+    }
 
     def __init__(self,
-                 db_manipulators: Optional[Dict[str, Type['DatabaseManipulator']]] = None,
+                 db_paths: Optional[Dict[str, str]] = None,
                  batch_size: int = 100,
                  backup_interval: int = 500,
-                 s3_manipulator: Optional[S3Manipulator] = None):
+                 control_queue: Optional[multiprocessing.Queue] = None,
+                 data_queue: Optional[multiprocessing.Queue] = None,
+                 s3_manipulator: Optional[S3Manipulator] = None,
+                 database_structure: Optional[Dict[str, Any]] = None):
         """
         Initialize the DatabaseManager instance.
 
         Args:
         db_manipulators (Optional[Dict[str, Type['DatabaseManipulator']]]): A dictionary of database manipulators.
         batch_size (int): The size of each batch for processing.
+        backup_interval (int): The interval at which to back up the database to S3.
         s3_manipulator (Optional[Type[S3Manipulator]]): An instance or subclass of S3Manipulator.
         """
-        self.db_manipulators = db_manipulators
-        self.lock = threading.Lock()
+        self.database_structure = database_structure if database_structure is not None else self.DEFAULT_STRUCTURE
+        self.db_paths = db_paths
+        self.db_manipulators = {}
         self.processed_databases = set()
         self.backup_interval = backup_interval
         self.backup_counters = {}
-        if self.db_manipulators is not None:
-            for recording_id, db_manipulator in self.db_manipulators.items():
-                db_manipulator.batch_size = batch_size
-                self.init_database(db_manipulator)
-                self.backup_counters[recording_id] = 0
         self.batch_size = batch_size
-        self.data_batches = {recording_id: [] for recording_id in db_manipulators}
-        self.queue = None
+        self.data_batches = {}
+        self.control_queue = control_queue if control_queue is not None else multiprocessing.Queue()
+        self.queue = data_queue if data_queue is not None else multiprocessing.Queue()
         self.s3_manipulator = s3_manipulator
 
-    def init_database(self, db_manipulator):
+    def _init_database_manipulator(self, db_file):
+        """
+        Initialize a new database manipulator for the given database file.
+        """
+        from detectflow.manipulators.database_manipulator import DatabaseManipulator
+
+        return DatabaseManipulator(db_file, batch_size=self.batch_size, lock_type="processing")
+
+    def _init_database(self, db_manipulator):
         """
         Initialize the database and required tables for the given recording ID.
         """
-        for table_name, columns in [("visits", self.VISITS_COLS), ("videos", self.VIDEOS_COLS)]:
-            db_manipulator.create_table(table_name, columns)
+        for table_name, table_info in self.database_structure.items():
+            columns = table_info['columns']
+            if table_name not in db_manipulator.get_table_names():
+                db_manipulator.create_table(table_name, columns)
 
-    def add_database(self, recording_id: str, db_manipulator: Type["DatabaseManipulator"]):
+    def add_database(self, recording_id: str, db_path: str):
         """
         Add a new database for the given recording ID and initialize it.
         """
@@ -153,12 +169,13 @@ class DatabaseManager:
             print(f"Database for recording ID {recording_id} already exists.")
             return
 
+        db_manipulator = self._init_database_manipulator(db_path)
         self.db_manipulators[recording_id] = db_manipulator
         self.data_batches[recording_id] = []
         self.backup_counters[recording_id] = 0
 
         # Initialize the database and required tables
-        self.init_database(db_manipulator)
+        self._init_database(db_manipulator)
 
     def get_database(self, recording_id: str) -> Optional["DatabaseManipulator"]:
         """
@@ -166,7 +183,7 @@ class DatabaseManager:
         """
         return self.db_manipulators.get(recording_id)
 
-    def dump_to_csv(self, data_entry: Dict[str, Any]):
+    def _dump_to_csv(self, data_entry: Dict[str, Any]):
         """ Dump data to a CSV file as a fallback """
         from detectflow.manipulators.manipulator import Manipulator
         from detectflow.utils.hash import get_numeric_hash
@@ -178,7 +195,7 @@ class DatabaseManager:
             writer.writerow(data_entry)
             print(f"Data dumped to {filepath}")
 
-    def check_backup_interval(self, recording_id: str):
+    def _check_backup_interval(self, recording_id: str):
         # Check if the backup should be performed
         self.backup_counters[recording_id] += 1
         if self.backup_interval and self.backup_counters[recording_id] >= self.backup_interval:
@@ -201,7 +218,7 @@ class DatabaseManager:
         db_manipulator.close_connection()
 
         # Get the local file path
-        local_file_path = db_manipulator.db_path
+        local_file_path = db_manipulator.db_file
 
         # Specify the bucket and directory names
         bucket_name = InputManipulator.get_bucket_name_from_id(recording_id)
@@ -238,9 +255,9 @@ class DatabaseManager:
             logging.error(f"Failed to upload {local_file_path} to S3: {e}")
 
         if validate_upload:
-            self.validate_backup_to_s3(bucket_name, s3_file_path, local_file_path)
+            self._validate_backup_to_s3(bucket_name, s3_file_path, local_file_path)
 
-    def validate_backup_to_s3(self, bucket_name: str, s3_file_path: str, db_file_path: str):
+    def _validate_backup_to_s3(self, bucket_name: str, s3_file_path: str, db_file_path: str):
         from detectflow.utils.file import compare_file_sizes
 
         tmp_folder = os.path.join(DOWNLOADS_DIR, os.path.dirname(db_file_path))
@@ -261,34 +278,89 @@ class DatabaseManager:
         except Exception as e:
             logging.error(f"Failed to validate the upload of {db_file_path} to S3: {e}")
 
-    def process_queue(self, queue: Queue):
+    def run(self):
         """ Process tasks from the queue """
         # TODO: Consider handling errors here to avoid crashing the whole process.
         #  Come up with a good way to fix errors. Test the script to see what errors may occur and then address them.
+
+        # Initialize the database manipulators
+        self.db_manipulators = {}
+        for recording_id, db_path in self.db_paths.items():
+            db_manipulator = self._init_database_manipulator(db_path)
+            self.db_manipulators[recording_id] = db_manipulator
+            self._init_database(db_manipulator)
+            self.backup_counters[recording_id] = 0
+        self.data_batches = {recording_id: [] for recording_id in self.db_manipulators}
+        logging.info(f"Database manipulators initialized: #{len(self.db_manipulators)}.")
+
+        # Initialize S3Manipulator if not provided
+        if self.s3_manipulator is None:
+            self.s3_manipulator = S3Manipulator(S3_CONFIG)
+            logging.warning("No S3 manipulator provided. Using a new instance for S3 backup.")
+
+        # Start the processing
+        logging.info(f"Process {multiprocessing.current_process().name} started.")
         mark_keys = {'id', 'status'}
-        self.queue = queue
+        stop = False
         while True:
-            data_entry = queue.get()
-            if data_entry is None:
-                # Signal to stop processing
-                self.flush_all_batches()
-                break
-            elif not isinstance(data_entry, dict):
-                raise RuntimeError(f"Invalid data type supplied to database manager: {type(data_entry)}")
-            else:
-                if isinstance(data_entry, dict) and set(data_entry.keys()) == mark_keys:
-                    # Mark the recording as processed and flush its batch
-                    self.mark_recording_processed(data_entry['id'])
-                    continue
-                try:
-                    self.process_input_data(data_entry)
-                except Exception as e:
-                    raise RuntimeError(f"Error processing input data dictionary: {e} - {traceback.format_exc()}")
-                finally:
-                    self.queue.task_done() # TODO: Test this to see if it works as expected
+            try:
+                # Check for control messages
+                print("Checking control queue.")
+                if not self.control_queue.empty():
+                    command, args = self.control_queue.get()
+                    if command == 'add_database':
+                        self.add_database(*args) # Pass recording_id and db_manipulator
+                        logging.info(f"Adding database for recording ID {args[0]}.")
+                    elif command == 'stop':
+                        stop = True
+                        logging.info("Stopping database manager.")
+                    elif command == 'flush_all_batches':
+                        self.flush_all_batches()
+                        logging.info("Flushing all batches.")
+                    elif command == 'flush_batch':
+                        self.flush_batch(*args)
+                        logging.info(f"Flushing batch for recording ID {args[0]}.")
+                    elif command == 'backup_to_s3':
+                        self.backup_to_s3(*args)
+                        logging.info(f"Backing up database for recording ID {args[0]} to S3.")
+                    #self.control_queue.task_done()
+
+                # Check if the queue is empty and stop is requested
+                if self.queue.empty() and stop:
+                    self.flush_all_batches()
+                    break
+
+                # Process the next data entry
+                if not self.queue.empty():
+                    data_entry = self.queue.get()
+                    if not isinstance(data_entry, dict):
+                        #self.queue.task_done()
+                        raise TypeError(f"Invalid data type supplied to database manager: {type(data_entry)}")
+                    elif isinstance(data_entry, dict) and set(data_entry.keys()) == mark_keys:
+                        # Mark the recording as processed and flush its batch
+                        self._mark_recording_processed(data_entry['id'])
+                        #self.queue.task_done()
+                        continue
+                    else:
+                        try:
+                            self._process_input_data(data_entry)
+                        except Exception as e:
+                            raise RuntimeError(f"Error processing input data dictionary: {e} - {traceback.format_exc()}")
+                        #finally:
+                            #self.queue.task_done() # TODO: Test this to see if it works as expected
+
+                # Sleep to prevent high CPU usage
+                time.sleep(1)
+            except TypeError as e:
+                logging.error(f"Type Error: {e} - {traceback.format_exc()}. Ignoring and continuing.")
+            except Exception as e:
+                logging.error(f"Error during database manager processing: {e} - {traceback.format_exc()}")
+
+        # Clean up the database manager when processing is done
+        self.clean_up()
 
     @profile_function_call(logging.getLogger(__name__))
-    def process_input_data(self, data_entry: Dict[str, Any]):
+    def _process_input_data(self, data_entry: Dict[str, Any]):
         """ Process a single DetectionResult object. Should be overwritten by subclasses to address specific
         structure of database tables and entries."""
         recording_id = data_entry.get("recording_id")
@@ -298,20 +370,23 @@ class DatabaseManager:
 
         if not db_manipulator:
             print(f"Recording ID {recording_id} not found in managed databases. Emergency data dump initiated.")
-            self.dump_to_csv(data_entry)
+            self._dump_to_csv(data_entry)
             return
 
-        if any(["total_frames", "fps", "focus", "blur", "contrast", "brightness"]) in data_entry.keys():
-            # Add data to the manipulators batch
-            db_manipulator.insert("videos", data_entry)
-        else:
-            # Add data to the manipulators batch
-            db_manipulator.add_to_batch("visits", data_entry)
+        for table_name, table_info in self.database_structure.items():
+            column_names = [col[0] for col in table_info['columns']]
+            if all([key in column_names for key in data_entry.keys()]):
+                if table_info.get('batching', True):
+                    # Add data to the manipulators batch
+                    db_manipulator.add_to_batch(table_name, data_entry)
+                else:
+                    # Add data directly to the table
+                    db_manipulator.insert(table_name, data_entry)
 
         # Check if the backup should be performed
-        self.check_backup_interval(recording_id)
+        self._check_backup_interval(recording_id)
 
-    def mark_recording_processed(self, recording_id):
+    def _mark_recording_processed(self, recording_id):
         """ Mark a recording as processed and flush its batch """
         # Add the recording to the list of processed databases
         self.processed_databases.add(recording_id)
@@ -336,20 +411,66 @@ class DatabaseManager:
         logging.info("Flushed all batches.")
 
     def clean_up(self):
-        if self.queue is not None:
-            self.queue.join()
-            self.queue = None
+        """ Clean up the database manager """
+        if self.db_manipulators is not None:
+            for recording_id, db_manipulator in self.db_manipulators.items():
+                self.flush_batch(recording_id)
+                self.backup_to_s3(recording_id)
+                if recording_id not in self.processed_databases:
+                    logging.warning(f"Recording ID {recording_id} was not marked as processed before cleanup.")
 
-        for recording_id, db_manipulator in self.db_manipulators.items():
-            self.flush_batch(recording_id)
-            self.backup_to_s3(recording_id)
-            if recording_id not in self.processed_databases:
-                logging.warning(f"Recording ID {recording_id} was not marked as processed before cleanup.")
-            self.db_manipulators.pop(recording_id, None)
-        logging.info("Database manager cleaned up.")
+            recording_ids = list(self.db_manipulators.keys())
+            for recording_id in recording_ids:
+                self.db_manipulators.pop(recording_id)
 
-    def __del__(self):
-        self.clean_up()
+            logging.info("Database manager cleaned up.")
+
+
+def start_db_manager(db_paths: Dict[str, str],
+                     batch_size: int = 100,
+                     backup_interval: int = 500,
+                     s3_manipulator: Optional[S3Manipulator] = None,
+                     database_structure: Optional[Dict[str, Any]] = None):
+
+    control_queue = multiprocessing.Queue()
+    data_queue = multiprocessing.Queue()
+
+    manager = DatabaseManager(db_paths=db_paths,
+                              batch_size=batch_size,
+                              backup_interval=backup_interval,
+                              control_queue=control_queue,
+                              data_queue=data_queue,
+                              s3_manipulator=s3_manipulator,
+                              database_structure=database_structure)
+    manager_process = multiprocessing.Process(target=manager.run, name="DatabaseManager")
+    manager_process.start()
+    return {'manager': manager,
+            'process': manager_process,
+            'control_queue': control_queue,
+            'data_queue': data_queue
+            }
+
+
+def stop_db_manager(control_queue, manager_process):
+    control_queue.put(('stop', []))
+    manager_process.join()
+
+
+def add_database_to_db_manager(control_queue, db_name, db_path):
+    logging.info(f"Adding database {db_name} to control queue.")
+    control_queue.put(('add_database', (db_name, db_path)))
+
+
+def flush_one_db_manager(control_queue, recording_id):
+    control_queue.put(('flush_batch', (recording_id,)))
+
+
+def flush_all_db_manager(control_queue):
+    control_queue.put(('flush_all_batches', []))
+
+
+def backup_file_db_manager(control_queue, recording_id):
+    control_queue.put(('backup_to_s3', (recording_id, True)))
 
 
 
