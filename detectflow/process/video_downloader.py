@@ -5,6 +5,7 @@ import logging
 from detectflow.manipulators.s3_manipulator import S3Manipulator
 from detectflow.manipulators.manipulator import Manipulator
 from detectflow.utils import DOWNLOADS_DIR, CHECKPOINTS_DIR
+from functools import partial
 
 
 class VideoDownloader:
@@ -156,12 +157,14 @@ class VideoDownloader:
             self.manipulator.download_file_s3(bucket_name=bucket, file_name=self.manipulator._parse_s3_path(video_path)[1],
                                               local_file_name=destination_path)
 
-            callback_result = None
-            if self.processing_callback:
-                try:
-                    callback_result = self.processing_callback(video_path=destination_path, s3_path=video_path)
-                except Exception as e:
-                    logging.error(f"Error during post-download callback for {destination_path}: {str(e)}")
+            _, callback_result = self._process_callback(self.processing_callback, destination_path, video_path)
+
+            # callback_result = None
+            # if self.processing_callback:
+            #     try:
+            #         callback_result = self.processing_callback(video_path=destination_path, s3_path=video_path)
+            #     except Exception as e:
+            #         logging.error(f"Error during post-download callback for {destination_path}: {str(e)}")
 
             if self.delete_after_process:
                 logging.info(f"Deleting video after processing: {destination_path}")
@@ -169,7 +172,54 @@ class VideoDownloader:
 
             yield destination_path, callback_result
 
-    def download_videos_ordered(self, regex: str = r'\.(mp4|avi)$'):
+    def _download_videos_batch(self, bucket, directory, videos_to_download, batch_size=5):
+        from detectflow.utils.threads import calculate_optimal_threads
+        from concurrent.futures import ProcessPoolExecutor, as_completed
+        import itertools
+
+        # Define pairs of video s3 paths and destination paths
+        download_path = self._get_download_path(bucket, directory)
+
+        for videos_to_download_chunk in iter(lambda: list(itertools.islice(iter(videos_to_download), batch_size)), []):
+
+            file_pairs = [(self.manipulator._parse_s3_path(video_path)[1], os.path.join(download_path, os.path.basename(video_path))) for video_path in videos_to_download_chunk]
+
+            # Download logic - use multithreading to download multiple videos at once
+            downloaded_videos = self.manipulator.download_files_s3_batch(bucket_name=bucket, file_pairs=file_pairs, max_workers=calculate_optimal_threads(), max_attempts=3)
+
+            with ProcessPoolExecutor(max_workers=calculate_optimal_threads()) as executor:
+                future_to_video = {
+                    executor.submit(self._process_callback, self.processing_callback, destination_path, video_path): (destination_path, video_path)
+                    for destination_path in downloaded_videos
+                    for video_path in videos_to_download
+                    if os.path.basename(video_path) == os.path.basename(destination_path)
+                }
+
+                for future in as_completed(future_to_video):
+                    destination_path, video_path = future_to_video[future]
+                    try:
+                        video_path, callback_result = future.result()
+                        logging.info(f"Downloading video: {video_path} to {destination_path}")
+
+                        if self.delete_after_process:
+                            logging.info(f"Deleting video after processing: {destination_path}")
+                            Manipulator.delete_file(destination_path)
+
+                        yield destination_path, callback_result
+                    except Exception as e:
+                        logging.error(f"Callback processing failed for {destination_path}: {str(e)}")
+                        yield destination_path, None
+
+    @staticmethod
+    def _process_callback(processing_callback, video_path, s3_path):
+        result = None
+        try:
+            result = processing_callback(video_path=video_path, s3_path=s3_path)
+        except Exception as e:
+            logging.error(f"Error during post-download callback for {video_path}: {str(e)}")
+        return video_path, result
+
+    def download_videos_ordered(self, regex: str = r'\.(mp4|avi)$', parallelism: bool = False, batch_size: int = 5):
         checkpoint = self._read_checkpoint()
         buckets = self._filter_buckets(self.manipulator.list_buckets_s3())
         logging.info(f"Processing buckets: {buckets}")
@@ -183,9 +233,11 @@ class VideoDownloader:
                     # Filter out already downloaded videos if resuming
                     videos_to_download = [v for v in video_files if
                                           os.path.basename(v) not in checkpoint.get("downloaded_videos", [])]
-
-                    for destination_path, callback_result in self._download_videos(bucket, directory,
-                                                                                   videos_to_download):
+                    download_method = partial(self._download_videos_batch,
+                                              batch_size=batch_size) if parallelism else self._download_videos
+                    for destination_path, callback_result in download_method(bucket=bucket,
+                                                                             directory=directory,
+                                                                             videos_to_download=videos_to_download):
                         logging.info(f"Processed {destination_path} with callback result: {callback_result}")
                         # Assuming the callback doesn't change the video file name, so we use the basename for the checkpoint.
                         checkpoint["downloaded_videos"].append(os.path.basename(destination_path))
@@ -195,7 +247,7 @@ class VideoDownloader:
 
         self._remove_checkpoint()
 
-    def download_videos_random(self, regex: str = r'\.(mp4|avi)$', sample_size: int = 5):
+    def download_videos_random(self, regex: str = r'\.(mp4|avi)$', sample_size: int = 5, parallelism: bool = False, batch_size: int = 5):
         checkpoint = self._read_checkpoint()
         buckets = self._filter_buckets(self.manipulator.list_buckets_s3())
         logging.info(f"Processing buckets: {buckets}")
@@ -213,7 +265,10 @@ class VideoDownloader:
                         logging.warning(f"Not enough new videos in {directory}, found only {len(available_videos)}")
                         continue
                     selected_videos = random.sample(available_videos, sample_size)
-                    for destination_path, callback_result in self._download_videos(bucket, directory, selected_videos):
+                    download_method = partial(self._download_videos_batch, batch_size=batch_size) if parallelism else self._download_videos
+                    for destination_path, callback_result in download_method(bucket=bucket,
+                                                                             directory=directory,
+                                                                             videos_to_download=selected_videos):
                         logging.info(
                             f"Processed {destination_path} with callback result: {None if callback_result is None else 'OK'}")
                         # Update the checkpoint similarly as in ordered download
