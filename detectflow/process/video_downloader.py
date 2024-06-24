@@ -53,7 +53,7 @@ class VideoDownloader:
         ...     delete_after_process=False,
         ...     post_download_callback=log_video_path
         ... )
-        >>> downloader.download_videos_ordered(batch_size=5)
+        >>> downloader.download_videos_ordered()
     """
 
     def __init__(self,
@@ -168,7 +168,7 @@ class VideoDownloader:
 
             yield destination_path, callback_result
 
-    def download_videos_ordered(self):
+    def download_videos_ordered(self, regex: str = r'\.(mp4|avi)$'):
         checkpoint = self._read_checkpoint()
         buckets = self._filter_buckets(self.manipulator.list_buckets_s3())
         logging.info(f"Processing buckets: {buckets}")
@@ -178,7 +178,7 @@ class VideoDownloader:
                 if self._should_process_directory(checkpoint, bucket, directory):
                     logging.info(f"Processing directory: {directory} in bucket: {bucket}")
                     video_files = self.manipulator.list_files_s3(bucket_name=bucket, folder_name=directory,
-                                                                 regex=r'\.(mp4|avi)$', return_full_path=True)
+                                                                 regex=regex, return_full_path=True)
                     # Filter out already downloaded videos if resuming
                     videos_to_download = [v for v in video_files if
                                           os.path.basename(v) not in checkpoint.get("downloaded_videos", [])]
@@ -194,7 +194,7 @@ class VideoDownloader:
 
         self._remove_checkpoint()
 
-    def download_videos_random(self, sample_size: int = 5):
+    def download_videos_random(self, regex: str = r'\.(mp4|avi)$', sample_size: int = 5):
         checkpoint = self._read_checkpoint()
         buckets = self._filter_buckets(self.manipulator.list_buckets_s3())
         logging.info(f"Processing buckets: {buckets}")
@@ -204,7 +204,7 @@ class VideoDownloader:
                 if self._should_process_directory(checkpoint, bucket, directory):
                     logging.info(f"Processing directory: {directory} in bucket: {bucket}")
                     video_files = self.manipulator.list_files_s3(bucket_name=bucket, folder_name=directory,
-                                                                 regex=r'\.(mp4|avi)$', return_full_path=True)
+                                                                 regex=regex, return_full_path=True)
                     # print(video_files)
                     available_videos = [v for v in video_files if
                                         os.path.basename(v) not in checkpoint.get("downloaded_videos", [])]
