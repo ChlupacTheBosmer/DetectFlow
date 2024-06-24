@@ -13,7 +13,7 @@ def calculate_optimal_threads(divisor: int = 1):
 
     print(f"The optimal number of threads based on the CPU count is: {num_threads}")
 
-    return num_threads
+    return max(num_threads, 1)
 
 
 def profile_threads():
