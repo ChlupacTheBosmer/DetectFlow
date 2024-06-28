@@ -15,6 +15,7 @@ setuptools
 torch
 ultralytics
 python-dateutil
+paramiko
 
 # GitHub repositories for the forked packages
 git+https://github.com/ChlupacTheBosmer/sahi.git@main#egg=sahi
