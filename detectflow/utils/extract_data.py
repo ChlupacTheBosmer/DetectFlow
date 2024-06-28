@@ -13,7 +13,10 @@ def safe_str(value):
 
 
 def safe_int(value, default=0):
-    return int(value) if value is not None else default
+    if isinstance(value, timedelta):
+        return int(value.total_seconds())
+    else:
+        return int(value) if value is not None else default
 
 
 def safe_float(value, default=0.0):
@@ -50,8 +53,16 @@ def safe_json(value):
     return json.dumps(convert_to_lists(value) if value is not None else [])
 
 
-def extract_data_from_video(video_path: Optional[str] = None, video_file: Optional[Type["Video"]] = None, s3_path: str = None):
-    """ Extract data from a video file and pack as a dictionary"""
+def extract_data_from_video(video_path: Optional[str] = None, video_file: Optional[Type["Video"]] = None, s3_path: str = None, **kwargs):
+    """
+    Extract data from a video file and pack as a dictionary
+
+    Args:
+    - video_path: str, path to video file (alternatively to video_file)
+    - video_file: Video object, video file object (alternatively to video_path)
+    - s3_path: str, path to the video file in a S3 storage (optional)
+    - **kwargs: additional keyword arguments for VideoDiagnoser
+    """
     from detectflow.video.video_data import Video
     from detectflow.video.video_diagnoser import VideoDiagnoser
 
@@ -59,6 +70,8 @@ def extract_data_from_video(video_path: Optional[str] = None, video_file: Option
         if video_file:
             video = video_file
             video_path = video.video_path
+            if s3_path:
+                video.s3_path = s3_path
         elif video_path:
             video = Video(video_path, s3_path)
         else:
@@ -79,10 +92,10 @@ def extract_data_from_video(video_path: Optional[str] = None, video_file: Option
     motion_method = "TA"
     try:
         if video:
-            kwargs = {"video_file": video, "motion_methods": motion_method, "frame_skip": 2}
+            diag_kwargs = {"video_file": video, "motion_methods": kwargs.get('motion_methods', motion_method), "frame_skip": kwargs.get('frame_skip', 5)}
         else:
-            kwargs = {"video_path": video_path, "motion_methods": motion_method, "frame_skip": 2}
-        video_diag = VideoDiagnoser(**kwargs)
+            diag_kwargs = {"video_path": video_path, "motion_methods": kwargs.get('motion_methods', motion_method), "frame_skip": kwargs.get('frame_skip', 5)}
+        video_diag = VideoDiagnoser(**{**kwargs, **diag_kwargs})
     except Exception as e:
         raise RuntimeError(f"Error initiating VideoDiagnoser for video file {video_path}: {e}")
 
@@ -96,6 +109,7 @@ def extract_data_from_video(video_path: Optional[str] = None, video_file: Option
             except Exception as e:
                 logging.error(f"Error getting {v} from video_diag object: {e}")
                 diag_results[v] = None
+        video_diag._ref_bboxes = diag_results.get("reference_boxes") # Set the protected attr manually so the ref boxes are saved for future analyses.
 
         attrs = ["daytime", "thumbnail"]
         for a in attrs:
@@ -129,11 +143,11 @@ def extract_data_from_video(video_path: Optional[str] = None, video_file: Option
         "brightness": safe_float(vid_results.get("brightness", None)),
         "daytime": diag_results.get("daytime", "NULL"),
         "thumbnail": diag_results.get("thumbnail", None),
-        "focus_regions_start": safe_first_element(diag_results.get("focus_regions")),
-        "flowers_start": safe_first_element(diag_results.get("reference_boxes")),
+        "focus_regions_start": safe_json(safe_first_element(diag_results.get("focus_regions"))),
+        "flowers_start": safe_json(safe_first_element(diag_results.get("reference_boxes"))),
         "focus_acc_start": safe_first_element(diag_results.get("focus_accuracies")),
-        "focus_regions_end": safe_last_element(diag_results.get("focus_regions")),
-        "flowers_end": safe_last_element(diag_results.get("reference_boxes")),
+        "focus_regions_end": safe_json(safe_last_element(diag_results.get("focus_regions"))),
+        "flowers_end": safe_json(safe_last_element(diag_results.get("reference_boxes"))),
         "focus_acc_end": safe_last_element(diag_results.get("focus_accuracies")),
         "motion": safe_float(diag_results.get("mean_motion"))
     }
