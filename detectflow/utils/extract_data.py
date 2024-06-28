@@ -4,6 +4,7 @@ import json
 from typing import Dict, List, Optional, Type, Any
 from datetime import timedelta, datetime
 import logging
+import numpy as np
 from detectflow.predict.results import DetectionResults
 
 
@@ -31,17 +32,37 @@ def safe_last_element(value):
     return value[-1] if value else None
 
 
+def convert_to_lists(value):
+    from detectflow.predict.results import DetectionBoxes
+
+    if isinstance(value, np.ndarray):
+        value = value.tolist()  # Convert numpy array to list
+    elif isinstance(value, tuple):
+        value = list(value)  # Convert tuple to list
+    elif isinstance(value, DetectionBoxes):
+        value = value.tolist()
+    if isinstance(value, list):
+        return [convert_to_lists(item) for item in value]  # Recursively convert elements
+    return value
+
+
 def safe_json(value):
-    return json.dumps(value.to_list() if value is not None else [])
+    return json.dumps(convert_to_lists(value) if value is not None else [])
 
 
-def extract_data_from_video(video_path: str, s3_path: str = None):
+def extract_data_from_video(video_path: Optional[str] = None, video_file: Optional[Type["Video"]] = None, s3_path: str = None):
     """ Extract data from a video file and pack as a dictionary"""
     from detectflow.video.video_data import Video
     from detectflow.video.video_diagnoser import VideoDiagnoser
 
     try:
-        video = Video(video_path, s3_path)
+        if video_file:
+            video = video_file
+            video_path = video.video_path
+        elif video_path:
+            video = Video(video_path, s3_path)
+        else:
+            raise ValueError("No video file or video object supplied")
     except Exception as e:
         raise RuntimeError(f"Error initiating Video class for video file {video_path}: {e}")
 
