@@ -37,7 +37,7 @@ class VideoDiagnoser:
                  flowers_model_conf: float = 0.3,
                  motion_methods: Optional[Union[str, int, List, Tuple]] = "SOM",
                  frame_skip: int = 1,
-                 color_variance_threshold: int = 10,
+                 color_variance_threshold: int = 1500,
                  verbose: bool = True,
                  output_path: Optional[str] = None
                  ):
@@ -239,7 +239,9 @@ class VideoDiagnoser:
                 # Detect flowers in the sliced frames
                 for result in predictor.detect(frame_numpy_array=self.frames,
                                                model_path=self.flowers_model_path,
-                                               detection_conf_threshold=self.flowers_model_conf):
+                                               detection_conf_threshold=self.flowers_model_conf,
+                                               device='cpu'
+                                               ):
 
                     # Store detected boxes for further analysis
                     ref_bboxes.append(result.boxes)
