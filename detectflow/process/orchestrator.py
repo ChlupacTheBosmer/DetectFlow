@@ -1,16 +1,16 @@
 import logging
-from threading import Thread
 import json
 import sys
 import uuid
 import os
-from queue import Queue
+import time
 from typing import Dict, Optional
 from detectflow.handlers.config_handler import ConfigHandler
 from detectflow.manipulators.dataloader import Dataloader
 from detectflow.utils.threads import profile_threads, manage_threads
 from detectflow.utils.s3.input import validate_and_process_input
-
+from detectflow.utils import WINDOWS
+import importlib
 
 class Task:
     def __init__(self, directory: str, video_files: list, status: dict):
@@ -26,14 +26,21 @@ class Task:
         self._video_files = video_files
         self._status = status
 
-    def get_status(self, file_path):
+    def get_status(self, file_path=None, file_name=None):
         """
         Get the processing status for a specific video file.
 
         :param file_path: Path of the video file.
+        :param file_name: Name of the video file.
         :return: Processing status for the given file.
         """
-        return self._status.get(file_path, 0)
+        if file_path:
+            return self._status.get(file_path, 0)
+        if file_name:
+            for key in self._status.keys():
+                if os.path.basename(key) == file_name:
+                    return self._status[key]
+        return 0
 
     @property
     def files(self):
@@ -111,6 +118,7 @@ class Orchestrator(ConfigHandler):
                  config_path: Optional[str] = None,
                  config_format: str = "json",
                  config_defaults: Optional[Dict] = None,
+                 parallelism: Optional[str] = None,
                  **kwargs):
 
         if not config_defaults:
@@ -119,6 +127,17 @@ class Orchestrator(ConfigHandler):
         self.callback_config = {}
 
         super().__init__(config_path, config_format, config_defaults)
+
+        # Initialize attributes with default values
+        self.parallelism = None
+        self._concurrent_unit = None
+        self.task_queue = None
+        self.control_queue = None
+        self._unit_type = None
+
+        # Determine parallelism type and set up
+        self.parallelism = "process" if parallelism in ["process", "p"] else "thread"
+        self._setup_parallelism()
 
         try:
             # Start by initializing dataloader, it should be injected
@@ -145,12 +164,11 @@ class Orchestrator(ConfigHandler):
                         self.callback_config[key] = value
 
             # Init other attributes
-            self.task_queue = Queue()
             self.checkpoint_file = os.path.join(self.checkpoint_dir, f"{self.task_name}.json")
             self._setup_logging()
             self.checkpoint_data = None
             self._initialize_checkpoint()
-            self.threads = []
+            self.concurrent_units = []
 
             # Update the config by the values of the atr in case custom values were passed. Saving config would save the custom configuration.
             self.pack_config(
@@ -169,6 +187,28 @@ class Orchestrator(ConfigHandler):
             logging.error(f"Failed to initialize Orchestrator: {e}")
             raise
 
+    def _setup_parallelism(self):
+        try:
+            if self.parallelism == "process":
+                from multiprocessing import Process, JoinableQueue, Queue as MPQueue, set_start_method
+                from queue import Empty as Queue_Empty
+                self._concurrent_unit = Process
+                self.task_queue = JoinableQueue()
+                self.control_queue = MPQueue()
+                self._unit_type = "process"
+                self._queue_empty_exception = Queue_Empty
+                set_start_method('spawn', force=True)
+            else:
+                from threading import Thread
+                from queue import Queue, Empty as Queue_Empty
+                self._concurrent_unit = Thread
+                self.task_queue = Queue()
+                self.control_queue = Queue()
+                self._unit_type = "thread"
+                self._queue_empty_exception = Queue_Empty
+        except Exception as e:
+            raise RuntimeError(f"Failed to set up parallelism: {e}")
+
     def _generate_fallback_directories(self):
         # Generate dynamic fallback paths based on the instance attributes
         return [
@@ -178,7 +218,32 @@ class Orchestrator(ConfigHandler):
             self.scratch_path
         ]
 
-    def validate_config(self):
+    def load_config(self):
+
+        self.config = super().load_config()
+
+        # Assign attributes
+        self.input_data = self.config.get('input_data', None)
+        self.checkpoint_dir = self.config.get('checkpoint_dir', os.getcwd())
+        self.task_name = self.config.get('task_name', str(uuid.uuid4()))
+        self.batch_size = self.config.get('batch_size', 3)
+        self.max_workers = self.config.get('max_workers', 3)
+        self.force_restart = self.config.get('force_restart', False)
+        self.scratch_path = self.config.get('scratch_path', "")
+        self.user_name = self.config.get('user_name', None)
+
+        # Retrieve the callback function from the config
+        callback_function_path = self.config.get('process_task_callback', None)
+        if callback_function_path:
+            module_name, function_name = callback_function_path.rsplit('.', 1)
+            module = importlib.import_module(module_name)
+            self.process_task_callback = getattr(module, function_name)
+        else:
+            self.process_task_callback = None
+
+        return self.config
+
+    def _validate_config(self):
         """
         Validate config. Checks if all required keys are present.
         """
@@ -301,6 +366,7 @@ class Orchestrator(ConfigHandler):
 
             if input_flags[0]:  # S3 bucket, directory
                 bucket, prefix = self.dataloader._parse_s3_path(directory)
+                print(bucket, prefix)
                 file_list = self.dataloader.list_files_s3(bucket, prefix, regex=r"^(?!.*^\.).*(?<=\.mp4|\.avi|\.mkv)$",
                                                           return_full_path=True)
             elif input_flags[2]:  # Local directory
@@ -341,29 +407,45 @@ class Orchestrator(ConfigHandler):
 
         logging.critical("All attempts to write checkpoint failed. Progress may be lost.")
 
-    def start_processing(self):
+    def run(self):
         # Start the workers
         self._start_workers()
 
         # Begin managing tasks
         self._manage_tasks()
 
+        # Control loop to check for signals and process tasks
+        while (not self.task_queue.empty()) or not (any(u.is_alive() for u in self.concurrent_units)):
+            try:
+                control_signal, args = self.control_queue.get_nowait()
+                if control_signal == "stop":
+                    logging.info("Received stop signal")
+                    break
+                if control_signal == "update_task":
+                    self._handle_worker_update()
+            except self._queue_empty_exception:
+                pass
+
+            time.sleep(0.1)  # Prevent busy-waiting
+
         # Signal workers to stop after all tasks are queued
+        self.task_queue.join()
         for _ in range(self.max_workers):
+            logging.info("Signaling workers to stop")
             self.task_queue.put(None)
 
         # Wait for all tasks to be completed
-        # self.task_queue.join() #TODO: Is queue a thread? Shouldn't the workers be joined rather than the queue?
-        for thread in self.threads:
-            thread.join()
+        for unit in self.concurrent_units:
+            unit.join()
 
-        # Profile running threads
-        profile_threads()
+        # Profile running concurrent_units
+        profile_threads() if self.parallelism == "thread" else None
 
     def _manage_tasks(self):
         directory = None
         for task in self.checkpoint_data.get('tasks', []):
             try:
+                logging.info(f"Managing task for directory {task.get('directory')}")
                 directory = task.get('directory')
                 status = task.get('status', {})
 
@@ -394,7 +476,7 @@ class Orchestrator(ConfigHandler):
     def _queue_batch(self, task: Task):
         try:
             self.task_queue.put(task)
-
+            logging.info(f"Queued batch for directory {task.directory}")
             # Update checkpoint file with the queued batch
             for file in task.files:
                 self.checkpoint_data['progress'][file] = 0  # Mark as queued but not started
@@ -425,7 +507,7 @@ class Orchestrator(ConfigHandler):
         except Exception as e:
             logging.error(f"Error updating task progress for {file} in {directory}: {e}")
 
-    def handle_worker_update(self, update_info):
+    def _handle_worker_update(self, update_info):
         file, directory = None, None
         try:
             # Validate update_info format
@@ -454,51 +536,67 @@ class Orchestrator(ConfigHandler):
         for i in range(self.max_workers):
             try:
                 worker_name = f"Worker #{i}"
-                worker_thread = Thread(target=self._worker_process, args=(worker_name,), name=worker_name)
-                self.threads.append(worker_thread)
-                worker_thread.start()
+                callback_kwargs = {
+                    "orchestrator_control_queue": self.control_queue,
+                    "scratch_path": self.scratch_path,
+                    **self.callback_config
+                }
+                worker_unit = self._concurrent_unit(target=self._worker, args=(worker_name,
+                                                                               self.task_queue,
+                                                                               self.process_task_callback,
+                                                                               callback_kwargs), name=worker_name)
+                self.concurrent_units.append(worker_unit)
+                worker_unit.start()
             except Exception as e:
-                logging.error(f"Failed to start worker thread: {e}")
+                logging.error(f"Failed to start worker {self._unit_type}: {e}")
 
-        # Profile running threads
-        manage_threads(r'Worker #\d+', 'status')
+        # Profile running concurrent_units
+        manage_threads(r'Worker #\d+', 'status') if self.parallelism == "thread" else None
 
-    def _worker_process(self, name):
+    @staticmethod
+    def _worker(name, task_queue, process_task_callback, callback_kwargs):
         while True:
             try:
-                task = self.task_queue.get()
+                task = task_queue.get()
+                logging.info(f"{name} - Processing task: {task}")
                 if task is None:
-                    self.task_queue.put(None)
+                    task_queue.put(None)
                     break
 
-                self._process_task(task, name)
-                self.task_queue.task_done()
+                # Call the processing callback if it's set
+                if process_task_callback:
+                    try:
+                        process_task_callback(
+                            task=task,
+                            name=name,
+                            **callback_kwargs
+                        )
+                    except Exception as callback_exc:
+                        logging.error(
+                            f"{name} - Error during processing callback in orchestrator process task: {callback_exc}")
+                        # TODO: Consider whether to continue or break the loop based on the nature of the error
+
+                task_queue.task_done()
             except Exception as e:
                 logging.error(f"{name} - Error processing task: {e}")
-                self.task_queue.task_done()  # Ensure task_done is called even if there's an error
+                task_queue.task_done()  # Ensure task_done is called even if there's an error
 
-        # Join the thread
-        logging.info(f"{name} - Joining Worker thread")
-        manage_threads(name, 'join')
-
-    def _process_task(self, task, name):
-
-        # Call the processing callback if it's set
-        if self.process_task_callback:
-            try:
-                self.process_task_callback(
-                    task=task,
-                    orchestrator=self,
-                    name=name,
-                    scratch_path=self.scratch_path,
-                    max_workers=self.max_workers,
-                    **self.callback_config  # DONE: Rename config after implementing the ocnfig funcionality
-                )
-            except Exception as callback_exc:
-                logging.error(f"{name} - Error during processing callback in orchestrator process task: {callback_exc}")
-                # Consider whether to continue or break the loop based on the nature of the error
-
-        return
+    # @staticmethod
+    # def _process_task(task, name, process_task_callback, callback_kwargs):
+    #
+    #     # Call the processing callback if it's set
+    #     if process_task_callback:
+    #         try:
+    #             process_task_callback(
+    #                 task=task,
+    #                 name=name,
+    #                 **callback_kwargs
+    #             )
+    #         except Exception as callback_exc:
+    #             logging.error(f"{name} - Error during processing callback in orchestrator process task: {callback_exc}")
+    #             # Consider whether to continue or break the loop based on the nature of the error
+    #
+    #     return
         # Placeholder for task processing logic
         # This method should handle the actual processing of each task, including:
         # - Loading data (if necessary)
