@@ -303,7 +303,7 @@ class DatabaseManager:
                             #self.queue.task_done() # TODO: Test this to see if it works as expected
 
                 # Sleep to prevent high CPU usage
-                time.sleep(1)
+                time.sleep(2)
             except TypeError as e:
                 logging.error(f"Type Error: {e} - {traceback.format_exc()}. Ignoring and continuing.")
             except Exception as e:
