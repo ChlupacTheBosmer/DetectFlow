@@ -88,6 +88,19 @@ class TestDatabaseManager():
 
         print("Test adding data passed")
 
+    def test_adding_video_data(self, db_index=None):
+        from detectflow.utils.extract_data import extract_data_from_video
+        import random
+
+        for i in range(1):
+            number_suffix = random.randint(2, 3) if db_index is None else db_index
+            video_path = os.path.join(self.path, f'{self.rec_id_base}{number_suffix}_{self.timestamp}.mp4')
+            data_entry = extract_data_from_video(video_path=video_path, frame_skip=20)
+
+            self.queue.put(data_entry)
+
+        print("Test adding video data passed")
+
     def test_flush_all_db_manager(self):
         from detectflow.process.database_manager import flush_all_db_manager
 
@@ -141,13 +154,14 @@ if __name__ == '__main__':
     t = TestDatabaseManager()
     t.test_start_db_manager()
     time.sleep(10)
-    t.test_add_database()
-    t.test_adding_data()
-    t.test_flush_all_db_manager()
-    t.test_flush_one_db_manager()
-    t.test_backup_db_to_s3()
+    # t.test_add_database()
+    # t.test_adding_data()
+    t.test_adding_video_data()
+    # t.test_flush_all_db_manager()
+    # t.test_flush_one_db_manager()
+    # t.test_backup_db_to_s3()
     t.test_stop_db_manager()
-    #t.tear_down()
+    t.tear_down()
 
 
 
