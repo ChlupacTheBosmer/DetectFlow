@@ -51,7 +51,7 @@ class TestPictureQualityAnalyzer(unittest.TestCase):
         self.assertGreaterEqual(color_variance, 0)
 
     def test_daytime(self):
-        is_daytime = self.analyzer.get_daytime(color_variance_threshold=10)
+        is_daytime = self.analyzer.get_daytime(brightness_threshold=10)
         self.assertIsInstance(is_daytime, bool)
 
     def test_get_blur(self):
@@ -93,8 +93,36 @@ class TestPictureQualityAnalyzer(unittest.TestCase):
         self.assertGreaterEqual(color_variance, 0)
 
     def test_get_daytime(self):
-        is_daytime = self.analyzer.get_daytime(color_variance_threshold=10)
+        print("Brightness: ", self.analyzer.brightness)
+        print("Saturation: ", self.analyzer.saturation)
+        is_daytime = self.analyzer.get_daytime(brightness_threshold=10, saturation_threshold = 10)
         self.assertIsInstance(is_daytime, bool)
+
+    def test_real_test(self):
+        from detectflow.video.video_data import Video
+
+        vid = Video(video_path = r"D:\Dílna\Kutění\Python\DetectFlow\tests\video\resources\CZ2_T1_AciArv02_20210619_23_21.mp4")
+
+        analyzer = vid.get_picture_quality(25)
+
+        print("Blur: ", analyzer.blur)
+        print("Focus: ", analyzer.focus)
+        print("Contrast: ", analyzer.contrast)
+        print("Brightness: ", analyzer.brightness)
+        print("Saturation: ", analyzer.saturation)
+        print("Color variance: ", analyzer.color_variance)
+
+        vid = Video(
+            video_path=r"D:\Dílna\Kutění\Python\DetectFlow\tests\video\resources\GR2_L1_TolUmb3_20220524_07_44.mp4")
+
+        analyzer = vid.get_picture_quality(25)
+
+        print("Blur: ", analyzer.blur)
+        print("Focus: ", analyzer.focus)
+        print("Contrast: ", analyzer.contrast)
+        print("Brightness: ", analyzer.brightness)
+        print("Saturation: ", analyzer.saturation)
+        print("Color variance: ", analyzer.color_variance)
 
 if __name__ == '__main__':
     unittest.main()

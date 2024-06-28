@@ -18,16 +18,9 @@ class TestVideoDiagnoserIntegration(unittest.TestCase):
         output_path = './test_output'
 
         # Create VideoDiagnoser instance
-        cls.diagnoser = VideoDiagnoser(
-            video_path=video_path,
-            flowers_model_path=flowers_model_path,
-            flowers_model_conf=0.3,
-            motion_methods="TA",
-            frame_skip=500,
-            color_variance_threshold=10,
-            verbose=True,
-            output_path=output_path
-        )
+        cls.diagnoser = VideoDiagnoser(video_path=video_path, flowers_model_path=flowers_model_path,
+                                       flowers_model_conf=0.3, motion_methods="TA", frame_skip=500,
+                                       brightness_threshold=10, verbose=True, output_path=output_path)
 
     def test_attributes(self):
         self.assertIsInstance(self.diagnoser.video_path, str)

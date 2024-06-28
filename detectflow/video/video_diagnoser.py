@@ -37,10 +37,11 @@ class VideoDiagnoser:
                  flowers_model_conf: float = 0.3,
                  motion_methods: Optional[Union[str, int, List, Tuple]] = "SOM",
                  frame_skip: int = 1,
-                 color_variance_threshold: int = 1500,
+                 brightness_threshold: int = 50,
+                 saturation_threshold: int = 10,
                  verbose: bool = True,
-                 output_path: Optional[str] = None
-                 ):
+                 output_path: Optional[str] = None,
+                 **kwargs):
 
         if video_path is None and video_file is None:
             raise ValueError("Either 'video_path' or 'video_file' must be provided.")
@@ -53,7 +54,8 @@ class VideoDiagnoser:
             self.flowers_model_conf = flowers_model_conf
             self.motion_methods = motion_methods
             self.frame_skip = frame_skip
-            self.color_variance_threshold = color_variance_threshold
+            self.brightness_threshold = brightness_threshold
+            self.saturation_threshold = saturation_threshold
             self.verbose = verbose
 
             # Validate attributes, will raise error if something is wrong
@@ -201,16 +203,17 @@ class VideoDiagnoser:
             self._daytime = self.get_daytime()
         return self._daytime
 
-    def get_daytime(self, color_variance_threshold: Optional[int] = None):
+    def get_daytime(self, brightness_threshold: Optional[int] = None, saturation_threshold: Optional[int] = None):
 
         # Override default attribute or get default
-        color_variance_threshold = color_variance_threshold if color_variance_threshold is not None else self.color_variance_threshold
+        brightness_threshold = brightness_threshold if brightness_threshold is not None else self.brightness_threshold
+        saturation_threshold = saturation_threshold if saturation_threshold is not None else self.saturation_threshold
 
         # Check if the self.example_frames attribute exists
         self._check_frames()
 
         try:
-            self._daytime = self.video_file.get_picture_quality(24).get_daytime(color_variance_threshold)
+            self._daytime = self.video_file.get_picture_quality(24).get_daytime(brightness_threshold, saturation_threshold)
         except Exception as e:
             logging.error(
                 f"ERROR: (Video Diagnoser) Failed to analyze whether video is day or night: {os.path.basename(self.video_path)}. Error: {e}")
@@ -414,7 +417,8 @@ class VideoDiagnoser:
                              '/storage/brno2/home/USER/Flowers/flowers_ours_f2s/weights', 'best.pt'),
                          flowers_model_conf: float = 0.3,
                          motion_methods: Optional[Union[str, List, Tuple]] = None,
-                         color_variance_threshold: int = 10):
+                         brightness_threshold: Optional[int] = 50,
+                         saturation_threshold: Optional[int] = 10):
         # Pack data
         output_data = {}
         try:
@@ -436,7 +440,7 @@ class VideoDiagnoser:
             output_data["basic_data"]["frame_height"] = self.frame_height
             output_data["motion_data"] = self._motion_data if self._motion_data else self.analyze_motion_data(motion_methods=motion_methods)
             output_data["daytime"] = self._daytime if self._daytime is not None else self.get_daytime(
-                color_variance_threshold)
+                brightness_threshold, saturation_threshold)
             output_data["frames"] = self.frames if self.frames is not None else self._get_frames()
         except Exception as e:
             logging.error(f"ERROR: (Video Diagnoser) Error packing output data. Error: {e}")
@@ -467,20 +471,23 @@ class VideoDiagnoser:
                flowers_model_path: Optional[str] = None,
                flowers_model_conf: Optional[float] = None,
                motion_methods: Optional[Union[str, List, Tuple]] = None,
-               color_variance_threshold: Optional[int] = 10,
+               brightness_threshold: Optional[int] = 50,
+               saturation_threshold: Optional[int] = 10,
                verbose: Optional[bool] = None):
 
         # Combine arguments with initialized configuration, these override the config defined in init
         flowers_model_path = flowers_model_path if flowers_model_path is not None else self.flowers_model_path
         flowers_model_conf = flowers_model_conf if flowers_model_conf is not None else self.flowers_model_conf
         motion_methods = motion_methods if motion_methods is not None else self.motion_methods
-        color_variance_threshold = color_variance_threshold if color_variance_threshold is not None else self.color_variance_threshold
+        brightness_threshold = brightness_threshold if brightness_threshold is not None else self.brightness_threshold
+        saturation_threshold = saturation_threshold if saturation_threshold is not None else self.saturation_threshold
         verbose = verbose if verbose is not None else self.verbose
 
         # Repack Output Data
         report_data = self._get_report_data(flowers_model_path=flowers_model_path,
                                             flowers_model_conf=flowers_model_conf, motion_methods=motion_methods,
-                                            color_variance_threshold=color_variance_threshold)
+                                            brightness_threshold=brightness_threshold,
+                                            saturation_threshold=saturation_threshold)
 
         # Print output to the console
         if verbose:
