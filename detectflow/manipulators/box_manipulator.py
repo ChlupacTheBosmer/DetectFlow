@@ -1200,11 +1200,15 @@ class BoxManipulator:
         """
         result = None
         if detection_results and len(detection_results) > 0:
+
             # Initialize Tracker
             tracker = Tracker() if tracker is None else tracker
+
             # Run tracking on the frames
-            tracked_results = tracker.process_tracking(
-                detection_results)  # Returns list of DetectionResults updated for each passed Result
+            tracked_results = []
+            for result in detection_results:
+                tracked_result = tracker.process_tracking(result, filter=True)
+                tracked_results.append(tracked_result)
 
             # Get boxes from the first frame
             first_frame_boxes = None
