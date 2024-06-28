@@ -170,7 +170,7 @@ class Sampler:
             end_x = random.randint(start_x, grid_size - 1)
             end_y = random.randint(start_y, grid_size - 1)
             # Convert grid cell coordinates to pixel coordinates
-            box = (start_x * square_size, start_y * square_size, (end_x + 1) * square_size, (end_y + 1) * square_size)
+            box = [start_x * square_size, start_y * square_size, (end_x + 1) * square_size, (end_y + 1) * square_size]
             boxes.append(box)
 
         if as_detection_boxes:
@@ -206,10 +206,9 @@ class Sampler:
         image, boxes = Sampler.create_sample_image_with_bboxes(grid_size, square_size, num_boxes, True)
 
         # Init the object instance
-        result = DetectionResults(image, "/sample_image.png", {0: "0"})
+        result = DetectionResults(image, boxes, names={0: "0"})
 
         # Assign test attributes
-        result.boxes = boxes
         result.reference_boxes = Sampler.create_sample_bboxes(grid_size=8, square_size=24, num_boxes=2,
                                                               as_detection_boxes=True)
         result.frame_number = random.randint(1, 30000)
