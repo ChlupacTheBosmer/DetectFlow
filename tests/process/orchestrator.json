@@ -1,0 +1,27 @@
+{
+    "input_data": [
+        "s3://gr2-l1/GR2_L1_TolUmb02/GR2_L1_TolUmb02_20220523_08_25.mp4",
+        "s3://gr2-l1/GR2_L1_TolUmb03/GR2_L1_TolUmb03_20220524_10_10.mp4"
+    ],
+    "checkpoint_dir": "D:\\Dílna\\Kutění\\Python\\DetectFlow\\tests\\process\\test",
+    "task_name": "detectflow_realtest_loaded_config",
+    "batch_size": 1,
+    "max_workers": 2,
+    "force_restart": true,
+    "scratch_path": "D:\\Dílna\\Kutění\\Python\\DetectFlow\\tests\\process\\test",
+    "user_name": "USER",
+    "dataloader": null,
+    "process_task_callback": "detectflow.callbacks.orchestrator_process_video.process_video_callback",
+    "frame_batch_size": 100,
+    "frame_skip": 50,
+    "max_producers": 1,
+    "max_consumers": 1,
+    "model_config": {
+        "path": "D:\\Dílna\\Kutění\\Python\\DetectFlow\\detectflow\\models\\visitors.pt",
+        "conf": 0.1
+    },
+    "device": "cpu",
+    "track_results": true,
+    "tracker_type": "botsort.yaml",
+    "inspect": true
+}

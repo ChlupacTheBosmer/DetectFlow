@@ -93,6 +93,7 @@ class FrameGenerator:
             self.output_folder = output_folder
             self.processing_callback = processing_callback
             self.config = kwargs
+            self.frame_batch_size = None
         except FileNotFoundError as e:
             logging.error(f"Initialization failed due to a missing file: {e}")
             # Consider halting initialization or setting defaults
@@ -376,7 +377,7 @@ class FrameGenerator:
             logging.error(f"An error occurred in create_conf_folders: {e}")
             return [f"{parent_folder}/rest"]
 
-    def run(self, nprod: int = 1, ndet: int = 1, frame_batch_size: int = 100):
+    def run(self, producers: int = 1, consumers: int = 1, frame_batch_size: int = 100):
 
         # Assign attributes and variables
         self.frame_batch_size = frame_batch_size
@@ -386,14 +387,14 @@ class FrameGenerator:
 
         try:
             queue = Queue()  # create shared queue
-            with ThreadPoolExecutor(max_workers=nprod + ndet) as executor:  # create workers
+            with ThreadPoolExecutor(max_workers=producers + consumers) as executor:  # create workers
                 chunks = iter(video_files)
-                for chunk in iter(lambda: list(itertools.islice(chunks, nprod)),
+                for chunk in iter(lambda: list(itertools.islice(chunks, producers)),
                                   []):  # Chunk the passed video files to chunks with the size of nprod
                     logging.debug("Checking videos in this chunk.")
                     producer_futures = []
-                    # A producer task is created for each video_fiel if the frame data for this file are found in the dict
-                    for video_file in chunk:
+
+                    for video_file in chunk: # A producer task is created for each video_fiel if the frame data for this file are found in the dict
                         logging.debug("Does this video have visits?")
                         if frame_dict.get(video_file.filename):
                             logging.debug("Yes - creating producer per video.")
@@ -403,10 +404,10 @@ class FrameGenerator:
                             producer_futures.append(future)
                             logging.debug(f"Producer futures: {producer_futures}")
 
-                    # For each chunk ndet number of detector tasks are created
-                    detector_futures = [executor.submit(self.detector_task, n, queue, **self.config) for n in
-                                        range(ndet)]
-                    logging.debug(f"Detector futures: {detector_futures}")
+                    # For each chunk ndet number of consumer tasks are created
+                    consumer_futures = [executor.submit(self.consumer_task, n, queue, **self.config) for n in
+                                        range(consumers)]
+                    logging.debug(f"Consumer futures: {consumer_futures}")
 
                     # Wait until all producers are finished
                     for future in as_completed(producer_futures):
@@ -414,7 +415,7 @@ class FrameGenerator:
                         pass
 
                     # Stopper sentient values are put to the queue for each detector
-                    for _ in range(ndet):
+                    for _ in range(consumers):
                         queue.put(FrameGeneratorTask(None, None))
         except Exception as e:
             logging.error(f"Error in FrameGenerator run method: {e}")
@@ -466,8 +467,8 @@ class FrameGenerator:
             logging.error(f"Error in producer task for {filename}: {e}")
             # Decide whether to retry, log and continue, or stop
 
-    def detector_task(self, name, queue, **kwargs):
-        logging.debug(f"(D) - Detector {name} created.")
+    def consumer_task(self, name, queue, **kwargs):
+        logging.debug(f"(D) - Consumer {name} created.")
         while True:
             try:
                 # Get task from the queue
@@ -475,7 +476,7 @@ class FrameGenerator:
 
                 # Terminate thread if item is none sentinel value
                 if task.frames_array is None and task.metadata is None:
-                    print(f"(D) - Detector {name} finished.")
+                    print(f"(D) - Consumer {name} finished.")
                     break
 
                 # Unpack data from the task
@@ -485,7 +486,7 @@ class FrameGenerator:
                 video_filename = task.get_meta('video_name')
                 visit_numbers = task.get_meta('visit_numbers')
 
-                print(f"(D) - Detector {name} got element <{frame_numbers[0]} - {frame_numbers[-1:][0]}>")
+                print(f"(D) - Consumer {name} got element <{frame_numbers[0]} - {frame_numbers[-1:][0]}>")
 
                 # Call the processing callback if it's set
                 if self.processing_callback:
@@ -498,15 +499,14 @@ class FrameGenerator:
                             video_filename=video_filename,
                             visit_numbers=visit_numbers,
                             task=task,
-                            generator=self,
                             **kwargs
                         )
                     except Exception as callback_exc:
-                        logging.error(f"Error during processing callback in detector task {name}: {callback_exc}")
+                        logging.error(f"Error during processing callback in consumer task {name}: {callback_exc}")
                         # Consider whether to continue or break the loop based on the nature of the error
 
             except Exception as e:
-                logging.error(f"Error in detector task {name}: {e}")
+                logging.error(f"Error in consumer task {name}: {e}")
                 # Decide whether to break the loop or continue processing based on the nature of the error
 
 # def process_frames_callback(**kwargs):
