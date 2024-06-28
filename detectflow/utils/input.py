@@ -1,4 +1,6 @@
 from typing import List, Dict, Tuple, Union
+from datetime import timedelta
+import re
 
 def validate_flags(input_flags: Union[str, int, List[Union[str, int]], Tuple[Union[str, int], ...]],
                    flag_map: Union[Dict[int, str], List[str], Tuple[str, ...]],
@@ -45,3 +47,40 @@ def validate_flags(input_flags: Union[str, int, List[Union[str, int]], Tuple[Uni
         raise TypeError("Input flags should be a string, integer, list, or tuple")
 
     return input_flags
+
+
+def format_duration(time_input):
+    """
+    Converts various time formats to a standardized 'hh:mm:ss' format representing duration.
+
+    Parameters:
+        time_input (str or int or float): Input time in various formats ('01:30', '1:15', '1', 1, 1.5, etc.)
+
+    Returns:
+        str: Time duration in 'hh:mm:ss' format.
+    """
+    try:
+        if isinstance(time_input, (int, float)):  # Direct number input
+            # Assuming the number is an hour count, convert to timedelta
+            total_seconds = int(time_input * 3600)
+        else:
+            # Handle string input assuming it could be hours:minutes, hours:minutes:seconds or just hours
+            parts = [int(part) for part in re.split("[:]", time_input)]
+            if len(parts) == 1:
+                # Only hours are provided
+                total_seconds = parts[0] * 3600
+            elif len(parts) == 2:
+                # Hours and minutes are provided
+                total_seconds = parts[0] * 3600 + parts[1] * 60
+            elif len(parts) == 3:
+                # Hours, minutes, and seconds are provided
+                total_seconds = parts[0] * 3600 + parts[1] * 60 + parts[2]
+            else:
+                return "Invalid time format"
+
+        # Create a timedelta object from the total seconds
+        td = timedelta(seconds=total_seconds)
+        # Formatting to 'hh:mm:ss'
+        return str(td)
+    except ValueError:
+        return "Invalid input"
