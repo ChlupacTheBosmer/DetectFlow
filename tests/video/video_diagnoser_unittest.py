@@ -14,16 +14,9 @@ class TestVideoDiagnoser(unittest.TestCase):
         self.output_path = './test_output'
 
     def test_initialization(self):
-        diagnoser = VideoDiagnoser(
-            video_path=self.video_path,
-            flowers_model_path=self.flowers_model_path,
-            flowers_model_conf=0.3,
-            motion_methods="SOM",
-            frame_skip=1,
-            color_variance_threshold=10,
-            verbose=True,
-            output_path=self.output_path
-        )
+        diagnoser = VideoDiagnoser(video_path=self.video_path, flowers_model_path=self.flowers_model_path,
+                                   flowers_model_conf=0.3, motion_methods="SOM", frame_skip=1, brightness_threshold=10,
+                                   verbose=True, output_path=self.output_path)
         self.assertEqual(diagnoser.video_path, self.video_path)
         self.assertEqual(diagnoser.flowers_model_path, self.flowers_model_path)
         self.assertEqual(diagnoser.flowers_model_conf, 0.3)
@@ -41,16 +34,9 @@ class TestVideoDiagnoser(unittest.TestCase):
         mock_sample_frames.return_value = [mock_frame]
 
         MockVideo.return_value.fps = 30
-        diagnoser = VideoDiagnoser(
-            video_path=self.video_path,
-            flowers_model_path=self.flowers_model_path,
-            flowers_model_conf=0.3,
-            motion_methods="SOM",
-            frame_skip=1,
-            color_variance_threshold=10,
-            verbose=True,
-            output_path=self.output_path
-        )
+        diagnoser = VideoDiagnoser(video_path=self.video_path, flowers_model_path=self.flowers_model_path,
+                                   flowers_model_conf=0.3, motion_methods="SOM", frame_skip=1, brightness_threshold=10,
+                                   verbose=True, output_path=self.output_path)
         frames = diagnoser._get_frames()
         mock_sample_frames.assert_called_once_with(
             self.video_path,
@@ -63,16 +49,9 @@ class TestVideoDiagnoser(unittest.TestCase):
 
     @patch('detectflow.PictureQualityAnalyzer.get_daytime', return_value="day")
     def test_get_daytime(self, mock_get_daytime):
-        diagnoser = VideoDiagnoser(
-            video_path=self.video_path,
-            flowers_model_path=self.flowers_model_path,
-            flowers_model_conf=0.3,
-            motion_methods="SOM",
-            frame_skip=1,
-            color_variance_threshold=10,
-            verbose=True,
-            output_path=self.output_path
-        )
+        diagnoser = VideoDiagnoser(video_path=self.video_path, flowers_model_path=self.flowers_model_path,
+                                   flowers_model_conf=0.3, motion_methods="SOM", frame_skip=1, brightness_threshold=10,
+                                   verbose=True, output_path=self.output_path)
         daytime = diagnoser.get_daytime()
         self.assertEqual(daytime, "day")
 
@@ -90,16 +69,9 @@ class TestVideoDiagnoser(unittest.TestCase):
         mock_detection_result.boxes = mock_boxes
         mock_detect.return_value = [mock_detection_result]
 
-        diagnoser = VideoDiagnoser(
-            video_path=self.video_path,
-            flowers_model_path=self.flowers_model_path,
-            flowers_model_conf=0.3,
-            motion_methods="SOM",
-            frame_skip=1,
-            color_variance_threshold=10,
-            verbose=True,
-            output_path=self.output_path
-        )
+        diagnoser = VideoDiagnoser(video_path=self.video_path, flowers_model_path=self.flowers_model_path,
+                                   flowers_model_conf=0.3, motion_methods="SOM", frame_skip=1, brightness_threshold=10,
+                                   verbose=True, output_path=self.output_path)
 
         ref_bboxes = diagnoser.get_ref_bboxes()
         mock_detect.assert_called_once()
@@ -115,16 +87,9 @@ class TestVideoDiagnoser(unittest.TestCase):
     def test_get_frames_real_video(self):
         import cv2
         import numpy as np
-        diagnoser = VideoDiagnoser(
-            video_path=self.video_path,
-            flowers_model_path=self.flowers_model_path,
-            flowers_model_conf=0.3,
-            motion_methods="SOM",
-            frame_skip=1,
-            color_variance_threshold=10,
-            verbose=True,
-            output_path=self.output_path
-        )
+        diagnoser = VideoDiagnoser(video_path=self.video_path, flowers_model_path=self.flowers_model_path,
+                                   flowers_model_conf=0.3, motion_methods="SOM", frame_skip=1, brightness_threshold=10,
+                                   verbose=True, output_path=self.output_path)
         frames = diagnoser._get_frames()
 
         # Check that frames are a list and contain numpy arrays

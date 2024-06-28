@@ -15,6 +15,7 @@ class PictureQualityAnalyzer:
         self._contrast = None
         self._brightness = None
         self._color_variance = None
+        self._saturation = None
 
     @property
     def blur(self):
@@ -171,6 +172,16 @@ class PictureQualityAnalyzer:
         return hsv[:, :, 2].mean()
 
     @property
+    def saturation(self):
+        if self._saturation is None:
+            self._saturation = self.get_saturation()
+        return self._saturation
+
+    def get_saturation(self):
+        hsv = cv2.cvtColor(self.frame, cv2.COLOR_BGR2HSV)
+        return np.mean(hsv[:, :, 1])
+
+    @property
     def color_variance(self):
         if self._color_variance is None:
             self._color_variance = self.get_color_variance()
@@ -180,6 +191,6 @@ class PictureQualityAnalyzer:
         gray = cv2.cvtColor(self.frame, cv2.COLOR_BGR2GRAY)
         return np.var(gray)
 
-    def get_daytime(self, color_variance_threshold: int = 10):
+    def get_daytime(self, brightness_threshold: int = 50, saturation_threshold: int = 10):
         # If the color variance is higher than threshold, it's likely a daytime video
-        return bool(self.color_variance > color_variance_threshold)
+        return bool(self.brightness > brightness_threshold and self.saturation > saturation_threshold)
