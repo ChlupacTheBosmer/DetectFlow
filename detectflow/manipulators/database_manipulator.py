@@ -1,8 +1,10 @@
+import multiprocessing
 import sqlite3
 from sqlite3 import Error
 import csv
 import os
 import threading
+import multiprocessing
 import traceback
 import time
 import logging
@@ -12,7 +14,7 @@ from detectflow.manipulators.manipulator import Manipulator
 
 
 class DatabaseManipulator:
-    def __init__(self, db_file: str, batch_size: int = 50):
+    def __init__(self, db_file: str, batch_size: int = 50, lock_type: str = "threading"):
         """
         Initialize the DatabaseManipulator object with the path to the SQLite database file.
 
@@ -22,10 +24,21 @@ class DatabaseManipulator:
         self.db_file = db_file
         self._db_name = os.path.splitext(os.path.basename(self.db_file))[0]
         self.conn = None
-        self.lock = threading.RLock()  # Assuming you are using threading for concurrency
+        self._lock_type = lock_type
+        self._lock = None
         self.batch_data = []
         self.batch_table = None
         self.batch_size = batch_size
+
+    @property
+    def lock(self):
+        if self._lock is None:
+            self._lock = threading.RLock() if self._lock_type == 'threading' else multiprocessing.RLock()  # Assumes using threading or multiprocesing for concurrency
+        return self._lock
+
+    @lock.setter
+    def lock(self, value):
+        self._lock = value
 
     def create_connection(self):
         """
