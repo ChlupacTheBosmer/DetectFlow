@@ -9,6 +9,7 @@ import re
 from detectflow.handlers.email_handler import EmailHandler
 from detectflow.utils.log_file import LogFile
 from detectflow.utils.pbs_job_report import PBSJobReport
+from detectflow.config import S3_CONFIG
 import traceback
 from typing import List
 
@@ -17,7 +18,7 @@ class JobHandler:
     def __init__(self,
                  output_directory: str,
                  user_email: str,
-                 s3_cfg_file: str = "/storage/brno2/home/USER/.s3.cfg",
+                 s3_cfg_file: str = S3_CONFIG,
                  sender_email: str = "detectflow@gmail.com",
                  email_password: str = "AUTH_INFO",
                  email_handler=None,
@@ -269,23 +270,23 @@ class JobHandler:
                     return root
         return None
 
-    def upload_db_to_s3(self, local_file_path, job_name): # TODO: Could be more robust like in DatabaseManager
+    def upload_db_to_s3(self, local_file_path, job_name):
+        from detectflow.manipulators.input_manipulator import InputManipulator
+
+        if self.s3_manipulator is None:
+            logging.warning("No S3 manipulator provided. Skipping database S3 backup.")
+            return
+
+        # Specify the bucket and directory names
+        bucket_name, recording_id = job_name.split('_', 1)
+        directory_name = f"{InputManipulator.zero_pad_id(recording_id)}/"
+
+        # Upload database to s3
         try:
-            # Specify the bucket and directory names
-            bucket_name, directory_name = job_name.split('_', 1)
-
-            # Create bucket
-            self.s3_manipulator.create_bucket_s3(bucket_name)
-
-            # Check if the directory exists within the bucket
-            self.s3_manipulator.create_directory_s3(bucket_name, directory_name)
-
-            # Upload a file to the specified directory
-            s3_file_path = f"{directory_name}{os.path.basename(local_file_path)}"  # Path in the bucket where the file will be uploaded
-            self.s3_manipulator.upload_file_s3(bucket_name, local_file_path, s3_file_path)
-            print(f"Uploaded {local_file_path} to S3 bucket {bucket_name} successfully.")
+            self.s3_manipulator.backup_file_s3(bucket_name, directory_name, local_file_path)
         except Exception as e:
-            print(f"Failed to upload {local_file_path} to S3: {e}")
+            logging.error(f"Failed to backup database for recording ID {recording_id} to S3: {e}")
+            return
 
     def upload_folder_to_s3(self, local_directory, bucket_name, job_name):
         try:
