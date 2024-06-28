@@ -19,10 +19,9 @@ def process_single_input(input_data, s3_manipulator):
         return s3_manipulator.list_directories_s3(input_data, full_path=True), (True, False, False, False)
 
     elif s3_manipulator.is_s3_directory(input_data):
-        # Fetch directories from the S3 directory
+        # Fetch files from the S3 directory
         bucket_name, prefix = s3_manipulator._parse_s3_path(input_data)
-        return s3_manipulator.list_directories_s3(bucket_name, prefix, full_path=True), (
-            True, False, False, False)
+        return [input_data], (True, False, False, False)
 
     elif s3_manipulator.is_s3_file(input_data):
         return [input_data], (False, True, False, False)
