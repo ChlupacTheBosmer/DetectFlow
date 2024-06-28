@@ -37,9 +37,17 @@ class S3Validator:
             return False
 
         try:
-            response = self.s3_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix, Delimiter='/', MaxKeys=1)
-            return 'CommonPrefixes' in response or 'Contents' in response
-        except Exception:
+            # Ensure the prefix ends with a slash for directory checks
+            if not prefix.endswith('/'):
+                prefix += '/'
+
+            response = self.s3_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix, Delimiter='/')
+            has_common_prefixes = 'CommonPrefixes' in response and len(response['CommonPrefixes']) > 0
+            has_contents = 'Contents' in response and len(response['Contents']) > 0
+
+            return has_common_prefixes or has_contents
+        except Exception as e:
+            print(f"Exception: {e}")
             return False
 
     def is_s3_file(self, input_data):
@@ -49,10 +57,20 @@ class S3Validator:
         if not bucket_name:
             return False
 
+        # Check if the key ends with a slash, indicating it's a directory
+        if key.endswith('/'):
+            return False
+
         try:
+            # Attempt to get the object metadata
             self.s3_client.head_object(Bucket=bucket_name, Key=key)
             return True
         except self.s3_client.exceptions.NoSuchKey:
+            return False
+        except self.s3_client.exceptions.ClientError as e:
+            # If the error is access denied, it's possible the object exists but we can't access it
+            if e.response['Error']['Code'] == '403':
+                return True
             return False
         except Exception:
             return False
