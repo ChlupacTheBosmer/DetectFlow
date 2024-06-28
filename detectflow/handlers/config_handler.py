@@ -45,7 +45,7 @@ class ConfigHandler(ABC):
         self.config = config_with_defaults
 
         # Validate configuration
-        self.validate_config()
+        self._validate_config()
 
         return self.config
 
@@ -55,7 +55,7 @@ class ConfigHandler(ABC):
         pack them into the self.config dictionary.
         """
         self.config = {key: value for key, value in kwargs.items()}
-        self.validate_config()  # Validate the newly packed config
+        self._validate_config()  # Validate the newly packed config
 
     def save_config(self):
         """
@@ -76,7 +76,7 @@ class ConfigHandler(ABC):
                 config.write(file)
 
     @abstractmethod
-    def validate_config(self):
+    def _validate_config(self):
         """
         Validate the loaded configuration. Must be implemented in subclasses.
         """
