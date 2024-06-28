@@ -224,59 +224,12 @@ class DatabaseManager:
         bucket_name = InputManipulator.get_bucket_name_from_id(recording_id)
         directory_name = f"{InputManipulator.zero_pad_id(recording_id)}/"
 
+        # Upload the file to S3
         try:
-            if not self.s3_manipulator.is_s3_bucket(bucket_name):
-                logging.warning(f"Bucket {bucket_name} does not exist. Attempting backup into the 'data' bucket.")
-                bucket_name = 'data'
-                self.s3_manipulator.create_bucket_s3(bucket_name)
+            self.s3_manipulator.backup_file_s3(bucket_name, directory_name, local_file_path)
         except Exception as e:
-            logging.error(f"Error during bucket resolution. Attempted to create bucket: {bucket_name}: {e}")
-            bucket_name = 'data'
-            if self.s3_manipulator.is_s3_bucket(bucket_name):
-                logging.warning(f"Bucket {bucket_name} exists. Proceeding with backup into the 'data' bucket.")
-
-        try:
-            if not self.s3_manipulator.is_s3_directory(f"{bucket_name}/{directory_name}"):
-                logging.warning(f"Directory {directory_name} does not exist. File backed up into the 'data' bucket.")
-                bucket_name = 'data'
-                self.s3_manipulator.create_directory_s3(bucket_name, directory_name)
-        except Exception as e:
-            logging.error(f"Error during directory resolution. Attempted to create directory: {bucket_name}/{directory_name}: {e}")
-            bucket_name = 'data'
-            if self.s3_manipulator.is_s3_directory(f"{bucket_name}/{directory_name}"):
-                logging.warning(f"Directory {bucket_name}/{directory_name} exists. Proceeding with backup into the 'data' bucket.")
-
-        s3_file_path = f"{directory_name}{os.path.basename(local_file_path)}"  # Path in the bucket where the file will be uploaded
-        try:
-            # Upload a file to the specified directory
-            self.s3_manipulator.upload_file_s3(bucket_name, local_file_path, s3_file_path)
-            logging.info(f"Uploaded {local_file_path} to S3 bucket {bucket_name}/{s3_file_path}.")
-        except Exception as e:
-            logging.error(f"Failed to upload {local_file_path} to S3: {e}")
-
-        if validate_upload:
-            self._validate_backup_to_s3(bucket_name, s3_file_path, local_file_path)
-
-    def _validate_backup_to_s3(self, bucket_name: str, s3_file_path: str, db_file_path: str):
-        from detectflow.utils.file import compare_file_sizes
-
-        tmp_folder = os.path.join(DOWNLOADS_DIR, os.path.dirname(db_file_path))
-        tmp_file_path = os.path.join(tmp_folder, os.path.basename(db_file_path))
-        os.makedirs(tmp_folder, exist_ok=True)
-
-        try:
-            # Validate the upload
-            if self.s3_manipulator.is_s3_file(f"s3://{bucket_name}/{s3_file_path}"):
-                self.s3_manipulator.download_file_s3(bucket_name, s3_file_path, tmp_file_path)
-                if compare_file_sizes(db_file_path, tmp_file_path, 0.05): # Tolerance of 5%
-                    logging.info(f"Successfully validated the upload of {db_file_path} to S3 bucket {bucket_name}/{s3_file_path}.")
-                    # TODO: Could add additional validation by constructing a manipulator and reading something from the database
-                else:
-                    logging.warning(f"Partially validated the upload of {db_file_path} to S3 bucket {bucket_name}/{s3_file_path}. Size discrepancy found.")
-            else:
-                logging.error(f"Failed to validate the upload of {db_file_path} to S3 bucket {bucket_name}/{s3_file_path}.")
-        except Exception as e:
-            logging.error(f"Failed to validate the upload of {db_file_path} to S3: {e}")
+            logging.error(f"Failed to backup database for recording ID {recording_id} to S3: {e}")
+            return
 
     def run(self):
         """ Process tasks from the queue """
