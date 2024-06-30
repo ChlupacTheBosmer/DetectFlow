@@ -25,17 +25,16 @@ class InputManipulator:
 
     @staticmethod
     def zero_pad_id(string):
-        # This regex pattern captures a group of characters ending with the second underscore
-        # and followed by the integer we want to zero-pad
-        match = re.search(r'(^[^_]*_[^_]*_[^_]*)(\d+)', string)
+        # Regex to match the general pattern with any prefix and a number to zero-pad
+        pattern = r'(^[^_]*_[^_]*_[^_]*?)(\d+)([_]?.*)'
 
+        match = re.search(pattern, string)
         if match:
-            prefix, number = match.groups()
-
-            # Check if the number is already zero-padded or if it's less than 10 and not zero-padded
+            prefix, number, suffix = match.groups()
+            # Only zero-pad the number if it's a single digit or not already zero-padded
             if len(number) == 1 or (len(number) > 1 and not number.startswith('0')):
                 zero_padded_number = number.zfill(2)
-                string = prefix + zero_padded_number + string[len(prefix) + len(number):]
+                string = prefix + zero_padded_number + suffix
 
         return string
 
