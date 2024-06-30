@@ -23,7 +23,7 @@ if __name__ == '__main__':
         "checkpoint_dir": r"D:\Dílna\Kutění\Python\DetectFlow\tests\process\test",
         "task_name": "detectflow_realtest",
         "batch_size": 2,
-        "max_workers": 2,
+        "max_workers": 1,
         "force_restart": True,
         "scratch_path": r"D:\Dílna\Kutění\Python\DetectFlow\tests\process\test",
         "user_name": "USER",
