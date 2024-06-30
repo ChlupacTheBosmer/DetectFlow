@@ -61,3 +61,28 @@ class test_predictor(unittest.TestCase):
             print(result.filtered_boxes)
 
             Inspector.display_frames_with_boxes([result.orig_img], [result.boxes if hasattr(result, 'boxes') else None])
+
+    def test_caching_model(self):
+        import time
+
+        # It will call the method three times with same model path
+        durations = []
+        for i in range(3):
+            start_time = time.time()
+            # Call the predict method with real parameters
+            for result in self.predictor.detect(frame_numpy_array=self.frames[:1],
+                                                model_path=self.flower_model_path,
+                                                detection_conf_threshold=0.3,
+                                                tracked=True,
+                                                filter_tracked=False,
+                                                device='cpu'):
+
+                print('')
+                print('Result attributes:')
+                print(result.frame_number)
+
+                Inspector.display_frames_with_boxes([result.orig_img], [result.boxes if hasattr(result, 'boxes') else None])
+            durations.append(time.time() - start_time)
+
+        for i, duration in enumerate(durations):
+            print(f"Duration #{i+1}: {duration:.4f} s")

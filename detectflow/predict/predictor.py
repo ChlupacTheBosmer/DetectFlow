@@ -11,8 +11,10 @@ from detectflow.manipulators.frame_manipulator import FrameManipulator
 from detectflow.validators.validator import Validator
 from detectflow.config import DETECTFLOW_DIR
 from detectflow.predict.tracker import Tracker
+from detectflow.utils.input import make_hashable
 from ultralytics.engine.results import Results
 from sahi.prediction import PredictionResult
+from functools import lru_cache
 
 
 class Predictor:
@@ -193,14 +195,24 @@ class Predictor:
         if sliced:
 
             # Define SAHI settings
-            model = AutoDetectionModel.from_pretrained(model_type='yolov8',
-                                                       model_path=model_path,
-                                                       confidence_threshold=conf,
-                                                       device=device,
-                                                       load_at_init=True,
-                                                       save_txt=save_txt,
-                                                       save=save,
-                                                       **yolo_merged_config)
+            # model = AutoDetectionModel.from_pretrained(model_type='yolov8',
+            #                                            model_path=model_path,
+            #                                            confidence_threshold=conf,
+            #                                            device=device,
+            #                                            load_at_init=True,
+            #                                            save_txt=save_txt,
+            #                                            save=save,
+            #                                            **yolo_merged_config)
+
+            model = self._get_model(sahi=True,
+                                    model_path=model_path,
+                                    confidence_threshold=conf,
+                                    device=device,
+                                    load_at_init=True,
+                                    save_txt=save_txt,
+                                    save=save,
+                                    **yolo_merged_config)
+
             # **yolo_kwargs)
             logging.debug(f"(Predictor): YOLO SAHI model initiated")
 
@@ -217,7 +229,8 @@ class Predictor:
                               )
         else:
             # Load a pretrained YOLOv8n model
-            model = YOLO(model_path)
+            # model = YOLO(model_path)
+            model = self._get_model(sahi=False, model_path=model_path)
             logging.debug(f"(Predictor): YOLO model initiated")
 
             results = model(list_of_frames,
@@ -271,3 +284,38 @@ class Predictor:
                 raise
 
         return detection_result
+
+    @staticmethod
+    @lru_cache(maxsize=4)
+    def _get_model(sahi=False, model_path=None, **kwargs):
+        """
+        Sahi model can accept:
+            confidence_threshold
+            device
+            load_at_init
+            save_txt
+            save
+            other kwargs such as yolo_merged_config
+        YOLO model can accept:
+            model_path
+        """
+        logging.info(f"(Predictor): Loading model from path: {model_path}")
+
+        model = None
+        if sahi:
+
+            try:
+                kwargs = make_hashable(kwargs, filter_unhashable=True)
+            except Exception as e:
+                logging.error(f"(Predictor): Error in making hashable: {e}")
+                kwargs = {}
+
+            # Define SAHI settings
+            model = AutoDetectionModel.from_pretrained(model_type='yolov8',
+                                                       model_path=model_path,
+                                                       **kwargs)
+        else:
+            # Load a pretrained YOLOv8n model
+            model = YOLO(model_path)
+
+        return model
