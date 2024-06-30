@@ -6,6 +6,7 @@ from datetime import timedelta, datetime
 import logging
 import numpy as np
 from detectflow.predict.results import DetectionResults
+from functools import lru_cache
 
 
 def safe_str(value):
@@ -53,6 +54,7 @@ def safe_json(value):
     return json.dumps(convert_to_lists(value) if value is not None else [])
 
 
+@lru_cache(maxsize=4)
 def extract_data_from_video(video_path: Optional[str] = None, video_file: Optional[Type["Video"]] = None, s3_path: str = None, **kwargs):
     """
     Extract data from a video file and pack as a dictionary
