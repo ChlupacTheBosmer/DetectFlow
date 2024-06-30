@@ -17,7 +17,7 @@ from detectflow import BoxManipulator
 from detectflow.predict.results import DetectionBoxes
 from detectflow.utils.pdf_creator import PDFCreator, DiagPDFCreator
 from detectflow.video.video_data import Video
-from detectflow.config import ROOT
+from detectflow.config import DETECTFLOW_DIR
 from PIL import Image as PILImage
 
 
@@ -33,7 +33,7 @@ class VideoDiagnoser:
     def __init__(self,
                  video_path: Optional[str] = None,
                  video_file: Optional[Video] = None,
-                 flowers_model_path: str = os.path.join(ROOT, 'models', 'flowers.pt'),
+                 flowers_model_path: str = os.path.join(DETECTFLOW_DIR, 'models', 'flowers.pt'),
                  flowers_model_conf: float = 0.3,
                  motion_methods: Optional[Union[str, int, List, Tuple]] = "SOM",
                  frame_skip: int = 1,
