@@ -158,6 +158,7 @@ def process_video_callback(task: Task,
 
             # Get the status of the video processing
             status = task.get_status(file_name=os.path.basename(files[i]))
+            print("Status: ", status)
             first_frame_number = status if status and status != -1 else 0
             update_info = {"directory": directory, "file": files[i], "status": status}
             if status == -1:
@@ -167,9 +168,10 @@ def process_video_callback(task: Task,
             add_database_to_db_manager(db_manager_control_queue, video_id, os.path.join(scratch, f"{video_id}.db"))
 
             # Add video details data entry to database manager queue
-            if db_manager_data_queue is not None:
-                video_data_entry = extract_data_from_video(video_path)
-                db_manager_data_queue.put(video_data_entry)
+            if db_manager_data_queue is not None:  # Assumes that the video has not been processed before
+                if status == 0:
+                    video_data_entry = extract_data_from_video(video_path, frame_skip=100, motion_methods='SOM')
+                    db_manager_data_queue.put(video_data_entry)
             else:
                 raise TypeError("Database task queue not defined")
 
