@@ -7,9 +7,10 @@ from queue import Queue
 import numpy as np
 import pandas as pd
 from detectflow.manipulators.video_manipulator import VideoManipulator
-from detectflow.video.video_passive import VideoFilePassive
+from detectflow.video.video_data import Video
 from detectflow.validators.validator import Validator
 import sqlite3
+import traceback
 #TODO: Add imports for video classes and functions dealing with the excel fiel and dataframe
 
 
@@ -381,32 +382,31 @@ class FrameGenerator:
 
         # Assign attributes and variables
         self.frame_batch_size = frame_batch_size
-        frame_dict = self.frame_dict if hasattr(self,
-                                                "frame_dict") and self.frame_dict else self._get_frame_dict()  # If not created get dict
-        video_files = tuple(VideoFilePassive(filepath) for filepath in self.video_paths)
+        frame_dict = self.frame_dict if hasattr(self, "frame_dict") and self.frame_dict else self._get_frame_dict()  # If not created get dict
+        video_files = tuple(Video(filepath) for filepath in self.video_paths)
 
         try:
             queue = Queue()  # create shared queue
             with ThreadPoolExecutor(max_workers=producers + consumers) as executor:  # create workers
+                # Chunk the passed video files to chunks with the size of nprod
                 chunks = iter(video_files)
-                for chunk in iter(lambda: list(itertools.islice(chunks, producers)),
-                                  []):  # Chunk the passed video files to chunks with the size of nprod
+                for chunk in iter(lambda: list(itertools.islice(chunks, producers)), []):
                     logging.debug("Checking videos in this chunk.")
                     producer_futures = []
 
-                    for video_file in chunk: # A producer task is created for each video_fiel if the frame data for this file are found in the dict
+                    # A producer task created for each video_file if the frame data for this file is found in the dict
+                    for video_file in chunk:
                         logging.debug("Does this video have visits?")
-                        if frame_dict.get(video_file.filename):
+                        if frame_dict.get(video_file.video_name):
                             logging.debug("Yes - creating producer per video.")
                             future = executor.submit(self._producer_task, video_file,
-                                                     frame_dict[video_file.filename][0],
-                                                     frame_dict[video_file.filename][1], queue)
+                                                     frame_dict[video_file.video_name][0],
+                                                     frame_dict[video_file.video_name][1], queue)
                             producer_futures.append(future)
                             logging.debug(f"Producer futures: {producer_futures}")
 
                     # For each chunk ndet number of consumer tasks are created
-                    consumer_futures = [executor.submit(self.consumer_task, n, queue, **self.config) for n in
-                                        range(consumers)]
+                    consumer_futures = [executor.submit(self.consumer_task, n, queue, **self.config) for n in range(consumers)]
                     logging.debug(f"Consumer futures: {consumer_futures}")
 
                     # Wait until all producers are finished
@@ -429,9 +429,10 @@ class FrameGenerator:
             yield (frame_numbers_tuple1[i:end], frame_numbers_tuple2[i:end], end - i)
 
     def _producer_task(self, video_object_file, frame_indices, visit_indices, queue):
+        filename = None
         try:
-            filepath = video_object_file.filepath
-            filename = video_object_file.filename
+            filepath = video_object_file.video_path
+            filename = video_object_file.video_name
 
             print(f"(P) - Producer <{filename}> successfully created")
 
@@ -441,14 +442,13 @@ class FrameGenerator:
                 logging.debug(f"(P) - Producer <{filename}> created a chunk of size: {actual_chunk_size}")
 
                 # Pre-allocate 4D array with frame dimensions and the current chunk size
-                frame_height, frame_width = video_object_file.get_frame_shape()
-                frames_array = np.zeros((actual_chunk_size, frame_width, frame_height, 3), dtype=np.uint8)
+                frame_height, frame_width = video_object_file.frame_height, video_object_file.frame_width
+                frames_array = np.zeros((actual_chunk_size, frame_height, frame_width, 3), dtype=np.uint8)
                 print(f"(P) - Producer <{filename}> created a chunk of size: {actual_chunk_size}")
 
                 # Read frames with a reader that automatically decides based on video origin (defaults to decord)
-                frame_generator = video_object_file.read_video_frame(frame_numbers_chunk, True, 'decord')
-                for idx, frame_list in enumerate(frame_generator):
-                    frames_array[idx] = frame_list[3]
+                for idx, frame_dict in enumerate(video_object_file.read_video_frame(frame_indices=frame_numbers_chunk, stream=True)):
+                    frames_array[idx] = frame_dict['frame']
                     logging.debug(f"(P) - Adding a frame into array <{idx}>")
                 logging.debug("(P) - Array created")
 
@@ -503,6 +503,7 @@ class FrameGenerator:
                         )
                     except Exception as callback_exc:
                         logging.error(f"Error during processing callback in consumer task {name}: {callback_exc}")
+                        traceback.print_exc()
                         # Consider whether to continue or break the loop based on the nature of the error
 
             except Exception as e:
