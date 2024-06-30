@@ -3,6 +3,8 @@ from unittest.mock import patch, Mock, MagicMock
 import os
 from datetime import datetime, timedelta
 
+import numpy as np
+
 # Import the Video class
 from detectflow.video.video_data import Video
 
@@ -149,6 +151,12 @@ class TestVideo(unittest.TestCase):
         video1 = Video(video_path=self.video_path)
         video2 = Video(video_path=self.video_path)
         self.assertEqual(video1, video2)
+
+    def test_reading_frames(self):
+        video = Video(video_path=self.video_path)
+        frame = video.read_video_frame(0, stream=False)[0]['frame']
+        self.assertIsNotNone(frame)
+        self.assertIsInstance(frame, np.ndarray)
 
 
 if __name__ == '__main__':
