@@ -27,11 +27,11 @@ def list_running_processes(name):
 
 class TestDatabaseManager():
     def __init__(self):
-        from detectflow.config import ROOT
+        from detectflow.config import DETECTFLOW_DIR
 
         self.test_dir = tempfile.mkdtemp()
 
-        self.path = os.path.join(os.path.dirname(ROOT), "tests", "video", "resources")
+        self.path = os.path.join(os.path.dirname(DETECTFLOW_DIR), "tests", "process", "db")
         self.rec_id_base = 'GR2_L1_TolUmb'
         self.timestamp = '20220524_07_44'
         db_paths = {}

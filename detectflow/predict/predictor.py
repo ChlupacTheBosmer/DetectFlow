@@ -9,7 +9,7 @@ from ultralytics.models.yolo import YOLO
 from detectflow.predict.results import DetectionResults
 from detectflow.manipulators.frame_manipulator import FrameManipulator
 from detectflow.validators.validator import Validator
-from detectflow.config import ROOT
+from detectflow.config import DETECTFLOW_DIR
 from detectflow.predict.tracker import Tracker
 from ultralytics.engine.results import Results
 from sahi.prediction import PredictionResult
@@ -72,7 +72,7 @@ class Predictor:
     }
 
     def __init__(self,
-                 model_path: str = os.path.join(ROOT, 'models', 'visitors.pt'),
+                 model_path: str = os.path.join(DETECTFLOW_DIR, 'models', 'visitors.pt'),
                  detection_conf_threshold: float = 0.5,
                  tracker: Optional[str] = None):
 

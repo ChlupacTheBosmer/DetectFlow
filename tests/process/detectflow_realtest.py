@@ -1,6 +1,6 @@
 from detectflow.process.database_manager import start_db_manager
 from detectflow.process.orchestrator import Orchestrator
-from detectflow.config import S3_CONFIG, ROOT
+from detectflow.config import S3_CONFIG, DETECTFLOW_DIR
 from detectflow.callbacks.orchestrator_process_video import process_video_callback
 from detectflow.manipulators.dataloader import Dataloader
 import os
@@ -48,7 +48,8 @@ if __name__ == '__main__':
         "frame_skip": 50,
         "max_producers": 1,
         "max_consumers": 1,
-        "model_config": {'path': os.path.join(ROOT, 'models', 'visitors.pt'), 'conf': 0.1},
+        "model_config": {0: {'path': os.path.join(DETECTFLOW_DIR, 'models', 'flowers.pt'), 'conf': 0.3},
+                         1: {'path': os.path.join(DETECTFLOW_DIR, 'models', 'visitors.pt'), 'conf': 0.1}},
         "device": 'cpu',
         "track_results": True,
         "tracker_type": "botsort.yaml",

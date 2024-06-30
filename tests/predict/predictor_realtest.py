@@ -3,7 +3,7 @@ from detectflow.predict.tracker import Tracker
 from detectflow.video.video_data import Video
 from detectflow.utils.sampler import Sampler
 from detectflow.utils.inspector import Inspector
-from detectflow.config import ROOT
+from detectflow.config import DETECTFLOW_DIR
 import unittest
 import os
 
@@ -11,33 +11,36 @@ class test_predictor(unittest.TestCase):
     def setUp(self):
         self.predictor = Predictor(tracker="botsort.yaml")
 
-    def test_detect(self):
-
         # Put together the path to the test video file
-        video_path = os.path.join(os.path.dirname(ROOT), 'tests', 'video', 'resources', 'GR2_L1_TolUmb2_20220524_07_44.mp4')
+        self.video_path = os.path.join(os.path.dirname(DETECTFLOW_DIR), 'tests', 'video', 'resources',
+                                  'GR2_L1_TolUmb2_20220524_07_44.mp4')
+        self.flower_model_path = os.path.join(DETECTFLOW_DIR, 'models', 'flowers.pt')
+        self.visitor_model_path = os.path.join(DETECTFLOW_DIR, 'models', 'visitors.pt')
 
         # Init video file
-        vid = Video(video_path)
+        self.video = Video(self.video_path)
 
         # Get dummy frame numbers
-        frame_nums = list(range(0, 100, 10))
+        self.frame_nums = list(range(0, 100, 10))
 
         # Get frames from video
-        frames = [frame_dict['frame'] for frame_dict in vid.read_video_frame(frame_nums, False)]
+        self.frames = [frame_dict['frame'] for frame_dict in self.video.read_video_frame(self.frame_nums, False)]
+
+    def test_detect(self):
 
         # Get dummy reference boxes
         reference_boxes = Sampler.create_sample_bboxes(as_detection_boxes=True)
 
         metadata = {
-            'frame_number': frame_nums,
+            'frame_number': self.frame_nums,
             'visit_number': 1,
-            'source_path': video_path,
-            'reference_boxes': [reference_boxes for _ in frames]
+            'source_path': self.video_path,
+            'reference_boxes': [reference_boxes for _ in self.frames]
         }
 
         # Call the predict method with real parameters
-        for result in self.predictor.detect(frame_numpy_array=frames,
-                                            model_path=os.path.join(ROOT, 'models', 'flowers.pt'),
+        for result in self.predictor.detect(frame_numpy_array=self.frames,
+                                            model_path=self.flower_model_path,
                                             detection_conf_threshold=0.3,
                                             metadata=metadata,
                                             tracked=True,

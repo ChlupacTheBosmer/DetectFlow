@@ -4,13 +4,13 @@ import time
 import unittest
 from pathlib import Path
 from detectflow.process.scheduler import Scheduler
-from detectflow.config import ROOT
+from detectflow.config import DETECTFLOW_DIR
 
 class TestScheduler(unittest.TestCase):
 
     def setUp(self):
         # Setup the environment variables and paths for testing
-        cd = os.path.dirname(ROOT)
+        cd = os.path.dirname(DETECTFLOW_DIR)
         self.remote_work_dir = "/storage/brno2/home/USER/scheduler_test"
         self.local_work_dir = r'D:\Dílna\Kutění\Python\DetectFlow\tests\process\test'
         self.database_path = r'D:\Dílna\Kutění\Python\DetectFlow\tests\process\test\jobs.db'
