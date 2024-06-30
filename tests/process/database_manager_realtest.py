@@ -35,7 +35,7 @@ class TestDatabaseManager():
         self.rec_id_base = 'GR2_L1_TolUmb'
         self.timestamp = '20220524_07_44'
         db_paths = {}
-        for i in range(2, 4):
+        for i in range(2, 3):
             db_name = f'{self.rec_id_base}{i}'
             db_path = os.path.join(self.path, f'{db_name}.db')
             db_paths[db_name] = db_path
@@ -141,12 +141,20 @@ class TestDatabaseManager():
 
         print("Test stop db manager passed")
 
-    def tear_down(self):
-        self.db_manager.clean_up()
-        self.db_manager_process.terminate()
-        self.db_manager_process.join()
-        shutil.rmtree(self.test_dir)
-        print("Tear down completed")
+    def test_fetch_db(self):
+        from detectflow.process.database_manager import fetch_file_db_manager
+
+        db_file = os.path.join(self.path, f'{self.rec_id_base}2.db')
+        fetch_file_db_manager(self.control_queue, 's3://gr2-l1/GR2_L1_TolUmb02/GR2_L1_TolUmb2.db', db_file)
+
+        print("Test fetch db passed")
+
+    # def tear_down(self):
+    #     self.db_manager.clean_up()
+    #     self.db_manager_process.terminate()
+    #     self.db_manager_process.join()
+    #     shutil.rmtree(self.test_dir)
+    #     print("Tear down completed")
 
 
 if __name__ == '__main__':
@@ -154,14 +162,15 @@ if __name__ == '__main__':
     t = TestDatabaseManager()
     t.test_start_db_manager()
     time.sleep(10)
-    # t.test_add_database()
+    t.test_add_database()
     # t.test_adding_data()
-    t.test_adding_video_data()
+    #t.test_adding_video_data()
     # t.test_flush_all_db_manager()
     # t.test_flush_one_db_manager()
     # t.test_backup_db_to_s3()
-    t.test_stop_db_manager()
-    t.tear_down()
+    #t.test_stop_db_manager()
+    t.test_fetch_db()
+    #t.tear_down()
 
 
 
