@@ -189,34 +189,23 @@ class Manipulator(Validator):
 
     # @profile_function_call(logging.getLogger(__name__))
     @staticmethod
-    def find_files(root_path: str, file_name: str, sort_by: str = 'modification') -> List[str]:
+    def find_files(root_path: str, file_pattern: str) -> List[str]:
         """
-        Search for files with a specific name within the filesystem starting from a root directory and sort them.
+        Search for files with names matching a regex pattern within the filesystem starting from a root directory.
 
         :param root_path: The root directory to start the search from.
-        :param file_name: The name of the file to search for, including extension.
-        :param sort_by: Criterion to sort the found files ('modification', 'creation', 'size', 'name').
-        :return: List of paths to files with the specified name, sorted based on the criterion.
+        :param file_pattern: The regex pattern of the file names to search for, including extension.
+        :return: List of paths to files with names matching the specified regex pattern.
         """
         matching_files = []
         try:
+            pattern = re.compile(file_pattern)
+
             for root, dirs, files in os.walk(root_path):
                 for file in files:
-                    if file == file_name:
+                    if pattern.search(file):
                         full_path = os.path.join(root, file)
                         matching_files.append(full_path)
-
-            # Sorting logic based on the chosen criterion
-            if sort_by == 'modification':
-                matching_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
-            elif sort_by == 'creation':
-                matching_files.sort(key=lambda x: os.path.getctime(x), reverse=True)
-            elif sort_by == 'size':
-                matching_files.sort(key=lambda x: os.path.getsize(x), reverse=True)
-            elif sort_by == 'name':
-                matching_files.sort(key=lambda x: os.path.basename(x))
-            else:
-                logging.warning(f"Unknown sorting criterion: {sort_by}. Files will be returned unsorted.")
 
             return matching_files
         except FileNotFoundError:
@@ -227,4 +216,38 @@ class Manipulator(Validator):
             return []
         except Exception as e:
             logging.error(f"Unexpected error while searching for files in {root_path}: {e}")
+            return []
+
+    @staticmethod
+    def sort_files(file_paths: List[str], sort_by: str = 'modification', ascending: bool = True) -> List[str]:
+        """
+        Sort a list of file paths based on a specific criterion.
+
+        :param file_paths: List of file paths to sort.
+        :param sort_by: Criterion to sort the files ('modification', 'creation', 'size', 'name').
+        :param ascending: Sort in ascending order if True, else descending.
+        :return: List of sorted file paths.
+        """
+        try:
+            # Sorting logic based on the chosen criterion
+            if sort_by == 'modification':
+                file_paths.sort(key=lambda x: os.path.getmtime(x), reverse=not ascending)
+            elif sort_by == 'creation':
+                file_paths.sort(key=lambda x: os.path.getctime(x), reverse=not ascending)
+            elif sort_by == 'size':
+                file_paths.sort(key=lambda x: os.path.getsize(x), reverse=not ascending)
+            elif sort_by == 'name':
+                file_paths.sort(key=lambda x: os.path.basename(x), reverse=not ascending)
+            else:
+                logging.warning(f"Unknown sorting criterion: {sort_by}. Files will be returned unsorted.")
+
+            return file_paths
+        except FileNotFoundError:
+            logging.error("One or more files not found during sorting.")
+            return []
+        except OSError as error:
+            logging.error(f"Error accessing file during sorting: {error}")
+            return []
+        except Exception as e:
+            logging.error(f"Unexpected error while sorting files: {e}")
             return []
