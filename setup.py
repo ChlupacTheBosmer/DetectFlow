@@ -83,7 +83,11 @@ setup(
         ],
         'pdf': [
             'reportlab==4.2.0'
-        ]
+        ],
+        'excel': [
+            'openpyxl==3.1.2',
+            'xlwings==0.31.1'
+        ],
     },
     classifiers=[
         'Development Status :: 4 - Beta',
