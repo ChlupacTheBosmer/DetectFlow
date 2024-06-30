@@ -114,7 +114,7 @@ def frame_generator_predict(**kwargs):
         'frame_number': frame_numbers,
         'visit_number': visit_numbers,
         'source_path': video_filepath,
-        'reference_boxes': [det_results[0].boxes if det_results and len(det_results) > 0 and hasattr(det_results[0], 'boxes') else None for _ in frames]
+        'reference_boxes': det_results[0].boxes if det_results and len(det_results) > 0 and hasattr(det_results[0], 'boxes') else None
     }
 
     # Define Predictor
@@ -123,7 +123,7 @@ def frame_generator_predict(**kwargs):
     # # Define Tracker
     # tracker = Tracker()
 
-    # Get the position of flowers. Return DetectionResults
+    # Get the position of visitors. Return DetectionResults
     for i, result in enumerate(visitor_predictor.detect(frame_numpy_array=frames,
                                                         model_path=model_config[1].get('path', model_defaults[1]['path']),
                                                         detection_conf_threshold=model_config[1].get('conf', model_defaults[1]['conf']),
@@ -136,7 +136,8 @@ def frame_generator_predict(**kwargs):
 
             # Display all boxes on the frame if inspection requested
             if inspect:
-                Inspector.display_frames_with_boxes([result.orig_img], [result.boxes if hasattr(result, 'boxes') else None])
+                Inspector.display_frame_with_multiple_boxes(result.orig_img, [result.boxes, result.reference_boxes, result.filtered_boxes])
+
 
             # # Predictor Performs tracking on the result
             # try:
