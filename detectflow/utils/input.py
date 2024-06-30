@@ -84,3 +84,38 @@ def format_duration(time_input):
         return str(td)
     except ValueError:
         return "Invalid input"
+
+
+def make_hashable(input_dict: dict, filter_unhashable=False):
+    """
+    Convert dictionary values to hashable types (tuples) and filter out unhashable types if specified.
+    Converts lists to tuples.
+
+    :param input_dict: A dictionary with values to be converted to hashable types
+    :param filter_unhashable: A boolean flag to filter out unhashable types
+    :return: A dictionary with hashable values
+    """
+    def is_hashable(v):
+        try:
+            hash(v)
+        except TypeError:
+            return False
+        return True
+
+    def process_value(v):
+        if isinstance(v, list):
+            return tuple(v)
+        elif not is_hashable(v):
+            print(f"Warning: Value '{v}' of type '{type(v)}' is not hashable.")
+            if filter_unhashable:
+                return None
+        return v
+
+    result_dict = {}
+    for key, value in input_dict.items():
+        processed_value = process_value(value)
+        if processed_value is not None:
+            result_dict[key] = processed_value
+
+    return result_dict
+
