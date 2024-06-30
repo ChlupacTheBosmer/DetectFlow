@@ -99,6 +99,8 @@ def extract_data_from_video(video_path: Optional[str] = None, video_file: Option
     except Exception as e:
         raise RuntimeError(f"Error initiating VideoDiagnoser for video file {video_path}: {e}")
 
+    logging.info(f"VideoDiagnoser initiated for video file {video_path}")
+
     diag_results = {}
     if video_diag:
         vs = ["focus_accuracies", "reference_boxes", "focus_regions"]
@@ -111,13 +113,18 @@ def extract_data_from_video(video_path: Optional[str] = None, video_file: Option
                 diag_results[v] = None
         video_diag._ref_bboxes = diag_results.get("reference_boxes") # Set the protected attr manually so the ref boxes are saved for future analyses.
 
-        attrs = ["daytime", "thumbnail"]
+        logging.info(f"VideoDiagnoser results extracted for video file {video_path}")
+
+        attrs = ["daytime"]
         for a in attrs:
             try:
                 diag_results[a] = getattr(video_diag, a)
             except Exception as e:
                 logging.error(f"Error getting attribute {a} from video_diag object: {e}")
                 diag_results[a] = None
+
+        logging.info(f"VideoDiagnoser attributes extracted for video file {video_path}")
+
         try:
             motion_data = video_diag.motion_data.get(motion_method, None)
             mean_motion = motion_data.get("mean", None) if motion_data else None
@@ -125,6 +132,8 @@ def extract_data_from_video(video_path: Optional[str] = None, video_file: Option
         except Exception as e:
             logging.error(f"Error getting attribute motion data from video_diag object: {e}")
             diag_results["mean_motion"] = None
+
+        logging.info(f"VideoDiagnoser motion data extracted for video file {video_path}")
 
     video_data = {
         "video_id": safe_str(vid_results.get("video_id", None)),
@@ -142,7 +151,6 @@ def extract_data_from_video(video_path: Optional[str] = None, video_file: Option
         "contrast": safe_float(vid_results.get("contrast", None)),
         "brightness": safe_float(vid_results.get("brightness", None)),
         "daytime": diag_results.get("daytime", "NULL"),
-        "thumbnail": diag_results.get("thumbnail", None),
         "focus_regions_start": safe_json(safe_first_element(diag_results.get("focus_regions"))),
         "flowers_start": safe_json(safe_first_element(diag_results.get("reference_boxes"))),
         "focus_acc_start": safe_first_element(diag_results.get("focus_accuracies")),
