@@ -41,8 +41,8 @@ class Inspector:
         # If is a collection of objects
         elif isinstance(detection_boxes_list, (np.ndarray, tuple, list)):
             # if is a collection of DetectionBoxes objects convert to list
-            if all(isinstance(detection_boxes, DetectionBoxes) for detection_boxes in detection_boxes_list):
-                detection_boxes_list = [detection_boxes.xyxy for detection_boxes in detection_boxes_list]
+            if all(isinstance(detection_boxes, (DetectionBoxes, type(None))) for detection_boxes in detection_boxes_list):
+                detection_boxes_list = [detection_boxes.xyxy if detection_boxes else None for detection_boxes in detection_boxes_list]
             # If it is a collection of numpy arrays or lists or tuples
             elif all(isinstance(detection_boxes, (np.ndarray, tuple, list)) for detection_boxes in detection_boxes_list):
                 if all(isinstance(coords, (int, float)) for coords in detection_boxes_list[0]):
@@ -139,19 +139,20 @@ class Inspector:
             if isinstance(detection_boxes, DetectionBoxes):
                 detection_boxes = detection_boxes.xyxy
 
-            for bbox in detection_boxes:
-                x_min, y_min, x_max, y_max = bbox[:4]
-                conf = bbox[4] if len(bbox) > 4 else None
-                width, height = x_max - x_min, y_max - y_min
-                rect = patches.Rectangle((x_min, y_min), width, height, linewidth=2, edgecolor=color, facecolor='none')
-                ax.add_patch(rect)
+            if detection_boxes is not None:
+                for bbox in detection_boxes:
+                    x_min, y_min, x_max, y_max = bbox[:4]
+                    conf = bbox[4] if len(bbox) > 4 else None
+                    width, height = x_max - x_min, y_max - y_min
+                    rect = patches.Rectangle((x_min, y_min), width, height, linewidth=2, edgecolor=color, facecolor='none')
+                    ax.add_patch(rect)
 
-                if conf is not None:
-                    # Draw a rectangle for the confidence score
-                    conf_rect = patches.Rectangle((x_min, y_min - 15), width=50, height=15, linewidth=1, edgecolor=color,
-                                                  facecolor=color, alpha=0.5)
-                    ax.add_patch(conf_rect)
-                    ax.text(x_min, y_min - 5, f'{conf:.2f}', color='white', fontsize=8, verticalalignment='center')
+                    if conf is not None:
+                        # Draw a rectangle for the confidence score
+                        conf_rect = patches.Rectangle((x_min, y_min - 15), width=50, height=15, linewidth=1, edgecolor=color,
+                                                      facecolor=color, alpha=0.5)
+                        ax.add_patch(conf_rect)
+                        ax.text(x_min, y_min - 5, f'{conf:.2f}', color='white', fontsize=8, verticalalignment='center')
 
         if show:
             plt.show()
