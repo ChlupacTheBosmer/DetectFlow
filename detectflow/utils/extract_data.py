@@ -105,15 +105,17 @@ def extract_data_from_video(video_path: Optional[str] = None, video_file: Option
 
     diag_results = {}
     if video_diag:
-        vs = ["focus_accuracies", "reference_boxes", "focus_regions"]
-        funcs = ["get_focus_accuracies", "get_ref_bboxes", "get_focus_regions"]
+        vs = ["reference_boxes", "focus_accuracies", "focus_regions"]
+        funcs = ["get_ref_bboxes", "get_focus_accuracies", "get_focus_regions"]
         for v, f in zip(vs, funcs):
             try:
                 diag_results[v] = getattr(video_diag, f)()
             except Exception as e:
                 logging.error(f"Error getting {v} from video_diag object: {e}")
                 diag_results[v] = None
-        video_diag._ref_bboxes = diag_results.get("reference_boxes") # Set the protected attr manually so the ref boxes are saved for future analyses.
+            finally:
+                if v == 'reference_boxes':
+                    video_diag._ref_bboxes = diag_results.get("reference_boxes")  # Set the protected attr manually so the ref boxes are saved for future analyses.
 
         logging.info(f"VideoDiagnoser results extracted for video file {video_path}")
 
