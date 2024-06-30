@@ -14,12 +14,15 @@ from detectflow.manipulators.manipulator import Manipulator
 
 
 class DatabaseManipulator:
-    def __init__(self, db_file: str, batch_size: int = 50, lock_type: str = "threading"):
+    def __init__(self, db_file: str, batch_size: int = 50, lock_type: str = "threading", batch_update: bool = True):
         """
         Initialize the DatabaseManipulator object with the path to the SQLite database file.
 
         :param db_file: A string representing the path to the SQLite database file.
-        Example: 'example.db'
+        :param batch_size: An integer specifying the number of rows to insert in a batch.
+        :param lock_type: A string specifying the type of lock to use for concurrency control.
+                            Options: 'threading' or 'multiprocessing'
+        :param batch_update: A boolean specifying whether to update existing rows on primary key conflict during batching.
         """
         self.db_file = db_file
         self._db_name = os.path.splitext(os.path.basename(self.db_file))[0]
@@ -29,6 +32,7 @@ class DatabaseManipulator:
         self.batch_data = []
         self.batch_table = None
         self.batch_size = batch_size
+        self.batch_update_on_conflict = batch_update
 
     @property
     def lock(self):
@@ -203,20 +207,38 @@ class DatabaseManipulator:
         except Exception as e:
             raise RuntimeError(f"Failed to create table in {self._db_name}: {e}")
 
-    def insert(self, table, data, use_transaction=False):
+    def insert(self, table, data, use_transaction=False, update_on_conflict=True):
         """
-        Insert data into a table.
+        Insert data into a table. If a conflict on the primary key occurs, optionally update the existing row.
 
         :param table: A string specifying the table to insert data into.
         :param data: A dictionary where the keys are column names and the values are data to be inserted.
                      Example data: {'name': 'Alice', 'age': 25}
         :param use_transaction: If True, a transaction will be used to ensure data integrity.
+        :param update_on_conflict: If True, update the existing row on primary key conflict. If False, raise an error.
         """
         columns = ', '.join(data.keys())
         placeholders = ', '.join('?' for _ in data)
-        query = f"INSERT INTO {table} ({columns}) VALUES ({placeholders})"
-        print(query, tuple(data.values()))
-        self.safe_execute(query, tuple(data.values()), use_transaction=use_transaction)
+
+        if update_on_conflict:
+            update_placeholders = ', '.join(f"{col} = ?" for col in data.keys())
+            query = f"""
+                INSERT INTO {table} ({columns}) VALUES ({placeholders})
+                ON CONFLICT({self.get_primary_key_column(table)}) DO UPDATE SET {update_placeholders};
+                """
+            query_data = tuple(data.values()) + tuple(data.values())
+        else:
+            query = f"INSERT INTO {table} ({columns}) VALUES ({placeholders});"
+            query_data = tuple(data.values())
+
+        print(query, query_data)
+        try:
+            self.safe_execute(query, query_data, use_transaction=use_transaction)
+        except sqlite3.IntegrityError as e:
+            if "UNIQUE constraint failed" in str(e):
+                raise RuntimeError(f"Conflict detected when inserting data into {table}: {e}")
+            else:
+                raise
 
     def update(self, table, data, condition, use_transaction=False):
         """
@@ -263,7 +285,10 @@ class DatabaseManipulator:
         """
         with self.lock:
             if self.batch_table is not None and self.batch_table != table:
-                self.flush_batch()  # Flush existing batch if table name changes
+                try:
+                    self.flush_batch()  # Flush existing batch if table name changes
+                except Exception as e:
+                    print(f"Failed to insert batch data into {self._db_name} - {self.batch_table}: {e}")
             self.batch_table = table
             self.batch_data.append(data)
             if len(self.batch_data) >= self.batch_size:
@@ -286,14 +311,28 @@ class DatabaseManipulator:
         try:
             columns = ', '.join(self.batch_data[0].keys())
             placeholders = ', '.join('?' for _ in self.batch_data[0])
-            query = f"INSERT INTO {self.batch_table} ({columns}) VALUES ({placeholders})"
-            data = [tuple(d.values()) for d in self.batch_data]
-            self.safe_execute(query, data, use_transaction=True, enable_emergency_dumps=True, sustain_emergency_dumps=True)
+
+            if self.batch_update_on_conflict:
+                update_placeholders = ', '.join(f"{col} = ?" for col in self.batch_data[0].keys())
+                query = f"""
+                INSERT INTO {self.batch_table} ({columns}) VALUES ({placeholders})
+                ON CONFLICT({self.get_primary_key_column(self.batch_table)}) DO UPDATE SET {update_placeholders};
+                """
+                data = [tuple(d.values()) + tuple(d.values()) for d in self.batch_data]
+            else:
+                query = f"INSERT INTO {self.batch_table} ({columns}) VALUES ({placeholders});"
+                data = [tuple(d.values()) for d in self.batch_data]
+
+            self.safe_execute(query, data, use_transaction=True, enable_emergency_dumps=True,
+                              sustain_emergency_dumps=True)
             self.batch_data = []  # Clear the batch after successful insertion
             print(f"Batch data inserted into {self._db_name} - {self.batch_table}.")
         except sqlite3.Error as e:
             self.conn.rollback()
-            raise RuntimeError(f"Error inserting batch data: {self._db_name} - {e}")
+            if not self.batch_update_on_conflict and "UNIQUE constraint failed" in str(e):
+                raise RuntimeError(f"Conflict detected when inserting batch data into {self.batch_table}: {e}")
+            else:
+                raise RuntimeError(f"Error inserting batch data: {self._db_name} - {e}")
 
     def get_table_names(self):
         """
