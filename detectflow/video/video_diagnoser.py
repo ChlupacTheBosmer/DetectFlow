@@ -72,7 +72,6 @@ class VideoDiagnoser:
             self._focus_regions = None
             self._focus_accuracies = None
             self._thumbnails = None
-            self.validated_methods = None
             self._report_data = None
 
         except Exception as e:
@@ -98,6 +97,7 @@ class VideoDiagnoser:
             self.duration = self.video_file.duration  # timedelta
             self.frame_height = self.video_file.frame_height
             self.frame_width = self.video_file.frame_width
+            self.validated_methods = video_file.readers if video_file else None
 
             # Recording information
             self.recording_identifier = self.video_file.recording_id
@@ -111,7 +111,7 @@ class VideoDiagnoser:
                 f"ERROR: (Video Diagnoser) Failed to extract information from video file: {os.path.basename(self.video_path)}.") from e
 
         # Validate video file
-        if not self._validate_video():
+        if not video_file and not self._validate_video():
             raise RuntimeError("ERROR: (Video Diagnoser) Video could not be validated with any method.")
 
     def _validate_attributes(self):
@@ -133,7 +133,7 @@ class VideoDiagnoser:
 
     def _validate_video(self):
         try:
-            result = VideoValidator(self.video_path).validate_video_readers()
+            result = VideoValidator.validate_video_readers(self.video_path)
         except Exception as e:
             logging.warning(f"INFO: (Video Diagnoser) Error during video validation: {e}.")
             result = {}
