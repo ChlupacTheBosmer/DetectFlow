@@ -73,7 +73,7 @@ class Video(FrameReader):
     def get_readers(self):
         # Run validator on video
         try:
-            result = VideoValidator(self.video_path).validate_video_readers()
+            result = VideoValidator.validate_video_readers(self.video_path)
         except Exception as e:
             logging.warning(f'Unable to validate video: {self.video_name}. Using default reader. Exception: {e}')
             return ["opencv"]

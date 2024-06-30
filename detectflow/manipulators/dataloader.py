@@ -30,7 +30,7 @@ class Dataloader(S3Manipulator, Manipulator):
             if self.is_valid_file_path(video_path):
 
                 # Validate download
-                if not VideoValidator(video_path).validate_video():
+                if not VideoValidator.validate_video(video_path):
                     logging.error(f"Download validation failed for video: {video_path}")
                     return False
 

@@ -103,7 +103,7 @@ class MotionEnrich:
 
         if not Validator.is_valid_file_path(self.video_path):
             raise FileNotFoundError(f"Video file does not exist: {self.video_path}")
-        if not VideoValidator(self.video_path).validate_video():
+        if not VideoValidator.validate_video(self.video_path):
             raise RuntimeError(f"Video file could not be validated")
 
         video = VideoFilePassive(self.video_path)
