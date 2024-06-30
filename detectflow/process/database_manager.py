@@ -10,6 +10,7 @@ import logging
 from detectflow.utils import DOWNLOADS_DIR
 import multiprocessing
 import time
+from datetime import datetime
 
 VISITS_SQL = """
             CREATE TABLE IF NOT EXISTS visits (
@@ -33,7 +34,7 @@ VISITS_SQL = """
             """
 
 VISITS_COLS = [
-    ("frame_number", "integer", "NOT NULL"),
+    ("frame_number", "integer", "PRIMARY KEY"),
     ("video_time", "text", "NOT NULL"),
     ("life_time", "text", ""),
     ("year", "integer", ""),
@@ -167,6 +168,9 @@ class DatabaseManager:
             print(f"Database for recording ID {recording_id} already exists.")
             return
 
+        # Determine which database to use (new, local, remote)
+        db_path = self._resolve_db_conflict(recording_id, db_path)
+
         db_manipulator = self._init_database_manipulator(db_path)
         self.db_manipulators[recording_id] = db_manipulator
         self.data_batches[recording_id] = []
@@ -200,6 +204,106 @@ class DatabaseManager:
             self.backup_to_s3(recording_id)
             self.backup_counters[recording_id] = 0
 
+    def _resolve_db_conflict(self, recording_id: str, db_path: str):
+        """ Resolve a database conflict by merging the new database with the existing one """
+        from detectflow.manipulators.input_manipulator import InputManipulator
+        from detectflow.manipulators.manipulator import Manipulator
+        from detectflow.manipulators.database_manipulator import merge_databases
+        import pytz
+
+        logging.info(f"Resolving database conflict for recording ID {recording_id}.")
+
+        # Specify the bucket and directory names
+        bucket_name = InputManipulator.get_bucket_name_from_id(recording_id)
+        directory_name = f"{InputManipulator.zero_pad_id(recording_id)}"
+        print(rf'{directory_name}/({recording_id}|{directory_name}).db', bucket_name)
+        # Check online for the database
+        try:
+            online_files = self.s3_manipulator.find_files_s3(rf'{directory_name}/({recording_id}|{directory_name}).db',
+                                                             bucket_name)
+            if len(online_files) > 1:
+                online_files = self.s3_manipulator.sort_files_s3(online_files, sort_by='name', ascending=True)
+            online_file = online_files[0] if len(online_files) > 0 else None
+        except Exception as e:
+            logging.error(f"Error while searching database for recording ID {recording_id} from S3: {e}")
+            online_file = None
+
+        try:
+            if online_file:
+                online_date = self.s3_manipulator.get_metadata_s3(online_file, 'LastModified')
+                if online_date.tzinfo is not None and online_date.utcoffset() is not None:
+                    local_timezone = pytz.timezone("Europe/Prague")
+                    online_date = online_date.astimezone(local_timezone).replace(tzinfo=None)
+                online_dict = {'file': online_file,
+                               'date': online_date,
+                               'size': int(self.s3_manipulator.get_metadata_s3(online_file, 'ContentLength'))}
+            else:
+                online_dict = None
+        except Exception as e:
+            logging.error(f"Error while getting metadata for recording ID {recording_id} from S3: {e}")
+            online_dict = {'file': online_file, 'date': None, 'size': None}
+
+        # Check in scratch for the database
+        try:
+            local_files = Manipulator.find_files(os.path.dirname(db_path), rf'({recording_id}|{directory_name}).db')
+            if len(local_files) > 1:
+                local_files = Manipulator.sort_files(local_files, sort_by='name', ascending=True)
+            local_file = local_files[0] if len(local_files) > 0 else None
+        except Exception as e:
+            logging.error(f"Error while searching database for recording ID {recording_id} from scratch: {e}")
+            local_file = None
+
+        try:
+            if local_file:
+                local_dict = {'file': local_file,
+                              'date': datetime.fromtimestamp(os.path.getmtime(local_file)),
+                              'size': int(os.path.getsize(local_file))}
+            else:
+                local_dict = None
+        except Exception as e:
+            logging.error(f"Error while getting metadata for recording ID {recording_id} from scratch: {e}")
+            local_dict = {'file': local_file, 'date': None, 'size': None}
+
+        if online_file is None:
+            final_db_path = local_file if local_file else db_path
+            logging.info(f"Database for recording ID {recording_id} not found online. Using local database: {os.path.basename(final_db_path)}.")
+        elif local_file is None:
+            # Fetch the file from S3
+            download_path = self.fetch_from_s3(online_file, db_path)
+            final_db_path = download_path if download_path else db_path
+            logging.info(f"Database for recording ID {recording_id} not found locally. Using online database: {os.path.basename(final_db_path)}.")
+        else:
+            # Resolve conflicts
+            if online_dict['date'] > local_dict['date'] and online_dict['size'] > local_dict['size']:
+                # Fetch the file from S3
+                download_path = self.fetch_from_s3(online_file, db_path)
+                final_db_path = download_path if download_path else db_path
+                logging.info(f"Online database for recording ID {recording_id} is newer. Using online database: {os.path.basename(final_db_path)}.")
+            elif online_dict['date'] < local_dict['date'] and online_dict['size'] < local_dict['size']:
+                final_db_path = local_file
+                logging.info(f"Local database for recording ID {recording_id} is newer. Using local database: {os.path.basename(final_db_path)}.")
+            else:
+                # Fetch the file from S3
+                tmp_path_online = os.path.join(os.path.dirname(db_path),
+                                               f"{os.path.splitext(os.path.basename(db_path))[0]}_online.db")
+                download_path = self.fetch_from_s3(online_file, tmp_path_online)
+
+                # Rename the local file
+                move_path = Manipulator.move_file(local_file, os.path.dirname(db_path),
+                                                  f"{os.path.splitext(os.path.basename(db_path))[0]}_local.db",
+                                                  overwrite=True)
+
+                # Merge databases
+                try:
+                    final_db_path = merge_databases(move_path, download_path, db_path)
+                    logging.info(f"Databases for recording ID {recording_id} merged successfully.")
+                except Exception as e:
+                    logging.error(f"Error while merging databases for recording ID {recording_id}: {e}")
+                    final_db_path = db_path
+
+        print(f"Final database path: {final_db_path}")
+        return final_db_path
+
     def backup_to_s3(self, recording_id: str, validate_upload: bool = True):
         from detectflow.manipulators.input_manipulator import InputManipulator
 
@@ -228,6 +332,24 @@ class DatabaseManager:
         except Exception as e:
             logging.error(f"Failed to backup database for recording ID {recording_id} to S3: {e}")
             return
+
+    def fetch_from_s3(self, s3_path: str, local_path: str):
+        # Fetch the file from S3
+        recording_id = os.path.splitext(os.path.basename(local_path))[0]
+        if recording_id in self.db_manipulators:
+            print(f"Database for recording ID currently managed. Closing connection.")
+            db = self.db_manipulators.get(recording_id, None)
+            if db:
+                db.close_connection()
+
+        try:
+            download_path = self.s3_manipulator.download_file_s3(*self.s3_manipulator._parse_s3_path(s3_path), local_path)
+            logging.info(f"Database for recording ID {os.path.basename(local_path)} downloaded from S3.")
+        except Exception as e:
+            logging.error(f"Error while downloading database for recording ID {os.path.basename(local_path)} from S3: {e}")
+            download_path = None
+        return download_path
+
 
     def run(self):
         """ Process tasks from the queue """
@@ -260,7 +382,7 @@ class DatabaseManager:
                 if not self.control_queue.empty():
                     command, args = self.control_queue.get()
                     if command == 'add_database':
-                        self.add_database(*args) # Pass recording_id and db_manipulator
+                        self.add_database(*args)  # Pass recording_id and db_path
                         logging.info(f"Adding database for recording ID {args[0]}.")
                     elif command == 'stop':
                         stop = True
@@ -274,6 +396,9 @@ class DatabaseManager:
                     elif command == 'backup_to_s3':
                         self.backup_to_s3(*args)
                         logging.info(f"Backing up database for recording ID {args[0]} to S3.")
+                    elif command == 'fetch_from_s3':
+                        self.fetch_from_s3(*args)
+                        logging.info(f"Fetching database for recording ID {args[0]} from S3.")
                     #self.control_queue.task_done()
 
                 # Check if the queue is empty and stop is requested
@@ -353,8 +478,11 @@ class DatabaseManager:
             return
 
         # Flush the batch of the recording
-        db_manipulator.flush_batch()
-        print(f"Flushed batch for <{recording_id}>.")
+        try:
+            db_manipulator.flush_batch()
+            logging.info(f"Flushed batch for recording ID {recording_id}.")
+        except Exception as e:
+            logging.error(f"Error while flushing batch for recording ID {recording_id}: {e}")
 
     def flush_all_batches(self):
         for recording_id, _ in self.db_manipulators.items():
@@ -422,6 +550,10 @@ def flush_all_db_manager(control_queue):
 
 def backup_file_db_manager(control_queue, recording_id):
     control_queue.put(('backup_to_s3', (recording_id, True)))
+
+
+def fetch_file_db_manager(control_queue, s3_path, db_path):
+    control_queue.put(('fetch_from_s3', (s3_path, db_path)))
 
 
 

@@ -16,6 +16,7 @@ torch
 ultralytics
 python-dateutil
 paramiko
+pytz
 
 # GitHub repositories for the forked packages
 git+https://github.com/ChlupacTheBosmer/sahi.git@main#egg=sahi
