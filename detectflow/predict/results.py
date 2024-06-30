@@ -453,20 +453,21 @@ class DetectionResults(BaseClass):
                 save_folder = os.path.join(save_folder, conf_folder)
         return save_folder
 
-    def _get_video_file_instance(self):
-        from detectflow.video.video_data import Video
+    @staticmethod
+    def _get_video_file_instance(source_type, source_path):
+        from detectflow.video.video_data import get_video_file_instance
 
         try:
             # Check if source type is 'video'
-            if self.source_type != "video":
+            if source_type != "video":
                 raise ValueError("source is not set to 'video'")
 
             # Ensure that source_path is set and valid
-            if not self.source_path or not isinstance(self.source_path, str):
+            if not source_path or not isinstance(source_path, str):
                 raise ValueError("source_path is not set or invalid.")
 
             # Create instance of Video
-            return Video(self.source_path)
+            return get_video_file_instance(source_path)
 
         except Exception as e:
             # Log the specific error for debugging
@@ -671,7 +672,7 @@ class DetectionResults(BaseClass):
 
         # Construct video file object instance
         try:
-            video = self._get_video_file_instance()
+            video = self._get_video_file_instance(self.source_type, self.source_path)
         except RuntimeError as e:
             logging.error(f"Error in analysing video source: {str(e)}")
             return None
@@ -711,7 +712,7 @@ class DetectionResults(BaseClass):
 
         # Construct video file object instance
         try:
-            video = self._get_video_file_instance()
+            video = self._get_video_file_instance(self.source_type, self.source_path)
         except RuntimeError as e:
             logging.error(f"Error in analysing video source: {str(e)}")
             return None

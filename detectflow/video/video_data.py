@@ -6,6 +6,7 @@ import datetime
 from datetime import datetime, timedelta
 import logging
 import cv2
+from functools import lru_cache
 
 from detectflow.validators.s3_validator import S3Validator
 from detectflow.validators.video_validator import VideoValidator
@@ -300,3 +301,7 @@ class Video(FrameReader):
             return self.video_name == other.video_name
         return False
 
+
+@lru_cache(maxsize=8)
+def get_video_file_instance(source_path: str):
+    return Video(source_path)
