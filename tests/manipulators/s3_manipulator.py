@@ -43,3 +43,35 @@ class TestS3Manipulator(unittest.TestCase):
 
         # Check if the directory was deleted
         self.assertFalse(self.s3.is_s3_directory(f"s3://{self.bucket_name}/{self.directory}"))
+
+    def test_find_files(self):
+
+        # Find files in a directory
+        files = self.s3.find_files_s3(r'GR2_L1_TolUmb02/(GR2_L1_TolUmb2|GR2_L1_TolUmb02).db', 'gr2-l1')
+
+        print(files)
+
+        # Check if the files were found
+        self.assertTrue(files)
+
+    def test_sort_files(self):
+        # Find files in a directory
+        files = self.s3.find_files_s3(r'GR2_L1_TolUmb[02|2|03|3].db', 'gr2-l1')
+
+        # Sort files in a directory
+        files = self.s3.sort_files_s3(files, sort_by='name', ascending=True)
+
+        print(files)
+
+        # Check if the files were sorted
+        self.assertTrue(files)
+
+    def test_get_metadata(self):
+        # Get metadata of a file
+        metadata = self.s3.get_metadata_s3('s3://gr2-l1/GR2_L1_TolUmb02/GR2_L1_TolUmb02_20220523_08_25.mp4',
+                                           metadata_key='LastModified')
+
+        print(type(metadata))
+
+        # Check if the metadata was found
+        self.assertTrue(metadata)
