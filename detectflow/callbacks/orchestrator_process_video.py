@@ -16,38 +16,60 @@ def diagnose_video_callback(**kwargs):
     from detectflow.video.video_data import Video
 
     task = kwargs.get('task', None)
+    name = kwargs.get('name', "Diagnose Video Callback")
     scratch = kwargs.get('scratch_path', None)
     orchestrator_control_queue = kwargs.get('orchestrator_control_queue', None)
+    db_manager_control_queue = kwargs.get('db_manager_control_queue', None)
+    db_manager_data_queue = kwargs.get('db_manager_data_queue', None)
     dataloader = None
+
+    # Unpack Task
+    directory = task.directory
+    files = task.files
 
     if not task:
         return None
 
+    # Load videos and validate them
     try:
         dataloader = Dataloader()
-        valid, invalid = dataloader.prepare_data(task.files, scratch, False)
+        valid, invalid = dataloader.prepare_data(files, scratch, True)
 
-        if not len(valid) == len(task.files) or len(invalid) > 0:
+        if not len(valid) == len(files) or len(invalid) > 0:
             raise ValueError(f"Some ({len(invalid)}) videos failed validation: {invalid}")
 
+        logging.info(f"{name} - Videos loaded and validated: {valid}")
     except Exception as e:
-        logging.error(f"{task.name} - Error when loading and validating data: {e}")
+        logging.error(f"{name} - Error when loading and validating data: {e}")
         valid, invalid = [], []
 
     video_path = None
     try:
-        for video_path in valid:
-            vid = Video(video_path)
-            logging.info(vid.color_variance)
+        for i, video_path in enumerate(valid):
 
-            # Determine what the new status of the video is
-            update_info = {"directory": task.directory,
-                           "file": next((f for f in task.files if os.path.basename(f) == os.path.basename(video_path)),
-                                        None), "status": -1}
-            if orchestrator_control_queue:
-                orchestrator_control_queue.put(('update_task', (update_info,)))
+            # Get video_id
+            video_id, _ = os.path.splitext(os.path.basename(video_path))
+
+            # Get the status of the video processing
+            status = task.get_status(file_name=os.path.basename(files[i]))
+            print("Status: ", status)
+            first_frame_number = status if status and status != -1 else 0
+            update_info = {"directory": directory, "file": files[i], "status": status}
+            if status == -1:
+                continue
+
+            # Initialize its database
+            add_database_to_db_manager(db_manager_control_queue, video_id, os.path.join(scratch, f"{video_id}.db"))
+
+            # Add video details data entry to database manager queue
+            if db_manager_data_queue is not None:  # Assumes that the video has not been processed before
+                if status == 0:
+                    video_data_entry = extract_data_from_video(video_path, frame_skip=100, motion_methods='SOM')
+                    db_manager_data_queue.put(video_data_entry)
+            else:
+                raise TypeError("Database task queue not defined")
     except Exception as e:
-        logging.error(f"{task.name} - Error when processing video: {video_path} - {e}")
+        logging.error(f"{name} - Error when processing video: {video_path} - {e}")
 
     try:
         for video_path in valid + invalid:
