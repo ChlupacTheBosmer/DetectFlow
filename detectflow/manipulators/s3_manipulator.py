@@ -266,13 +266,13 @@ class S3Manipulator(S3Validator):
             logging.error(f"Error occurred while downloading directory from S3: {e}")
             raise  # Re-raise the exception to notify the caller
 
-    def find_files_s3(self, file_name: str, bucket_name: str = None) -> List[str]:
+    def find_files_s3(self, file_pattern: str, bucket_name: str = None) -> List[str]:
         """
-        Search for a file with a specific name in S3 storage.
+        Search for files with names matching a regex pattern in S3 storage.
 
-        :param file_name: The name of the file to search for, including extension.
+        :param file_pattern: The regex pattern of the file names to search for, including extension.
         :param bucket_name: Optional specific bucket to search in. If None, searches all buckets.
-        :return: List of S3 paths to files with the specified name.
+        :return: List of S3 paths to files matching the specified regex pattern.
         """
         found_files = []
         try:
@@ -281,12 +281,14 @@ class S3Manipulator(S3Validator):
             else:
                 buckets = [bucket['Name'] for bucket in self.s3_client.list_buckets()['Buckets']]
 
+            pattern = re.compile(file_pattern)
+
             for bucket in buckets:
                 paginator = self.s3_client.get_paginator('list_objects_v2')
                 for page in paginator.paginate(Bucket=bucket):
                     if "Contents" in page:
                         for obj in page['Contents']:
-                            if obj['Key'].endswith(file_name):
+                            if pattern.search(obj['Key']):
                                 found_files.append(f"s3://{bucket}/{obj['Key']}")
 
             return found_files
