@@ -422,7 +422,7 @@ class Orchestrator(ConfigHandler):
                     logging.info("Received stop signal")
                     break
                 if control_signal == "update_task":
-                    self._handle_worker_update()
+                    self._handle_worker_update(*args)
             except self._queue_empty_exception:
                 pass
 
