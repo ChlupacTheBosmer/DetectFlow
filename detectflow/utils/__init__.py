@@ -190,4 +190,4 @@ DOWNLOADS_DIR = SETTINGS['downloads_dir']
 CHECKPOINTS_DIR = SETTINGS['checkpoints_dir']
 CONFIG_DIR = SETTINGS['config_dir']
 
-# TODO: Create checkpoints directory
+# TODO: Create checkpoints directory and others
