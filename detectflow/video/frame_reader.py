@@ -53,7 +53,7 @@ class FrameReader: # TODO: Bitch be reading in wrong channels
         if self.reader_method is None:
             # Run validator on video
             try:
-                result = VideoValidator(self.video_path).validate_video()
+                result = VideoValidator.validate_video_readers(self.video_path)
                 return next((self.READERS.get(reader, self.read_frames_opencv2) for reader in self.READERS if result.get(reader, False)), None)
             except Exception as e:
                 logging.warning(f'Unable to validate video: {self.video_name}. Using default reader. Exception: {e}')
