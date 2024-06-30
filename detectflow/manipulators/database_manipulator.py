@@ -51,7 +51,7 @@ class DatabaseManipulator:
         """
         with self.lock:
             try:
-                self.conn = sqlite3.connect(self.db_file)
+                self.conn = sqlite3.connect(self.db_file, detect_types=sqlite3.PARSE_DECLTYPES)
                 print(f"SQLite connection is opened to {self._db_name}")
             except Exception as e:
                 raise RuntimeError(f"Error connecting to database: {self._db_name} - {e}")
@@ -334,6 +334,19 @@ class DatabaseManipulator:
             else:
                 raise RuntimeError(f"Error inserting batch data: {self._db_name} - {e}")
 
+    def get_primary_key_column(self, table_name):
+        """
+        Get the primary key column of a given table.
+
+        :param table_name: The name of the table.
+        :return: The name of the primary key column.
+        """
+        columns_info = self.fetch_all(f"PRAGMA table_info({table_name})")
+        for col in columns_info:
+            if col[5]:  # Check if it's a primary key
+                return col[1]
+        return None
+
     def get_table_names(self):
         """
         Fetches the names of all tables in the SQLite database.
@@ -426,3 +439,68 @@ class DatabaseManipulator:
             self.flush_batch()
         except Exception as e:
             print(f"Failed to insert batch data into {self._db_name} - {self.batch_table}: {e}")
+
+
+def merge_databases(db1_path: str, db2_path: str, output_db_path: str):
+    # Initialize DatabaseManipulator instances for both databases
+    db1 = DatabaseManipulator(db1_path)
+    db2 = DatabaseManipulator(db2_path)
+    output_db = DatabaseManipulator(output_db_path)
+
+    try:
+        # Open connections
+        db1.create_connection()
+        db2.create_connection()
+        output_db.create_connection()
+
+        # Get all table names from the first database
+        table_names = db1.get_table_names()
+
+        for table in table_names:
+            print(f"Merging table: {table}")
+            db1_columns = db1.get_column_names(table, exclude_autoincrement_pks=False)
+            db2_columns = db2.get_column_names(table, exclude_autoincrement_pks=False)
+
+            # Ensure that both tables have the same columns
+            if set(db1_columns) != set(db2_columns):
+                raise RuntimeError(f"Table columns mismatch in {table}")
+
+            # Fetch the table schema from the first database
+            columns_info = db1.fetch_all(f"PRAGMA table_info({table})")
+            columns_definitions = ', '.join(
+                [f"{col[1]} {col[2]} PRIMARY KEY" if col[5] else f"{col[1]} {col[2]}" for col in columns_info])
+            create_table_query = f"CREATE TABLE IF NOT EXISTS {table} ({columns_definitions});"
+            output_db.safe_execute(create_table_query)
+
+            # Fetch all data from the first database table
+            db1_data = db1.fetch_all(f"SELECT * FROM {table}")
+            for row in db1_data:
+                data = dict(zip(db1_columns, row))
+                placeholders = ', '.join('?' for _ in data)
+                columns_str = ', '.join(data.keys())
+                query = f"INSERT OR IGNORE INTO {table} ({columns_str}) VALUES ({placeholders})"
+                output_db.safe_execute(query, tuple(data.values()))
+
+            # Fetch all data from the second database table and insert or ignore conflicts
+            db2_data = db2.fetch_all(f"SELECT * FROM {table}")
+            for row in db2_data:
+                data = dict(zip(db2_columns, row))
+                placeholders = ', '.join('?' for _ in data)
+                columns_str = ', '.join(data.keys())
+                query = f"INSERT OR IGNORE INTO {table} ({columns_str}) VALUES ({placeholders})"
+                output_db.safe_execute(query, tuple(data.values()))
+
+        print("Databases merged successfully into the third database.")
+
+    except sqlite3.Error as e:
+        print(f"SQLite error: {e}")
+    except Exception as e:
+        print(f"Error merging databases: {e}")
+
+    finally:
+        # Close connections
+        db1.close_connection()
+        db2.close_connection()
+        output_db.close_connection()
+
+    return output_db_path
