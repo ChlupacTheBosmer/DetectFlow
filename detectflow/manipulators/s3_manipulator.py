@@ -527,6 +527,68 @@ class S3Manipulator(S3Validator):
             logging.error(f"Error occurred while checking file modification: {error}")
             return True  # Assume modified in case of error
 
+    def sort_files_s3(self, s3_paths: List[str], sort_by: str = 'date', ascending: bool = True) -> List[str]:
+        """
+        Sort a list of S3 file paths by their last modification date, size, or name.
+
+        :param s3_paths: List of S3 file paths to sort.
+        :param sort_by: Sort by 'date', 'size', or 'name'.
+        :param ascending: Sort in ascending order if True, else descending order.
+        :return: List of S3 file paths sorted by the specified attribute.
+        """
+        file_info = []
+
+        for s3_path in s3_paths:
+            try:
+                bucket, key = self._parse_s3_path(s3_path)
+                response = self.s3_client.head_object(Bucket=bucket, Key=key)
+
+                if sort_by == 'date':
+                    attribute = response['LastModified']
+                elif sort_by == 'size':
+                    attribute = int(response['ContentLength'])
+                elif sort_by == 'name':
+                    attribute = os.path.basename(key)
+                else:
+                    raise ValueError("sort_by must be 'date', 'size', or 'name'")
+
+                file_info.append((s3_path, attribute))
+            except boto3.exceptions.Boto3Error as error:
+                logging.error(f"Error accessing S3 object {s3_path}: {error}")
+            except Exception as e:
+                logging.error(f"Unexpected error while accessing S3 object {s3_path}: {e}")
+
+        # Sort the file info list by the specified attribute
+        sorted_file_info = sorted(file_info, key=lambda x: x[1], reverse=not ascending)
+
+        # Extract the sorted S3 paths
+        sorted_s3_paths = [info[0] for info in sorted_file_info]
+
+        return sorted_s3_paths
+
+    def get_metadata_s3(self, s3_path: str, metadata_key: str = None) -> Union[dict, str, int, None]:
+        """
+        Get metadata for a specific S3 file path.
+
+        :param s3_path: The S3 file path.
+        :param metadata_key: Optional specific key to retrieve from the metadata.
+        :return: Metadata value for the specified key, or entire metadata dictionary if no key is specified.
+        """
+        try:
+            bucket, key = self._parse_s3_path(s3_path)
+            response = self.s3_client.head_object(Bucket=bucket, Key=key)
+
+            if metadata_key:
+                return response.get(metadata_key)
+            else:
+                return response
+        except boto3.exceptions.Boto3Error as error:
+            logging.error(f"Error accessing S3 object {s3_path}: {error}")
+            return None
+        except Exception as e:
+            logging.error(f"Unexpected error while accessing S3 object {s3_path}: {e}")
+            return None
+
     def backup_file_s3(self, bucket_name, directory_name, local_file_path, validate_upload=True, validate_callback=None, fallback_bucket_name='data'):
         try:
             if not self.is_s3_bucket(bucket_name):
