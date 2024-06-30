@@ -99,8 +99,9 @@ class Video(FrameReader):
             except Exception as e:
                 # Get the fps using meatadata
                 parser = createParser(self.video_path)
-                metadata = extractMetadata(parser)
-                fps = float(metadata.get("frame_rate"))
+                with parser:
+                    metadata = extractMetadata(parser)
+                    fps = float(metadata.get("frame_rate"))
         except Exception as e:
             logging.warning(f'Unable to read video fps: {self.video_path}. Exception: {e}')
             fps = 25
@@ -149,8 +150,9 @@ class Video(FrameReader):
             except Exception as e:
                 # Get the duration from metadata
                 parser = createParser(self.video_path)
-                metadata = extractMetadata(parser)
-                duration = str(metadata.get("duration"))
+                with parser:
+                    metadata = extractMetadata(parser)
+                    duration = str(metadata.get("duration"))
                 hours, minutes, seconds = map(float, duration.split(':'))
                 duration = timedelta(hours=hours, minutes=minutes, seconds=seconds)
         except Exception as e:
@@ -170,8 +172,9 @@ class Video(FrameReader):
         try:
             # Get the creation date from metadata
             parser = createParser(self.video_path)
-            metadata = extractMetadata(parser)
-            modify_date = str(metadata.get("creation_date"))  # 2022-05-24 08:29:09
+            with parser:
+                metadata = extractMetadata(parser)
+                modify_date = str(metadata.get("creation_date"))  # 2022-05-24 08:29:09
 
             # Convert the date into a datetime object
             start_time = datetime.strptime(modify_date, '%Y-%m-%d %H:%M:%S')
