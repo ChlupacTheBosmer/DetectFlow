@@ -70,10 +70,18 @@ class TestDatabaseManipulator(unittest.TestCase):
     def test_insert(self):
         self.manipulator.create_connection()
         self.manipulator.execute_query("CREATE TABLE test (id INTEGER PRIMARY KEY, name TEXT)")
-        self.manipulator.insert("test", {"name": "John"})
+
+        # Simple Insert
+        self.manipulator.insert("test", {"id": 0, "name": "John"})
         result = self.manipulator.fetch_one("SELECT * FROM test")
         print(result)
         self.assertEqual(result[1], "John")
+
+        # Now insert with conflicting id - therefore the entry should updated
+        self.manipulator.insert("test", {"id": 0, "name": "Karel"})
+        result = self.manipulator.fetch_one("SELECT * FROM test")
+        print(result)
+        self.assertEqual(result[1], "Karel")
 
     def test_update(self):
         self.manipulator.create_connection()
