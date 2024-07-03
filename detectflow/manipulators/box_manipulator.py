@@ -413,8 +413,8 @@ class BoxManipulator:
 
             # Get boxes remaining after finding the best crop
             if multiple_rois and len(done_boxes) < len(detection_boxes):
-                remaining_boxes = DetectionBoxes(
-                    np.array([box for box in detection_boxes if box not in np.array(done_boxes)]), img_dims[::-1])
+                remaining = np.array([box for box in detection_boxes if box not in np.array(done_boxes)])
+                remaining_boxes = DetectionBoxes(remaining, img_dims[::-1]) if len(remaining) > 0 else None
             else:
                 break
 
