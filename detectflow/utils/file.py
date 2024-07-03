@@ -1,5 +1,8 @@
 import os
-
+import numpy as np
+from pathlib import Path
+import json
+import re
 
 def compare_file_sizes(file1, file2, tolerance=0.01):
     """
@@ -26,4 +29,28 @@ def compare_file_sizes(file1, file2, tolerance=0.01):
         return True
     else:
         return False
+
+def yolo_label_save(txt_file: str, boxes: np.ndarray):
+    """
+    Save YOLO formatted numpy array to txt file.
+    Format: class x_center y_center width height (all values normalized)
+    """
+    with open(txt_file, 'w') as file:
+        for box in boxes:
+            file.write(' '.join(map(str, box)) + '\n')
+
+
+def yolo_label_load(txt_file: str) -> np.ndarray:
+    """
+    Read YOLO formatted txt file and convert to numpy array.
+    Format: class x_center y_center width height (all values normalized)
+    """
+    with open(txt_file, 'r') as file:
+        lines = file.readlines()
+    boxes = []
+    for line in lines:
+        parts = list(map(float, line.strip().split()))
+        boxes.append(parts)
+    return np.array(boxes)
+
 

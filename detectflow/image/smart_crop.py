@@ -7,6 +7,13 @@ from sahi.slicing import slice_image
 from sahi.utils.coco import CocoAnnotation
 from detectflow.manipulators.frame_manipulator import FrameManipulator
 from detectflow.manipulators.box_manipulator import BoxManipulator
+import os
+import glob
+from PIL import Image
+import traceback
+from detectflow.handlers.checkpoint_handler import CheckpointHandler
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from detectflow.utils.file import yolo_label_load
 
 class CropResult:
     def __init__(self,
@@ -19,14 +26,7 @@ class CropResult:
 class SmartCrop:
     def __init__(self,
                  image: Optional[np.ndarray] = None,
-                 annotations: Optional[DetectionBoxes] = None,
-                 crop_size: Tuple = (640, 640),
-                 handle_overflow: str = "expand",
-                 max_expansion_limit: Tuple = (1000, 1000),
-                 margin: int = 100,
-                 exhaustive_search: bool = False,
-                 permutation_limit: int = 7,
-                 multiple_rois: bool = False):
+                 annotations: Optional[DetectionBoxes] = None):
         '''
         Initialize the instance of the SmartCrop when passing an image and annotations.
         '''
@@ -36,38 +36,16 @@ class SmartCrop:
         self.image_size = image.shape[:2][::-1]  # Reverse to make sure the order is (width, height)
         self.image_aspect_ratio = self.image_size[0] / self.image_size[1]
         self.annotations = annotations
-        self.crop_size = crop_size
-        self.crop_aspect_ratio = self.crop_size[0] / self.crop_size[1]
-        self.handle_overflow = handle_overflow
-        self.max_expansion_limit = max_expansion_limit
-        self.margin = margin
-        self.exhaustive_search = exhaustive_search
-        self.permutation_limit = permutation_limit
-        self.multiple_rois = multiple_rois
+        self.crop_aspect_ratio = None
 
     @classmethod
-    def from_detection_results(cls,
-                               detection_results: Optional[DetectionResults],
-                               crop_size: Tuple = (640, 640),
-                               handle_overflow: str = "expand",
-                               max_expansion_limit: Tuple = (1000, 1000),
-                               margin: int = 100,
-                               exhaustive_search: bool = False,
-                               permutation_limit: int = 7,
-                               multiple_rois: bool = False):
+    def from_detection_results(cls, detection_results: Optional[DetectionResults]):
         '''
         Initialize the instance of the SmartCrop when passing DetectionResults instance.
         '''
 
         return cls(image=detection_results.orig_img,
-                   annotations=detection_results.boxes,
-                   crop_size=crop_size,
-                   handle_overflow=handle_overflow,
-                   max_expansion_limit=max_expansion_limit,
-                   margin=margin,
-                   exhaustive_search=exhaustive_search,
-                   permutation_limit=permutation_limit,
-                   multiple_rois=multiple_rois)
+                   annotations=detection_results.boxes)
 
     def crop(self,
              inspect: bool = False,
@@ -75,27 +53,20 @@ class SmartCrop:
              ignore_empty: bool = False,
              partial_overlap: bool = False,
              iou_threshold: float = 0.5,
-             crop_size: Optional[Tuple[int, int]] = None,
-             handle_overflow: Optional[str] = None,
-             max_expansion_limit: Optional[Tuple] = None,
-             margin: Optional[int] = None,
-             exhaustive_search: Optional[bool] = None,
-             permutation_limit: Optional[int] = None,
-             multiple_rois: Optional[bool] = None):
+             crop_size: Tuple[int, int] = (640, 640),
+             handle_overflow: str = "expand",
+             max_expansion_limit: Tuple = (1000, 1000),
+             margin: int = 50,
+             exhaustive_search: bool = False,
+             permutation_limit: int = 7,
+             multiple_rois: bool = False):
         '''
         Search for the best solution to crop image based on the requirements
         '''
 
         logging.info("Running crop()")
 
-        # Crop size and multiple_rois can be specified manually overriding the one set while init-ing the class instance
-        crop_size = self.crop_size if crop_size is None else crop_size
-        handle_overflow = self.handle_overflow if handle_overflow is None else handle_overflow
-        max_expansion_limit = self.max_expansion_limit if max_expansion_limit is None else max_expansion_limit
-        margin = self.margin if margin is None else margin
-        exhaustive_search = self.exhaustive_search if exhaustive_search is None else exhaustive_search
-        permutation_limit = self.permutation_limit if permutation_limit is None else permutation_limit
-        multiple_rois = self.multiple_rois if multiple_rois is None else multiple_rois
+        self.crop_aspect_ratio = crop_size[0] / crop_size[1]
 
         # Calculate the roi(s) for cropping
         rois = BoxManipulator.get_optimal_roi(self.annotations, self.image_size, crop_size, handle_overflow,
@@ -148,6 +119,7 @@ class SmartCrop:
         return CropResult(crops, annotations)
 
     def tile(self,
+             crop_size: Tuple[int, int] = (640, 640),
              overlap_height_ratio: Optional[float] = 0.2,
              overlap_width_ratio: Optional[float] = 0.2,
              min_area_ratio: float = 0.1,
@@ -158,10 +130,10 @@ class SmartCrop:
 
         logging.info("Running tile()")
 
-        if self.image_size[0] < self.crop_size[0] or self.image_size[1] < self.crop_size[1]:
+        if self.image_size[0] < crop_size[0] or self.image_size[1] < crop_size[1]:
 
             # Will calculate the target size to which to resize the image to make sure at least one tile fits while maintaining aspect ratio
-            target_size = FrameManipulator.calculate_target_adjust_image_size(self.image_size, self.crop_size)
+            target_size = FrameManipulator.calculate_target_adjust_image_size(self.image_size, crop_size)
             print(target_size)
 
             # Upscale frame and adjust annotations
@@ -204,8 +176,8 @@ class SmartCrop:
         results = slice_image(
             image=image,
             coco_annotation_list=annotations,
-            slice_height=self.crop_size[1],
-            slice_width=self.crop_size[0],
+            slice_height=crop_size[1],
+            slice_width=crop_size[0],
             overlap_height_ratio=overlap_height_ratio,
             overlap_width_ratio=overlap_width_ratio,
             auto_slice_resolution=True,
@@ -248,6 +220,7 @@ class SmartCrop:
         return CropResult(crops, sliced_annotations)
 
     def rescale(self,
+                crop_size: Tuple[int, int] = (640, 640),
                 ignore_aspect_ratio: bool = False,
                 inspect: bool = False):
         '''
@@ -255,6 +228,7 @@ class SmartCrop:
         '''
 
         logging.info("Running rescale()")
+        self.crop_aspect_ratio = crop_size[0] / crop_size[1]
 
         if self.image_aspect_ratio == self.crop_aspect_ratio or ignore_aspect_ratio:
 
@@ -265,13 +239,13 @@ class SmartCrop:
         else:
 
             # Subcrop to get the same aspect ratio as crop_size
-            result = self.subcrop()
+            result = self.subcrop(self.crop_aspect_ratio)
             image = result.crops[0]
             orig_annotations = result.annotations[0]
 
         # Upscale frame and adjust annotations
-        crop = FrameManipulator.resize_frames([image], self.crop_size, preference='balance')[0]
-        annotations = BoxManipulator.adjust_boxes_for_resize(orig_annotations, image.shape[::-1][1:], self.crop_size)
+        crop = FrameManipulator.resize_frames([image], crop_size, preference='balance')[0]
+        annotations = BoxManipulator.adjust_boxes_for_resize(orig_annotations, image.shape[::-1][1:], crop_size)
 
         if inspect:
             Inspector.display_frames_with_boxes([crop], detection_boxes_list=[annotations])
@@ -279,6 +253,7 @@ class SmartCrop:
         return CropResult([crop], [annotations])
 
     def subcrop(self,
+                aspect_ratio: Union[int, float] = 1,
                 inspect: bool = False):
         '''
         Subcrop the image to change the aspect ratio while losing the least amount of information.
@@ -287,7 +262,7 @@ class SmartCrop:
         logging.info("Running subcrop()")
 
         # Calculate subscrop dimensions
-        roi_size = FrameManipulator.calculate_largest_roi(self.image_size, self.crop_aspect_ratio)
+        roi_size = FrameManipulator.calculate_largest_roi(self.image_size, aspect_ratio)
 
         # Crop the image with the crop_size set to the custom dimensions
         return self.crop(inspect=inspect,
@@ -303,8 +278,15 @@ class SmartCrop:
                          multiple_rois=False)
 
     def smart_crop(self,
+                   crop_size: Tuple[int, int] = (640, 640),
+                   handle_overflow: str = "expand",
+                   max_expansion_limit: Tuple = (1000, 1000),
+                   margin: int = 50,
                    partial_overlap: bool = False,
                    iou_threshold: float = 0.5,
+                   exhaustive_search: bool = False,
+                   permutation_limit: int = 7,
+                   multiple_rois: bool = False,
                    allow_slicing: bool = True,
                    evenness_threshold: float = 0.66,
                    force_slice_empty: bool = True,
@@ -320,22 +302,22 @@ class SmartCrop:
         # Image conditions
         same_aspect_ratio = self.image_aspect_ratio == self.crop_aspect_ratio  # is img and crop AR the same?
         all_img_dims_in_expansion_limit = all(img_dim <= limit for img_dim, limit in zip(self.image_size,
-                                                                                         self.max_expansion_limit))  # are all img dims smaller than their corresponding expansion limit of crop?
+                                                                                         max_expansion_limit))  # are all img dims smaller than their corresponding expansion limit of crop?
         any_img_dim_large = any(img_dim > 2 * crop_dim for img_dim, crop_dim in zip(self.image_size,
-                                                                                    self.crop_size))  # is any img dim larger than twice the corresponding crop dim?
+                                                                                    crop_size))  # is any img dim larger than twice the corresponding crop dim?
         all_img_dims_over_crop_size = all(img_dim > 1.3 * crop_dim for img_dim, crop_dim in zip(self.image_size,
-                                                                                                self.crop_size))  # are all img dims 1.3 times larger than corresponding crop dims?
+                                                                                                crop_size))  # are all img dims 1.3 times larger than corresponding crop dims?
 
         # Boxes conditions
-        empty = True if self.annotations is None else False
+        empty = True if not isinstance(self.annotations, DetectionBoxes) else False
 
-        grid_dim = max(min(self.image_size) // 2, min(self.crop_size) // 2)  # grid dims based on img or crop dims
+        grid_dim = max(min(self.image_size) // 2, min(crop_size) // 2)  # grid dims based on img or crop dims
         box_dist_idx = 0 if empty else BoxManipulator.get_boxes_distribution_index(self.annotations.xyxy,
                                                                                    self.image_size, grid_size=(grid_dim,
                                                                                                                grid_dim))  # analyse distribution of bboxes
         even_dist = box_dist_idx >= evenness_threshold  # are boxes distributed in more than set proportion of grid cells?
 
-        box_size_limit = self.max_expansion_limit if self.handle_overflow == "expand" else self.crop_size
+        box_size_limit = max_expansion_limit if handle_overflow == "expand" else crop_size
         any_large_box = False if empty else any(box_dim >= crop_dim for box_dim, crop_dim in
                                                 [(BoxManipulator.get_box_dimensions(box), box_size_limit) for box in
                                                  self.annotations.xyxy])  # is any box higher or wider than the crop size?
@@ -344,7 +326,11 @@ class SmartCrop:
         if empty and force_slice_empty:
             logging.info("Slicing empty image")
 
-            return self.tile(overlap_height_ratio=0.2, overlap_width_ratio=0.2, min_area_ratio=0.1, inspect=inspect)
+            return self.tile(crop_size=crop_size,
+                             overlap_height_ratio=0.2,
+                             overlap_width_ratio=0.2,
+                             min_area_ratio=0.1,
+                             inspect=inspect)
 
         # If the image has the same aspect ratio as the desired crop and the expansion limit is not exceeded
         if same_aspect_ratio and all_img_dims_in_expansion_limit:
@@ -352,7 +338,7 @@ class SmartCrop:
             logging.info("Rescaling image")
 
             # Then rescale the image
-            return self.rescale(inspect=inspect)
+            return self.rescale(crop_size=crop_size, inspect=inspect)
 
         # If any bbox is larger than the crop size and cannot be fitted in a crop
         elif any_large_box:
@@ -362,7 +348,7 @@ class SmartCrop:
             # Then subcrop the image and resize
             # TODO: note that this will result in subcroping if any box even just one of many is larger than crop
             # but it does take into account whether the expansion policy is set to strict or expand.
-            return self.subcrop(inspect=inspect)
+            return self.subcrop(aspect_ratio=self.crop_aspect_ratio, inspect=inspect)
 
         # If any img dim is twice as large as the crop size and both img dims are larger than crop_size
         elif allow_slicing and any_img_dim_large and all_img_dims_over_crop_size and even_dist:
@@ -370,7 +356,11 @@ class SmartCrop:
             logging.info("Slicing image")
 
             # Then image is considered large with even distribution of boxes and may be suitable for slicing
-            return self.tile(overlap_height_ratio=0.2, overlap_width_ratio=0.2, min_area_ratio=0.1, inspect=inspect)
+            return self.tile(crop_size=crop_size,
+                             overlap_height_ratio=0.2,
+                             overlap_width_ratio=0.2,
+                             min_area_ratio=0.1,
+                             inspect=inspect)
 
         # Else
         else:
@@ -382,4 +372,143 @@ class SmartCrop:
                              auto_resize=True,
                              ignore_empty=False,
                              partial_overlap=partial_overlap,
-                             iou_threshold=iou_threshold)
+                             iou_threshold=iou_threshold,
+                             margin=margin,
+                             exhaustive_search=exhaustive_search,
+                             permutation_limit=permutation_limit,
+                             multiple_rois=multiple_rois)
+
+
+class FrameCropper(CheckpointHandler):
+
+    CONFIG_DEF = {'handle_overflow': "expand",
+                   'max_expansion_limit': (900, 900),
+                   'margin': 25,
+                   'exhaustive_search': True,
+                   'permutation_limit': 8,
+                   'multiple_rois': True,
+                   'partial_overlap': False,
+                   'iou_threshold': 0.8,
+                   'allow_slicing': True,
+                   'evenness_threshold': 0.66,
+                   'force_slice_empty': True,
+                   'inspect': False}
+
+    def __init__(self, checkpoint_file='checkpoint.json', **kwargs):
+        super().__init__(checkpoint_file)
+
+        self.config = {}
+        for key, value in kwargs.items():
+            if key not in ['crop_size']:
+                self.config[key] = value
+
+        for key, value in self.CONFIG_DEF.items():
+            if key not in self.config:
+                self.config[key] = value
+
+    def process_image(self, image_file: str, output_folder: str, crop_size: Tuple[int, int], extension_in: str = '.png', extension_out: str = '.jpg'):
+        """
+        Process a single image file, crop it based on the bounding boxes from the corresponding .txt file,
+        and save the results to the output folder.
+        """
+        logging.info(f"Processing: {image_file}")
+
+        # Image
+        try:
+            image = np.array(Image.open(image_file))
+            image_shape = image.shape[:2]
+        except Exception as e:
+            logging.error(f"Failed to load image: {image_file}")
+            return
+
+        # Label
+        txt_file = None
+        try:
+            txt_file = image_file.replace(extension_in, '.txt')
+            if os.path.exists(txt_file):
+                boxes = yolo_label_load(txt_file)
+                detection_boxes = DetectionBoxes.from_custom_format(boxes[:, 1:], tuple(image_shape), "nxywh") if boxes is not None else None
+            else:
+                detection_boxes = None
+        except Exception as e:
+            logging.error(f"Failed to load label: {txt_file}")
+            return
+
+        #SmartCrop
+        try:
+            smart_crop = SmartCrop(image=image,
+                                   annotations=detection_boxes)
+            crop_result = smart_crop.smart_crop(
+                                   crop_size=crop_size,
+                                   **self.config)
+
+            logging.info(f"Created {len(crop_result.crops)} crops for {image_file}")
+
+            for idx, crop in enumerate(crop_result.crops):
+
+                # Take boxes and add dummy cls and probs
+                boxes = crop_result.annotations[idx]
+                if isinstance(boxes, DetectionBoxes):
+                    updated_boxes = np.hstack((boxes.data, np.zeros((boxes.data.shape[0], 2))))
+                    boxes.data = updated_boxes
+                result = DetectionResults(orig_img=crop, boxes=boxes)
+
+                # Assign attribute to results for correct naming convention
+                result.save_dir = output_folder
+                try:
+                    parts = os.path.basename(image_file).split(".")[0].split("_")
+                    result.source_name = f"{'_'.join(parts[:-1])}_{idx}"
+                    result.frame_number = parts[-1]
+                except Exception as e:
+                    result.source_name = f"{os.path.basename(image_file).split('.')[0]}_{idx}"
+                    result.frame_number = idx
+
+                # Save the result
+                result.save(save_txt=True, extension=extension_out)
+
+            # Update checkpoint after successfully processing the image
+            self.update_checkpoint(last_processed_file=image_file)
+        except Exception as e:
+            logging.error(f"ERROR: {e} {image_file}, {detection_boxes}")
+            traceback.print_exc()
+
+    def process_folder(self, input_folder: str, output_folder: str, crop_size: Tuple[int, int] = (640, 640),
+                       max_workers: int = 4, extension_in: str = '.png', extension_out: str = '.jpg'):
+        """
+        Process a folder of images, crop them based on the bounding boxes from corresponding .txt files,
+        and save the results to a new folder.
+        """
+        os.makedirs(output_folder, exist_ok=True)
+        image_files = glob.glob(os.path.join(input_folder, '**', f'*{extension_in}'), recursive=True)
+
+        # Load checkpoint to resume processing
+        last_processed_file = self.get_checkpoint_data('last_processed_file', None)
+        start_processing = False if last_processed_file else True
+
+        if max_workers == 1:
+            for image_file in image_files:
+                if not start_processing:
+                    if image_file == last_processed_file:
+                        start_processing = True
+                    continue
+
+                # Process the file without threading
+                self.process_image(image_file, output_folder, crop_size, extension_in, extension_out)
+
+        else:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = []
+                for image_file in image_files:
+                    if not start_processing:
+                        if image_file == last_processed_file:
+                            start_processing = True
+                        continue
+
+                    futures.append(executor.submit(self.process_image, image_file, output_folder, crop_size, extension_in, extension_out))
+
+                for future in as_completed(futures):
+                    try:
+                        future.result()  # Get the result to raise any exceptions
+                    except Exception as e:
+                        logging.info(f"Exception occurred during processing: {e}")
+
