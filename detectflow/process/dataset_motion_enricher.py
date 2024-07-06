@@ -154,7 +154,7 @@ class DatasetMotionEnricher(DatasetSourceProcessor):
 
         # Prepare the video
         try:
-            valid, _ = dataloader.prepare_data(video_paths=files, target_directory=video_dir, remove_invalid=False)
+            valid, _ = dataloader.prepare_videos(video_paths=files, target_directory=video_dir, remove_invalid=False)
             if not valid or len(valid) == 0:
                 raise RuntimeError(f"Videos could not be prepared and validated: {valid}")
             else:

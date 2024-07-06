@@ -43,7 +43,7 @@ class Dataloader(S3Manipulator, Manipulator):
             logging.error(f"Error during video validation for {video_path}: {e}")
             return False
 
-    def prepare_data(self, video_paths: List[str], target_directory: str, remove_invalid: bool = True) -> tuple[
+    def prepare_videos(self, video_paths: List[str], target_directory: str, remove_invalid: bool = True) -> tuple[
         list[str], list[str]]:
         """
         Prepare video data by downloading or moving files to the target directory and validating them.

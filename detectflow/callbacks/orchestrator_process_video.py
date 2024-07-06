@@ -33,7 +33,7 @@ def diagnose_video_callback(**kwargs):
     # Load videos and validate them
     try:
         dataloader = Dataloader()
-        valid, invalid = dataloader.prepare_data(files, scratch, True)
+        valid, invalid = dataloader.prepare_videos(files, scratch, True)
 
         if not len(valid) == len(files) or len(invalid) > 0:
             raise ValueError(f"Some ({len(invalid)}) videos failed validation: {invalid}")
@@ -135,6 +135,13 @@ def process_video_callback(task: Task,
 
     # Functionality flags
     inspect = kwargs.get('inspect', False)
+    skip_empty_videos = kwargs.get('skip_empty_videos', False)
+    skip_empty_frames = kwargs.get('skip_empty_frames', False)
+
+    # Initial validation and debug logging
+    if scratch is None:
+        raise ValueError(f"{name} - Scratch path not defined")
+
     if not model_config or not isinstance(model_config, (list, dict)):
         logging.warning(f"{name} - Model config not defined, using default")
         model_config = model_defaults
@@ -143,6 +150,7 @@ def process_video_callback(task: Task,
     try:
         dataloader = Dataloader()
         valid, invalid = dataloader.prepare_data(files, scratch, False)
+        valid, invalid = dataloader.prepare_videos(files, scratch, False)
 
         if not len(valid) == len(files) or len(invalid) > 0:
             raise ValueError(f"Some ({len(invalid)}) videos failed validation: {invalid}")
