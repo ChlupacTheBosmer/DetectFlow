@@ -3,7 +3,7 @@ from detectflow.process.database_manager import add_database_to_db_manager
 from detectflow.process.frame_generator import FrameGenerator
 from detectflow.manipulators.dataloader import Dataloader
 from detectflow.validators.validator import Validator
-from detectflow.utils.threads import calculate_optimal_threads
+from detectflow.models import DEFAULT_MODEL_CONFIG as model_defaults
 from detectflow.callbacks.frame_generator_predictions import frame_generator_predict
 from detectflow.utils.extract_data import extract_data_from_video
 import logging
@@ -94,7 +94,7 @@ def process_video_callback(task: Task,
                   "frame_skip": int,
                   "max_producers": int,
                   "max_consumers": int,
-                  "model_config": dict,
+                  "model_config": (dict, list),
                   "device": object,
                   "track_results": bool,
                   "tracker_type": str,
@@ -135,6 +135,9 @@ def process_video_callback(task: Task,
 
     # Functionality flags
     inspect = kwargs.get('inspect', False)
+    if not model_config or not isinstance(model_config, (list, dict)):
+        logging.warning(f"{name} - Model config not defined, using default")
+        model_config = model_defaults
 
     # Load videos and validate them
     try:

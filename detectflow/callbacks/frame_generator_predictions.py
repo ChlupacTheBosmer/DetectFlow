@@ -5,6 +5,7 @@ from detectflow.predict.tracker import Tracker
 from detectflow.utils.inspector import Inspector
 from detectflow.video.video_data import Video
 from detectflow.utils.extract_data import extract_data_from_result
+from detectflow.models import DEFAULT_MODEL_CONFIG as model_defaults
 
 
 def frame_generator_predict(**kwargs):
