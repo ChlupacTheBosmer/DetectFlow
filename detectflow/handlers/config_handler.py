@@ -1,6 +1,7 @@
 import json
 import configparser
 from abc import ABC, abstractmethod
+from detectflow.utils.config import load_json_config, load_ini_config
 
 
 class ConfigHandler(ABC):
@@ -29,12 +30,9 @@ class ConfigHandler(ABC):
 
         if Validator.is_valid_file_path(self.config_path):
             if self.format == 'json':
-                with open(self.config_path, 'r') as file:
-                    config_data = json.load(file)
+                config_data = load_json_config(self.config_path)
             elif self.format == 'ini':
-                config = configparser.ConfigParser()
-                config.read(self.config_path)
-                config_data = {section: dict(config.items(section)) for section in config.sections()}
+                config_data = load_ini_config(self.config_path)
             else:
                 raise ValueError("Unsupported format. Use 'json' or 'ini'.")
         else:
