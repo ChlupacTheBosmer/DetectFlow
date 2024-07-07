@@ -44,7 +44,10 @@ def main(config_path: str, config_format: str, log_file: Optional[str], **kwargs
             kwargs['scratch_path'] = os.getcwd()
 
     if not kwargs.get('log_file', None):
-        log_file = os.path.join(kwargs.get('scratch'), 'orchestrator.log')
+        try:
+            log_file = os.path.join(kwargs.get('scratch_path'), 'orchestrator.log')
+        except Exception as e:
+            log_file = 'orchestrator.log'
 
     #setup_logging(log_file)
 
