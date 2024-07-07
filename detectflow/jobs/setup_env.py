@@ -182,3 +182,5 @@ def setup_environment():
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     setup_environment()
+
+    import detectflow
