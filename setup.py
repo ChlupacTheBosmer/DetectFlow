@@ -60,9 +60,9 @@ setup(
     },
     author='Petr Chlup',
     author_email='USER@natur.cuni.cz',
-    packages=find_packages(exclude=['tests', 'examples']),
+    packages=find_packages(exclude=['tests', 'notebooks']),
     package_data={
-        '': ['*.yaml', '*.jpg', '*.json', '*.csv'],  # Add other data file types if needed
+        '': ['*.yaml', '*.jpg', '*.json', '*.csv', '*.txt', '*.pt', '*.sh', '*.css', '*.svg', '*.png'],  # Add other data file types if needed
     },
     include_package_data=True,
     install_requires=install_requires,
