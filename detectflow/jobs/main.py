@@ -37,6 +37,12 @@ def main(config_path: str, config_format: str, log_file: Optional[str], **kwargs
     if kwargs.get('verbose') == 'false':
         os.environ['YOLO_VERBOSE'] = 'false'
 
+    if not kwargs.get('scratch_path', None):
+        try:
+            kwargs['scratch_path'] = os.getenv('SCRATCHDIR')
+        except Exception as e:
+            kwargs['scratch_path'] = os.getcwd()
+
     if not kwargs.get('log_file', None):
         log_file = os.path.join(kwargs.get('scratch'), 'orchestrator.log')
 
