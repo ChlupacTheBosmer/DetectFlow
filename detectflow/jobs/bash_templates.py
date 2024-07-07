@@ -44,7 +44,7 @@ test -n "$SCRATCHDIR" || {
 
 singularity exec -B $SCRATCHDIR:/mnt \
 $SING_IMAGE /bin/bash -c "python '$SOURCE_FILE' \
-                              --config_path '$CONFIG'"
+                              --config_path '$CONFIG' --scratch_path '$SCRATCHDIR'"
 
 pwd > "$SCRATCHDIR"/test.txt
 ################################################################################
