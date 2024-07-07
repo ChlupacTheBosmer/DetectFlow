@@ -219,16 +219,6 @@ class DatabaseManager:
         bucket_name = InputManipulator.get_bucket_name_from_id(recording_id)
         directory_name = f"{InputManipulator.zero_pad_id(recording_id)}"
         print(rf'{directory_name}/({recording_id}|{directory_name}).db', bucket_name)
-        # Check online for the database
-        try:
-            online_files = self.s3_manipulator.find_files_s3(rf'{directory_name}/({recording_id}|{directory_name}).db',
-                                                             bucket_name)
-            if len(online_files) > 1:
-                online_files = self.s3_manipulator.sort_files_s3(online_files, sort_by='name', ascending=True)
-            online_file = online_files[0] if len(online_files) > 0 else None
-        except Exception as e:
-            logging.error(f"Error while searching database for recording ID {recording_id} from S3: {e}")
-            online_file = None
 
         # Attempt to locate the database file online and locally
         online_file = self.dataloader.locate_file_s3(rf'{directory_name}/({recording_id}|{directory_name}).db',
