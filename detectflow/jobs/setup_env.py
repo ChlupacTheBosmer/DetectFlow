@@ -148,6 +148,9 @@ def setup_environment():
     required_packages = get_detectflow_requirements()
     validate_environment(required_packages, installed_packages)
 
+    # Get installed packages
+    installed_packages = get_installed_packages()
+
     # Install specific versions of numpy and urllib3 if not present or different version is required
     if 'numpy' in installed_packages:
         if not installed_packages['numpy'].startswith('1.'):
