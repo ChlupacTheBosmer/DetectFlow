@@ -38,8 +38,9 @@ class Video(FrameReader):
         self.video_path = video_path
         self.video_name = os.path.basename(video_path)
         self.video_id, _ = os.path.splitext(self.video_name)
-        self.s3_bucket = s3_bucket if s3_bucket else (S3Validator._parse_s3_path(s3_path)[0] if s3_path else None)
-        self.s3_directory = s3_directory if s3_directory else (os.path.dirname(S3Validator._parse_s3_path(s3_path)[1]) if s3_path else None)
+        self.s3_bucket = s3_bucket if s3_bucket else (S3Validator.parse_s3_path(s3_path)[0] if s3_path else None)
+        self.s3_directory = s3_directory if s3_directory else (os.path.dirname(
+            S3Validator.parse_s3_path(s3_path)[1]) if s3_path else None)
         self.s3_path = s3_path if s3_path else f"s3://{s3_bucket}/{s3_directory}/{self.video_name}" if s3_bucket and s3_directory else None
         self.extension = parsed_data.get("extension", None)
 

@@ -365,7 +365,7 @@ class Orchestrator(ConfigHandler):
                 raise ValueError("Error during input data processing - 'None' type")
 
             if input_flags[0]:  # S3 bucket, directory
-                bucket, prefix = self.dataloader._parse_s3_path(directory)
+                bucket, prefix = self.dataloader.parse_s3_path(directory)
                 print(bucket, prefix)
                 file_list = self.dataloader.list_files_s3(bucket, prefix, regex=r"^(?!.*^\.).*(?<=\.mp4|\.avi|\.mkv)$",
                                                           return_full_path=True)

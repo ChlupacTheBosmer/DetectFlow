@@ -154,7 +154,8 @@ class VideoDownloader:
             logging.info(f"Downloading video: {video_path} to {destination_path}")
 
             # Download logic
-            self.manipulator.download_file_s3(bucket_name=bucket, file_name=self.manipulator._parse_s3_path(video_path)[1],
+            self.manipulator.download_file_s3(bucket_name=bucket, file_name=
+            self.manipulator.parse_s3_path(video_path)[1],
                                               local_file_name=destination_path)
 
             _, callback_result = self._process_callback(self.processing_callback, destination_path, video_path)
@@ -183,7 +184,7 @@ class VideoDownloader:
         iterable_videos_to_download = iter(videos_to_download)
         for videos_to_download_chunk in iter(lambda: list(itertools.islice(iterable_videos_to_download, batch_size)), []):
 
-            file_pairs = [(self.manipulator._parse_s3_path(video_path)[1], os.path.join(download_path, os.path.basename(video_path))) for video_path in videos_to_download_chunk]
+            file_pairs = [(self.manipulator.parse_s3_path(video_path)[1], os.path.join(download_path, os.path.basename(video_path))) for video_path in videos_to_download_chunk]
 
             # Download logic - use multithreading to download multiple videos at once
             downloaded_videos = self.manipulator.download_files_s3_batch(bucket_name=bucket, file_pairs=file_pairs, max_workers=batch_size, max_attempts=3)

@@ -542,7 +542,7 @@ class S3Manipulator(S3Validator):
 
         for s3_path in s3_paths:
             try:
-                bucket, key = self._parse_s3_path(s3_path)
+                bucket, key = self.parse_s3_path(s3_path)
                 response = self.s3_client.head_object(Bucket=bucket, Key=key)
 
                 if sort_by == 'date':
@@ -577,7 +577,7 @@ class S3Manipulator(S3Validator):
         :return: Metadata value for the specified key, or entire metadata dictionary if no key is specified.
         """
         try:
-            bucket, key = self._parse_s3_path(s3_path)
+            bucket, key = self.parse_s3_path(s3_path)
             response = self.s3_client.head_object(Bucket=bucket, Key=key)
 
             if metadata_key:

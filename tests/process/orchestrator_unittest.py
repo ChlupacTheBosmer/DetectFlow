@@ -100,7 +100,7 @@ class TestOrchestrator(unittest.TestCase):
         print(man.is_s3_directory(input_data[0]))
         print(man.is_s3_file(input_data[0]))
 
-        bucket_name, prefix = man._parse_s3_path(input_data[0])
+        bucket_name, prefix = man.parse_s3_path(input_data[0])
         print(bucket_name, prefix)
 
         print(man.list_directories_s3(bucket_name, prefix, full_path=True))

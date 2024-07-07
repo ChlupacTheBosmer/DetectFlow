@@ -61,7 +61,7 @@ class Dataloader(S3Manipulator, Manipulator):
             try:
                 if self.is_s3_file(video_path):
                     # Handle S3 file
-                    bucket_name, key = self._parse_s3_path(video_path)
+                    bucket_name, key = self.parse_s3_path(video_path)
                     local_path = os.path.join(target_directory, os.path.basename(key))
                     if self.is_valid_file_path(local_path) or self.download_file_s3(bucket_name, key, local_path):
                         if self.validate_video(local_path):
