@@ -329,7 +329,7 @@ def should_process_video_from_db(db_path: str, video_start: datetime, video_end:
 
     if 'video_data' not in db.get_table_names():
         logging.error(f"Table 'video_data' not found in the flowering minutes database.")
-        return False, None
+        return True, None
 
     # Query the video_data table for the given video_id
     try:
@@ -341,7 +341,7 @@ def should_process_video_from_db(db_path: str, video_start: datetime, video_end:
         rows = db.fetch_all(query)
     except Exception as e:
         logging.error(f"Error when querying the flowering minutes database: {e}")
-        return False, None
+        return True, None
 
     try:
         # Convert rows to datetime and flower count
@@ -352,7 +352,7 @@ def should_process_video_from_db(db_path: str, video_start: datetime, video_end:
             flower_data.append((time_point, no_of_flowers))
     except Exception as e:
         logging.error(f"Error when parsing the flowering minutes database: {e}")
-        return False, None
+        return True, None
 
     flowers_at_start = None
     flowers_changed_during_video = False
@@ -378,7 +378,7 @@ def should_process_video_from_db(db_path: str, video_start: datetime, video_end:
                     break
     except Exception as e:
         logging.error(f"Error when checking the flowering minutes data: {e}")
-        return False, None
+        return True, None
     finally:
         db.close_connection()
 
