@@ -194,7 +194,8 @@ def process_video_callback(task: Task,
                 'device': device,
                 'track_results': track_results,
                 'tracker_type': tracker_type,
-                'scratch_path': scratch
+                'scratch_path': scratch,
+                'skip_empty_frames': skip_empty_frames
             }
 
             # Generate frames and run detection

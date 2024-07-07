@@ -1,7 +1,6 @@
 import logging
 import os
 from detectflow.predict.predictor import Predictor
-from detectflow.predict.tracker import Tracker
 from detectflow.utils.inspector import Inspector
 from detectflow.video.video_data import Video
 from detectflow.utils.extract_data import extract_data_from_result
@@ -68,6 +67,7 @@ def frame_generator_predict(**kwargs):
 
     # Functionality flags
     inspect = kwargs.get('inspect', False)
+    skip_empty_frames = kwargs.get('skip_empty_frames', False)
 
     # Example processing code (replace the following lines with actual processing logic)
     logging.info(f"Running predictions on video: <{video_filename}>")
@@ -136,22 +136,6 @@ def frame_generator_predict(**kwargs):
             if inspect:
                 Inspector.display_frame_with_multiple_boxes(result.orig_img, [result.boxes, result.reference_boxes, result.filtered_boxes])
 
-
-            # # Predictor Performs tracking on the result
-            # try:
-            #     result = tracker.process_tracking(result)
-            # except Exception as e:
-            #     logging.error(f"Error in tracking: {e}")
-
-            # # Add attributes
-            # try:
-            #     # #result._real_start_time = video_start_time
-            #     # result.reference_boxes = det_results[0].boxes
-            #     # result.frame_number = frame_numbers[i] if len(frame_numbers) >= i + 1 else None
-            #     # result.source_path = video_filepath
-            # except Exception as e:
-            #     logging.error(f"Error when adding attributes to the result: {e}")
-
             # Save training data to scratch folder
             try:
                 if scratch_path and result.boxes is not None:
@@ -161,11 +145,12 @@ def frame_generator_predict(**kwargs):
                 logging.error(f"Error when saving training data: {e}")
 
             # Add to queue
-            if db_manager_data_queue is not None:
-                result_data_entry = extract_data_from_result(result)
-                db_manager_data_queue.put(result_data_entry)
-            else:
-                raise TypeError("Database task queue not defined")
+            if result.boxes is not None or not skip_empty_frames:
+                if db_manager_data_queue is not None:
+                    result_data_entry = extract_data_from_result(result)
+                    db_manager_data_queue.put(result_data_entry)
+                else:
+                    raise TypeError("Database task queue not defined")
 
         # If orchestrator_control_queue task was passed then update the progress
         if update_info is not None and len(frame_numbers) >= i + 1:
