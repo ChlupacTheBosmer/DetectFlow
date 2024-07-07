@@ -1,0 +1,32 @@
+QLabel {{
+  border: none;
+  background: transparent;
+  color: {QTMATERIAL_PRIMARYCOLOR};
+}}
+
+.detectflow_header {{
+  font-size: 24px;
+  color: {QTMATERIAL_PRIMARYCOLOR};
+}}
+
+.highlight_info{{
+  font-size: 12px;
+  color: {QTMATERIAL_PRIMARYCOLOR};
+}}
+
+QLineEdit,
+QSpinBox,
+QTimeEdit{{
+    color: white
+}}
+
+QLineEdit:placeholder {{
+    color: white
+            }}
+
+QProgressBar {{
+  border-radius: 0;
+  background-color: white;
+  text-align: center;
+  color: transparent;
+}}
