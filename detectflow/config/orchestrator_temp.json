@@ -1,8 +1,4 @@
 {
-    "input_data": [
-        "s3://gr2-l1/GR2_L1_TolUmb02/GR2_L1_TolUmb02_20220523_08_25.mp4",
-        "s3://gr2-l1/GR2_L1_TolUmb03/GR2_L1_TolUmb03_20220524_10_10.mp4"
-    ],
     "checkpoint_dir": ".\\tests\\jobs",
     "task_name": "detectflow",
     "batch_size": 1,
@@ -30,5 +26,7 @@
     "tracker_type": "botsort.yaml",
     "inspect": false,
     "db_batch_size": 20,
-    "db_backup_interval": 50
+    "db_backup_interval": 50,
+    "skip_empty_frames": true,
+    "skip_empty_videos": true
 }

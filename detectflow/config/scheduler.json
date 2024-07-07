@@ -1,0 +1,19 @@
+{
+    "local_work_dir": ".\\tests\\jobs",
+    "remote_work_dir": "/storage/brno2/home/USER/scheduler_test",
+    "database_path": ".\\tests\\jobs\\scheduler.db",
+    "mode": "both",
+    "bucket_name": "cz1-m1",
+    "directories": ["CZ1_M1_AraHir01"],
+    "job_config_path": ".\\detectflow\\config\\orchestrator_temp.json",
+    "python_script_path": "/storage/brno2/home/USER/notebooks/DetectFlow/detectflow/jobs/main.py",
+    "walltime": 1,
+    "ncpus": 5,
+    "use_gpu": "false",
+    "memory": 32,
+    "scratch_size": 2,
+    "user_email": "EMAIL",
+    "username": "USER",
+    "remote_host": "HOST",
+    "ssh_password": "PASSWORD"
+}
