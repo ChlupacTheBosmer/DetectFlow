@@ -3,7 +3,7 @@ decord
 hachoir
 imageio
 matplotlib
-numpy>=1.21.6,<1.27
+numpy>=1.22.2,<1.27
 opencv_python
 opencv_contrib_python
 pandas
