@@ -113,3 +113,24 @@ def yolo_label_load(txt_file: str) -> np.ndarray:
     return np.array(boxes)
 
 
+def is_yolo_label(file_path):
+    try:
+        with open(file_path, 'r') as file:
+            # Check if the file contains any digits
+            return any(re.search(r'\d', line) for line in file)
+    except IOError:
+        return False
+
+
+def open_image(image_path):
+    import cv2
+
+    try:
+        image = cv2.imread(image_path)
+        return image
+    except Exception as e:
+        stream = open(image_path, "rb")
+        bytes = bytearray(stream.read())
+        numpyarray = np.asarray(bytes, dtype=np.uint8)
+        image = cv2.imdecode(numpyarray, cv2.IMREAD_UNCHANGED)
+        return image
