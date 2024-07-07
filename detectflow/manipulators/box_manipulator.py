@@ -1145,7 +1145,30 @@ class BoxManipulator:
 
     @staticmethod
     def find_consistent_boxes(detection_results: List[Union[DetectionResults, DetectionBoxes]], iou_threshold=0.5, min_frames=3):
-        """ Find boxes that appear consistently across frames. """
+        """
+        Identifies and returns bounding boxes that consistently appear across multiple frames based on Intersection over
+        Union (IoU) criteria. This method iterates through each detection result, comparing bounding boxes across all
+        results to find those that appear in a minimum number of frames specified by `min_frames`. A bounding box is
+        considered consistent if it has an IoU greater than `iou_threshold` with boxes in other frames.
+
+        Args:
+            detection_results (List[Union[DetectionResults, DetectionBoxes]]): A list of DetectionResults or
+                                                                               DetectionBoxes instances containing the
+                                                                               detection results for each frame.
+            iou_threshold (float): The IoU threshold for considering two boxes as the same object.
+                                   Boxes with IoU above this threshold are considered matches.
+            min_frames (int): The minimum number of frames in which a box must appear to be considered consistent.
+
+        Returns:
+            List[Union[DetectionResults, DetectionBoxes]]: A list of DetectionResults or DetectionBoxes instances,
+                                                           each containing only the bounding boxes that were found to be
+                                                           consistent across the specified number of frames.
+        Note:
+            - The method modifies the input `detection_results` by filtering out inconsistent boxes.
+            - Boxes are compared using their IoU, and a box is considered consistent if it appears with an IoU above the
+              threshold in at least `min_frames` different frames.
+            - The original shape of the boxes is preserved in the output.
+        """
         consistent_results = []
         # For each result get boxes object
         for i, current_result in enumerate(detection_results):
@@ -1167,7 +1190,7 @@ class BoxManipulator:
                 for other_result in detection_results:
 
                     # Continue only if the boxes of the other result is not None
-                    other_result_boxes = other_result.boxes
+                    other_result_boxes = other_result.boxes if isinstance(other_result, DetectionResults) else (other_result if isinstance(other_result, DetectionBoxes) else None)
                     if other_result_boxes is None:
                         continue
 
