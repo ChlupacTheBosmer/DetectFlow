@@ -12,9 +12,9 @@ setup_environment()
 from detectflow.utils.config import load_json_config, load_ini_config, load_config, merge_configs
 from detectflow.process.database_manager import start_db_manager
 from detectflow.config import S3_CONFIG, DETECTFLOW_DIR
-from detectflow.callbacks.orchestrator_process_video import process_video_callback
 from detectflow.manipulators.dataloader import Dataloader
-from detectflow.process.orchestrator import Orchestrator  # Assuming the Orchestrator class is in orchestrator.py
+from detectflow.process.orchestrator import Orchestrator
+from detectflow.utils import install_s3_config
 
 
 def setup_logging(log_file: Optional[str] = None):
@@ -44,6 +44,17 @@ def main(config_path: str, config_format: str, log_file: Optional[str], **kwargs
 
     file_config = load_config(config_path, config_format)
     merged_config = merge_configs(file_config, kwargs)
+
+    # Install s3 config if the parameters were passed
+    try:
+        if all([key in merged_config for key in ['host_base', 'use_https', 'access_key', 'secret_key', 'host_bucket']]):
+            install_s3_config(merged_config.get('host_base'),
+                              merged_config.get('use_https'),
+                              merged_config.get('access_key'),
+                              merged_config.get('secret_key'),
+                              merged_config.get('host_bucket'))
+    except Exception as e:
+        logging.error(f"An error occurred when installing S3 config: {e}")
 
     # Sort Kwargs
     orchestrator_kwargs_keys = {

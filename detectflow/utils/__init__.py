@@ -2,12 +2,11 @@ from typing import Union
 from pathlib import Path
 import os
 import copy
-import json
-import re
 import platform
 import logging
 from detectflow.utils.file import json_load, json_save
 from detectflow.config import S3_CONFIG
+from detectflow.validators.validator import Validator
 
 MACOS, LINUX, WINDOWS = (platform.system() == x for x in ['Darwin', 'Linux', 'Windows']) # operating system
 NUM_THREADS = min(8, max(1, os.cpu_count() - 1)) # Number of threads to use for parallel processing
@@ -125,6 +124,38 @@ class BaseClass:
                     s = f"{a}: {repr(v)}"
                 attr.append(s)
         return f"{self.__module__}.{self.__class__.__name__} object with attributes:\n\n" + "\n".join(attr)
+
+
+def install_s3_config(host_base, use_https, access_key, secret_key, host_bucket):
+    """
+    Install the S3 configuration file.
+
+    Args:
+        host_base (str): The base URL of the S3 host.
+        use_https (bool): Whether to use HTTPS.
+        access_key (str): The access key.
+        secret_key (str): The secret key.
+        host_bucket (str): The bucket host.
+    """
+    # Define the configuration content
+    config_content = f"""
+    [default]
+    host_base = {host_base}
+    use_https = {use_https}
+    access_key = {access_key}
+    secret_key = {secret_key}
+    host_bucket = {host_bucket}
+    """
+
+    # Ensure the directory exists
+    os.makedirs(os.path.dirname(S3_CONFIG), exist_ok=True)
+
+    # Write the configuration to the file
+    with open(S3_CONFIG, 'w') as config_file:
+        config_file.write(config_content)
+
+    print(f"Configuration saved to {S3_CONFIG}")
+    print(f"Configuration verification status: {Validator.is_valid_file_path(S3_CONFIG)}")
 
 
 # init of some global constants

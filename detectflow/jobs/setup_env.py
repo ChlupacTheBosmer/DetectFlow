@@ -64,7 +64,6 @@ def check_cuda_availability():
 
 def setup_environment():
     package_name = 'git+https://github.com/ChlupacTheBosmer/DetectFlow.git@main#egg=DetectFlow'
-
     try:
         subprocess.check_call([sys.executable, '-m', 'pip', 'uninstall', 'detectflow', '-y'])
         subprocess.check_call([sys.executable, '-m', 'pip', 'install', package_name])

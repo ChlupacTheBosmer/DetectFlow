@@ -5,7 +5,7 @@
     "mode": "both",
     "bucket_name": "cz1-m1",
     "directories": ["CZ1_M1_AraHir01"],
-    "job_config_path": ".\\detectflow\\config\\orchestrator_temp.json",
+    "job_config_path": ".\\detectflow\\config\\orchestrator_private.json",
     "python_script_path": "/storage/brno2/home/USER/notebooks/DetectFlow/detectflow/jobs/main.py",
     "walltime": 1,
     "ncpus": 5,
