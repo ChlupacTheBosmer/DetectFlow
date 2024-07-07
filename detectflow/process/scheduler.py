@@ -8,6 +8,7 @@ import json
 import logging
 from typing import List, Tuple, Union, Optional, Dict
 import paramiko
+from jinja2 import Template
 
 from detectflow.manipulators.manipulator import Manipulator
 from detectflow.manipulators.s3_manipulator import S3Manipulator
@@ -19,6 +20,7 @@ from detectflow.config import S3_CONFIG
 from detectflow.utils import MACOS, LINUX, WINDOWS
 from detectflow.utils.input import format_duration
 from detectflow.utils.jobs import get_job_info
+from detectflow.jobs.bash_templates import BASIC_TEMPLATE
 
 
 class Scheduler(ConfigHandler):
@@ -163,7 +165,7 @@ class Scheduler(ConfigHandler):
         """Generate the PBS job script.
         :param python_script_path:
         """
-
+        # Determine the paths based on whether the job is run locally or remotely
         if self._is_remote:
             home_dir = self.remote_work_dir
             task_folder = "/".join((self.remote_work_dir, 'jobs', job_name)).replace("\\", "/")
@@ -175,70 +177,27 @@ class Scheduler(ConfigHandler):
             config_path = config_path
             python_script_path = python_script_path
 
-        job_script = f"""#!/bin/bash
-        #PBS -N {job_name}
-        #PBS -q {job_resources['queue']}
-        #PBS -l walltime={job_resources['walltime']},select=1:ncpus={job_resources['ncpus']}:mem={job_resources['mem']}:ngpus={job_resources['ngpus'] if self.use_gpu else '0'}{':gpu_cap=sm_75' if self.use_gpu else ''}:scratch_local={job_resources['scratch_local']}
+        # Create a dictionary with the values to substitute in the template
+        template_values = {
+            "job_name": job_name,
+            "queue": job_resources['queue'],
+            "walltime": job_resources['walltime'],
+            "ncpus": job_resources['ncpus'],
+            "mem": job_resources['mem'],
+            "ngpus": job_resources['ngpus'] if self.use_gpu else '0',
+            "gpu_cap": ':gpu_cap=sm_75' if self.use_gpu else '',
+            "scratch_local": job_resources['scratch_local'],
+            "task_folder": task_folder,
+            "home_dir": home_dir,
+            "config_path": config_path,
+            "python_script_path": python_script_path
+        }
 
-        #PBS -o "{task_folder}/{job_name}.out"
-        #PBS -e "{task_folder}/{job_name}.err"
+        # Load the template
+        template = Template(BASIC_TEMPLATE)
 
-        HOMEDIR="{home_dir}"
-        JOBDIR="{task_folder}"
-        CONFIG="{config_path}"
-        SOURCE_FILE="{python_script_path}"
-        SING_IMAGE="/storage/brno2/home/hoidekr/Ultralytics/Ultralytics-8.0.199.sif"
-
-        # Check if the CONFIG variable is set and not empty
-        if [ -z "$CONFIG" ]; then
-            echo "Variable CONFIG is not set!" >&2
-            exit 1
-        fi
-
-        echo "Config is set to: $CONFIG"
-
-        # Append a line to a file "jobs_info.txt" containing the ID of the job, the 
-        # hostname of node it is run on and the path to a scratch directory. This 
-        # information helps to find a scratch directory in case the job fails and you 
-        # need to remove the scratch directory manually.
-
-        echo "$PBS_JOBID is running on node `hostname -f` in a scratch directory $SCRATCHDIR" >> $HOMEDIR/jobs_info.txt
-
-        # Load modules here
-
-        # Test if scratch directory is set. If scratch directory is not set,
-        # issue an error message and exit.
-        test -n "$SCRATCHDIR" || {{
-            echo "Variable SCRATCHDIR is not set!" >&2
-            exit 1
-        }}
-
-        ################################################################################
-        # CALCULATIONS
-
-        #singularity exec -B $SCRATCHDIR:/mnt \
-        #$SING_IMAGE /bin/bash -c "python '$SOURCE_FILE' \
-                                  #--config '$CONFIG'"
-
-        pwd > "$SCRATCHDIR"/test.txt
-        ################################################################################
-
-        # Copy everything from scratch directory to $JOBDIR
-        echo "Listing contents of scratch directory:"
-        ls -l $SCRATCHDIR
-
-        # Make sure that the output folder exists
-        mkdir -p "$JOBDIR"
-
-        if [ -d "$SCRATCHDIR" ] && [ "$(ls -A $SCRATCHDIR)" ]; then
-           echo "Copying files from scratch directory to job output directory."
-           cp -r "$SCRATCHDIR"/* "$JOBDIR" || echo "Failed to copy files."
-        else
-           echo "Scratch directory is empty or does not exist."
-        fi
-
-        clean_scratch
-        """
+        # Render the template with actual values
+        job_script = template.render(template_values)
 
         job_script_path = os.path.join(self.jobs_dir, job_name, f"{job_name}.sh")
         with open(job_script_path, 'w', newline='\n') as file:
