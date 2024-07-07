@@ -29,6 +29,7 @@ if __name__ == "__main__":
     # Convert keyword arguments to dictionary
     kwargs = {}
     if parsed_args.kwargs:
+        print("Keyword arguments:", parsed_args.kwargs)
         for kwarg in parsed_args.kwargs:
             key, value = kwarg.split('=')
             try:
