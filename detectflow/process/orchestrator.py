@@ -9,7 +9,9 @@ from detectflow.handlers.config_handler import ConfigHandler
 from detectflow.manipulators.dataloader import Dataloader
 from detectflow.utils.threads import profile_threads, manage_threads
 from detectflow.utils.s3.input import validate_and_process_input
-from detectflow.utils import WINDOWS
+from detectflow.utils import WINDOWS, CHECKPOINTS_DIR, DOWNLOADS_DIR
+from detectflow.utils.dependencies import get_import_path, get_callable
+from detectflow.manipulators.manipulator import Manipulator
 import importlib
 
 class Task:
@@ -96,9 +98,8 @@ class Orchestrator(ConfigHandler):
         "max_workers": int,
         "force_restart": bool,
         "scratch_path": str,
-        "user_name": str,
         "dataloader": type(None),
-        "process_task_callback": type(None),
+        "process_task_callback": (str, type(None)),
     }
 
     CONFIG_DEFAULTS = {
@@ -109,7 +110,6 @@ class Orchestrator(ConfigHandler):
         "max_workers": 3,
         "force_restart": False,
         "scratch_path": "",
-        "user_name": "USER",
         "dataloader": None,
         "process_task_callback": None
     }
@@ -128,48 +128,57 @@ class Orchestrator(ConfigHandler):
 
         super().__init__(config_path, config_format, config_defaults)
 
-        # Initialize attributes with default values
-        self.parallelism = None
-        self._concurrent_unit = None
-        self.task_queue = None
-        self.control_queue = None
-        self._unit_type = None
-
-        # Determine parallelism type and set up
-        self.parallelism = "process" if parallelism in ["process", "p"] else "thread"
-        self._setup_parallelism()
-
         try:
-            # Start by initializing dataloader, it should be injected
-            dataloader = self.config.get('dataloader', None) if not kwargs.get('dataloader', None) else kwargs.get('dataloader', None)
-            self.dataloader = dataloader or Dataloader()
+            merged_config = {**self.config, **kwargs}
 
-            # Assign attributes
-            self.input_data = self.config.get('input_data', None) if not kwargs.get('input_data', None) else kwargs.get('input_data', None)
-            self.checkpoint_dir = self.config.get('checkpoint_dir', os.getcwd()) if not kwargs.get('checkpoint_dir', None) else kwargs.get('checkpoint_dir', None)
-            self.task_name = self.config.get('task_name', str(uuid.uuid4())) if not kwargs.get('task_name', None) else kwargs.get('task_name', None)
-            self.batch_size = self.config.get('batch_size', 3) if not kwargs.get('batch_size', None) else kwargs.get('batch_size', None)
-            self.max_workers = self.config.get('max_workers', 3) if not kwargs.get('max_workers', None) else kwargs.get('max_workers', None)
-            self.force_restart = self.config.get('force_restart', False) if not kwargs.get('force_restart', None) else kwargs.get('force_restart', None)
-            scratch_path = self.config.get('scratch_path', "") if not kwargs.get('scratch_path', None) else kwargs.get('scratch_path', None)
-            self.scratch_path = scratch_path if self.dataloader.is_valid_directory_path(scratch_path) else ""
-            self.user_name = self.config.get('user_name', None) if not kwargs.get('user_name', None) else kwargs.get('user_name', None)
-            self.fallback_directories = self._generate_fallback_directories()
-            self.process_task_callback = self.config.get('process_task_callback', None) if not kwargs.get('process_task_callback', None) else kwargs.get('process_task_callback', None)
+            # Start by initializing dataloader, it should be injected
+            self.dataloader = merged_config.get('dataloader', Dataloader())
+            self.input_data = merged_config.get('input_data')
+            self.checkpoint_dir = merged_config.get('checkpoint_dir', os.getcwd())
+            self.task_name = merged_config.get('task_name', str(uuid.uuid4()))
+            self.batch_size = merged_config.get('batch_size', 3)
+            self.max_workers = merged_config.get('max_workers', 3)
+            self.force_restart = merged_config.get('force_restart', False)
+            scratch_path = merged_config.get('scratch_path', None)
+            self.scratch_path = scratch_path if self.dataloader.is_valid_directory_path(scratch_path) else os.getcwd()
+            self.process_task_callback = merged_config.get('process_task_callback')
+
+            self.fallback_directories = [CHECKPOINTS_DIR, DOWNLOADS_DIR, self.scratch_path]
 
             # Pack the callback config rewriting values loaded from config file
-            if kwargs:
-                for key, value in kwargs.items():
+            if merged_config:
+                for key, value in merged_config.items():
                     if key not in self.CONFIG_MAP:
                         self.callback_config[key] = value
 
             # Init other attributes
             self.checkpoint_file = os.path.join(self.checkpoint_dir, f"{self.task_name}.json")
-            self._setup_logging()
             self.checkpoint_data = None
-            self._initialize_checkpoint()
+            self.parallelism = None
+            self._concurrent_unit = None
+            self.task_queue = None
+            self.control_queue = None
+            self._unit_type = None
             self.concurrent_units = []
 
+            # Determine parallelism type and set up
+            self.parallelism = "process" if parallelism in ["process", "p"] else "thread"
+            self._setup_parallelism()
+
+            # Init checkpoint
+            self._initialize_checkpoint()
+
+        except Exception as e:
+            logging.error(f"Failed to initialize Orchestrator: {e}")
+            raise
+
+        try:
+            callback_import_path = get_import_path(self.process_task_callback)
+        except Exception as e:
+            logging.error(f"Error getting import path for process_task_callback: {e}")
+            callback_import_path = None
+
+        try:
             # Update the config by the values of the atr in case custom values were passed. Saving config would save the custom configuration.
             self.pack_config(
                 input_data=self.input_data,
@@ -179,13 +188,11 @@ class Orchestrator(ConfigHandler):
                 max_workers=self.max_workers,
                 force_restart=self.force_restart,
                 scratch_path=self.scratch_path,
-                user_name=self.user_name,
                 dataloader=None,
-                process_task_callback=None
+                process_task_callback=callback_import_path
             )
         except Exception as e:
-            logging.error(f"Failed to initialize Orchestrator: {e}")
-            raise
+            logging.error(f"Failed to pack config: {e}")
 
     def _setup_parallelism(self):
         try:
@@ -209,37 +216,28 @@ class Orchestrator(ConfigHandler):
         except Exception as e:
             raise RuntimeError(f"Failed to set up parallelism: {e}")
 
-    def _generate_fallback_directories(self):
-        # Generate dynamic fallback paths based on the instance attributes
-        return [
-            f'/storage/brno2/home/{self.user_name}/',
-            f'/storage/plzen1/home/{self.user_name}/',
-            f'/storage/brno1-cerit/home/{self.user_name}/',
-            self.scratch_path
-        ]
-
     def load_config(self):
 
         self.config = super().load_config()
 
         # Assign attributes
         self.input_data = self.config.get('input_data', None)
-        self.checkpoint_dir = self.config.get('checkpoint_dir', os.getcwd())
-        self.task_name = self.config.get('task_name', str(uuid.uuid4()))
-        self.batch_size = self.config.get('batch_size', 3)
-        self.max_workers = self.config.get('max_workers', 3)
+        self.checkpoint_dir = self.config.get('checkpoint_dir', None)
+        self.task_name = self.config.get('task_name', None)
+        self.batch_size = self.config.get('batch_size', None)
+        self.max_workers = self.config.get('max_workers', None)
         self.force_restart = self.config.get('force_restart', False)
-        self.scratch_path = self.config.get('scratch_path', "")
-        self.user_name = self.config.get('user_name', None)
+        self.scratch_path = self.config.get('scratch_path', None)
 
         # Retrieve the callback function from the config
         callback_function_path = self.config.get('process_task_callback', None)
-        if callback_function_path:
-            module_name, function_name = callback_function_path.rsplit('.', 1)
-            module = importlib.import_module(module_name)
-            self.process_task_callback = getattr(module, function_name)
-        else:
-            self.process_task_callback = None
+        self.process_task_callback = None
+        if callback_function_path and isinstance(callback_function_path, str):
+            try:
+                self.process_task_callback = get_callable(callback_function_path)
+                self.config['process_task_callback'] = self.process_task_callback
+            except Exception as e:
+                logging.error(f"Error loading process_task_callback from config: {e}")
 
         return self.config
 
@@ -268,47 +266,50 @@ class Orchestrator(ConfigHandler):
             if key not in required_keys:
                 self.callback_config[key] = value
 
-    def _setup_logging(self):
-        # Initialize the logger attribute
-        self.logger = logging.getLogger(__name__)
-
-        # Setup logging with a desired format and level
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-
-        # Ensure that no duplicate handlers are added
-        if not self.logger.handlers:
-            self.logger.addHandler(handler)
-
-        self.logger.setLevel(logging.INFO)
-
     def _initialize_checkpoint(self):
+        def try_checkpoint_file(checkpoint_file):
+            if not os.path.exists(checkpoint_file):
+                raise FileNotFoundError("Checkpoint file not found in the specified location")
+
+            with open(checkpoint_file, 'r') as file:
+                checkpoint_data = json.load(file)
+
+            # Convert 'input_type_flags' from list to tuple
+            if 'input_type_flags' in checkpoint_data and isinstance(checkpoint_data['input_type_flags'], list):
+                checkpoint_data['input_type_flags'] = tuple(checkpoint_data['input_type_flags'])
+
+            if not self._validate_checkpoint(checkpoint_data):
+                raise ValueError("Invalid format in checkpoint file")
+
+            return checkpoint_data
+
         try:
-            if os.path.exists(self.checkpoint_file):
-                with open(self.checkpoint_file, 'r') as file:
-                    self.checkpoint_data = json.load(file)
-
-                # Convert 'input_type_flags' from list to tuple
-                if 'input_type_flags' in self.checkpoint_data and isinstance(self.checkpoint_data['input_type_flags'],
-                                                                             list):
-                    self.checkpoint_data['input_type_flags'] = tuple(self.checkpoint_data['input_type_flags'])
-
-                if not self._validate_checkpoint_format(self.checkpoint_data):
-                    raise ValueError("Invalid format in checkpoint file")
-            else:
-                raise FileNotFoundError(
-                    "Checkpoint file not found")  # TODO: Should probably check for checkpoint in a fallback location if it faield to be created in the original one
-
+            # Try loading the specified file
+            self.checkpoint_data = try_checkpoint_file(self.checkpoint_file)
         except (FileNotFoundError, ValueError, json.JSONDecodeError) as e:
             logging.error(f"Error reading checkpoint file: {e}")
+
             if self.force_restart:
                 logging.info("Force restart enabled. Creating a new checkpoint.")
                 self._create_new_checkpoint()
+                return
             else:
-                raise RuntimeError(f"Unable to proceed due to checkpoint file issue: {e}")
+                # Seek and gather valdi alternatives
+                for directory in self.fallback_directories:
+                    files = Manipulator.find_files(directory, f"{self.task_name}.json")
+                    if files is not None:
+                        for file in files:
+                            try:
+                                self.checkpoint_data = try_checkpoint_file(file)
+                                logging.info(f"Found valid checkpoint file in fallback location: {file}")
+                                self.checkpoint_file = file
+                                self.checkpoint_dir = os.path.dirname(file)
+                                return
+                            except (FileNotFoundError, ValueError, json.JSONDecodeError) as e:
+                                continue
+                raise FileNotFoundError(f"Unable to continue. No valid checkpoint file found in fallback locations.\nEnable force restart if you wish to start from begining.")
 
-    def _validate_checkpoint_format(self, data):
+    def _validate_checkpoint(self, data):
         required_keys = ['task_name', 'input_type_flags', 'batch_size', 'max_workers', 'tasks', 'progress']
 
         # Check if all required keys are present
@@ -344,7 +345,7 @@ class Orchestrator(ConfigHandler):
                 'input_type_flags': input_flags,
                 'batch_size': self.batch_size,
                 'max_workers': self.max_workers,
-                'tasks': [{'directory': directory, 'status': self._prepare_initial_status(directory, input_flags)} for directory in
+                'tasks': [{'directory': directory, 'status': self._prepare_initial_checkpoint(directory, input_flags)} for directory in
                           directories],
                 'progress': {}
             }
@@ -359,7 +360,7 @@ class Orchestrator(ConfigHandler):
             # Raise an exception to stop further processing and notify the user
             raise RuntimeError(f"Checkpoint creation failed due to invalid input: {e}")
 
-    def _prepare_initial_status(self, directory, input_flags):
+    def _prepare_initial_checkpoint(self, directory, input_flags):
         try:
             if input_flags is None:
                 raise ValueError("Error during input data processing - 'None' type")
@@ -378,7 +379,7 @@ class Orchestrator(ConfigHandler):
                 raise ValueError(
                     f"Invalid input data format, type processing flags: {input_flags} - (bucket/prefix, s3_file, dir, file)")
 
-            print(file_list)
+            #print(file_list)
             return {file: 0 for file in file_list}
 
         except Exception as e:
@@ -391,9 +392,9 @@ class Orchestrator(ConfigHandler):
                 json.dump(self.checkpoint_data, file, indent=4)
         except Exception as e:
             logging.error(f"Failed to write checkpoint file: {e}")
-            self._attempt_fallback_checkpoint_write()
+            self._write_fallback_checkpoint()
 
-    def _attempt_fallback_checkpoint_write(self):
+    def _write_fallback_checkpoint(self):
         # Attempt to save to fallback dirs
         for directory in self.fallback_directories:
             fallback_file = os.path.join(directory, f"{self.task_name}.json")
@@ -555,6 +556,7 @@ class Orchestrator(ConfigHandler):
 
     @staticmethod
     def _worker(name, task_queue, process_task_callback, callback_kwargs):
+        print(process_task_callback)
         while True:
             try:
                 task = task_queue.get()
