@@ -1,31 +1,32 @@
 import logging
 import subprocess
-import importlib
+import importlib.util
 import sys
 import os
-import venv
 
 
-def create_virtualenv(env_name='venv'):
-    """Create a virtual environment if it doesn't exist."""
-    if not os.path.exists(env_name):
-        venv.create(env_name, with_pip=True)
-        logging.info(f"Virtual environment '{env_name}' created successfully.")
-    else:
-        logging.info(f"Virtual environment '{env_name}' already exists.")
+def set_environment_variables():
+    """Set the environment variables for PYTHONBASE."""
+    python_base = os.getenv('PYTHONBASE', os.path.expanduser('~/pythonbase'))
+    os.makedirs(python_base, exist_ok=True)
+    os.makedirs(os.path.join(python_base, 'lib', 'python3.10', 'site-packages'), exist_ok=True)
+    os.makedirs(os.path.join(python_base, 'bin'), exist_ok=True)
 
+    os.environ['PYTHONBASE'] = python_base
+    os.environ['PATH'] = os.path.join(python_base, 'bin') + os.pathsep + os.environ.get('PATH', '')
+    os.environ['PYTHONPATH'] = os.path.join(python_base, 'lib', 'python3.10',
+                                            'site-packages') + os.pathsep + os.environ.get('PYTHONPATH', '')
 
-def activate_virtualenv(env_name='venv'):
-    """Activate the virtual environment."""
-    activate_script = os.path.join(env_name, 'Scripts', 'activate_this.py') if os.name == 'nt' else os.path.join(
-        env_name, 'bin', 'activate_this.py')
-    with open(activate_script) as file:
-        exec(file.read(), dict(__file__=activate_script))
+    logging.info(f"PYTHONBASE set to {python_base}")
+    logging.info(f"PATH updated: {os.environ['PATH']}")
+    logging.info(f"PYTHONPATH updated: {os.environ['PYTHONPATH']}")
 
 
 def install_package(package_name, no_deps=False):
-    """Install a package using pip."""
-    command = [sys.executable, '-m', 'pip', 'install', package_name]
+    """Install a package using pip into PYTHONBASE."""
+    python_base = os.getenv('PYTHONBASE')
+    command = [sys.executable, '-m', 'pip', 'install', '--target',
+               os.path.join(python_base, 'lib', 'python3.10', 'site-packages'), package_name]
     if no_deps:
         command.append('--no-deps')
     try:
@@ -37,9 +38,10 @@ def install_package(package_name, no_deps=False):
 
 
 def uninstall_package(package_name):
-    """Uninstall a package using pip."""
+    """Uninstall a package using pip from PYTHONBASE."""
+    command = [sys.executable, '-m', 'pip', 'uninstall', '-y', package_name]
     try:
-        subprocess.check_call([sys.executable, '-m', 'pip', 'uninstall', '-y', package_name])
+        subprocess.check_call(command)
         logging.info(f"{package_name} package uninstalled successfully.")
     except subprocess.CalledProcessError as e:
         logging.warning(f"{package_name} package was not installed: {e}")
@@ -76,7 +78,8 @@ def validate_environment(required_packages):
                 logging.info(f"{package_name} package is installed.")
             except ImportError:
                 logging.warning(f"{package_name} package not found. Installing...")
-                install_package(package)
+                install_package(package_name)
+
 
 def check_cuda_availability():
     """Check for CUDA availability."""
@@ -92,8 +95,12 @@ def check_cuda_availability():
 
 def setup_environment():
     """Setup the environment."""
-    create_virtualenv()
-    activate_virtualenv()
+    set_environment_variables()
+
+    python_base = os.getenv('PYTHONBASE')
+    if not python_base:
+        logging.error("PYTHONBASE environment variable is not set correctly.")
+        sys.exit(1)
 
     # Update pip to the latest version
     try:
@@ -116,5 +123,5 @@ def setup_environment():
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     setup_environment()
-
