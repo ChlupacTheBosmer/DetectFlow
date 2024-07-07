@@ -7,10 +7,10 @@ from typing import Optional, Dict, Any
 from setup_env import setup_environment
 import multiprocessing
 
-setup_environment()
+#setup_environment()
 
 # Now import detectflow package
-from detectflow.utils.config import load_json_config, load_ini_config, load_config, merge_configs
+from detectflow.utils.config import load_config, merge_configs
 from detectflow.process.database_manager import start_db_manager, stop_db_manager
 from detectflow.config import S3_CONFIG, DETECTFLOW_DIR
 from detectflow.manipulators.dataloader import Dataloader
