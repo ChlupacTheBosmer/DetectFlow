@@ -28,12 +28,12 @@ def get_detectflow_requirements():
         logging.error("detectflow package not found.")
         sys.exit(1)
 
-    detectflow_location = os.path.dirname(os.path.dirname(detectflow.__file__))
+    detectflow_location = os.path.join(os.path.dirname(detectflow.__file__), 'config')
     requirements_path = os.path.join(detectflow_location, 'requirements.txt')
 
     if not os.path.exists(requirements_path):
         logging.error(f"requirements.txt not found in detectflow module at {requirements_path}.")
-        sys.exit(1)
+        return []
 
     with open(requirements_path, 'r') as file:
         required_packages = file.read().splitlines()
