@@ -488,7 +488,7 @@ class DatabaseManager:
             logging.info("Database manager cleaned up.")
 
 
-def start_db_manager(db_paths: Dict[str, str],
+def start_db_manager(db_paths: Optional[Dict[str, str]] = None,
                      batch_size: int = 100,
                      backup_interval: int = 500,
                      dataloader: Optional[Dataloader] = None,
