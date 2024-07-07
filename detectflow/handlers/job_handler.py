@@ -1,7 +1,6 @@
 import os
 import glob
-from detectflow.manipulators.manipulator import Manipulator
-from detectflow.manipulators.s3_manipulator import S3Manipulator
+from detectflow.manipulators.dataloader import Dataloader
 from detectflow.manipulators.database_manipulator import DatabaseManipulator
 import logging
 import sqlite3
@@ -20,12 +19,12 @@ class JobHandler:
                  user_email: str,
                  s3_cfg_file: str = S3_CONFIG,
                  sender_email: str = "detectflow@gmail.com",
-                 email_password: str = "AUTH_INFO",
+                 email_password: str = "AUTH_INFO", # TODO: Change to a secure method
                  email_handler=None,
                  llm_handler=None):
 
         self.output_directory = output_directory
-        self.s3_manipulator = S3Manipulator(s3_cfg_file)
+        self.dataloader = Dataloader(s3_cfg_file)
         self.email_sender = EmailHandler(sender_email, email_password) if email_handler is None else email_handler
         self.llm_handler = llm_handler
 
@@ -77,15 +76,15 @@ class JobHandler:
         # Find a checkpoint file and rename it so it gets ignored when job is rerun but is retained for manual control
         try:
             chp_pattern = rf".*{re.escape(job_name)}.*"
-            chp_files = Manipulator.list_files(self.output_directory, regex=chp_pattern, extensions=('.json', '.ini'),
+            chp_files = self.dataloader.list_files(self.output_directory, regex=chp_pattern, extensions=('.json', '.ini'),
                                                return_full_path=True)
             if len(chp_files) == 1:
-                Manipulator.move_file(chp_files[0], self.output_directory,
+                self.dataloader.move_file(chp_files[0], self.output_directory,
                                       filename=f"DONE{os.path.splitext(chp_files[0])[-1]}", overwrite=True, copy=False)
             elif len(chp_files) > 1:
                 logging.info("More than one checkpoint file found in the output directory. Renaming all.")
                 for i, file in enumerate(chp_files):
-                    Manipulator.move_file(file, self.output_directory, filename=f"DONE_{i}{os.path.splitext(file)[-1]}",
+                    self.dataloader.move_file(file, self.output_directory, filename=f"DONE_{i}{os.path.splitext(file)[-1]}",
                                           overwrite=True, copy=False)
             else:
                 logging.info("No checkpoint file found in the output directory. Note that this is unexpected.")
@@ -273,7 +272,7 @@ class JobHandler:
     def upload_db_to_s3(self, local_file_path, job_name):
         from detectflow.manipulators.input_manipulator import InputManipulator
 
-        if self.s3_manipulator is None:
+        if self.dataloader is None:
             logging.warning("No S3 manipulator provided. Skipping database S3 backup.")
             return
 
@@ -283,25 +282,25 @@ class JobHandler:
 
         # Upload database to s3
         try:
-            self.s3_manipulator.backup_file_s3(bucket_name, directory_name, local_file_path)
+            self.dataloader.backup_file_s3(bucket_name, directory_name, local_file_path)
         except Exception as e:
             logging.error(f"Failed to backup database for recording ID {recording_id} to S3: {e}")
             return
 
-    def upload_folder_to_s3(self, local_directory, bucket_name, job_name):
+    def upload_folder_to_s3(self, local_directory, bucket_name, job_name): # TODO: Test and move to dataloader, make more robust
         try:
             # Specify the bucket and directory names
             _, directory_name = job_name.split('_', 1)
 
             # Ensure the bucket exists
-            self.s3_manipulator.create_bucket_s3(bucket_name)
+            self.dataloader.create_bucket_s3(bucket_name)
 
             # Check if the directory exists within the bucket
-            self.s3_manipulator.create_directory_s3(bucket_name, directory_name)
+            self.dataloader.create_directory_s3(bucket_name, directory_name)
 
             # Upload the directory to S3
             logging.info(f"Uploading directory '{local_directory}' to 's3://{bucket_name}/{directory_name}'")
-            self.s3_manipulator.upload_directory_s3(local_directory, bucket_name, directory_name)
+            self.dataloader.upload_directory_s3(local_directory, bucket_name, directory_name)
         except Exception as e:
             print(f"Failed to upload {local_directory} to S3: {e}")
 

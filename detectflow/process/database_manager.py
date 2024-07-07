@@ -4,7 +4,7 @@ import threading
 import csv
 from typing import Dict, List, Optional, Type, Any
 from detectflow.utils.profile import profile_function_call
-from detectflow.manipulators.s3_manipulator import S3Manipulator
+from detectflow.manipulators.dataloader import Dataloader
 from detectflow.config import S3_CONFIG
 import logging
 from detectflow.utils import DOWNLOADS_DIR
@@ -120,7 +120,7 @@ class DatabaseManager:
                  backup_interval: int = 500,
                  control_queue: Optional[multiprocessing.Queue] = None,
                  data_queue: Optional[multiprocessing.Queue] = None,
-                 s3_manipulator: Optional[S3Manipulator] = None,
+                 dataloader: Optional[Dataloader] = None,
                  database_structure: Optional[Dict[str, Any]] = None):
         """
         Initialize the DatabaseManager instance.
@@ -129,7 +129,7 @@ class DatabaseManager:
         db_manipulators (Optional[Dict[str, Type['DatabaseManipulator']]]): A dictionary of database manipulators.
         batch_size (int): The size of each batch for processing.
         backup_interval (int): The interval at which to back up the database to S3.
-        s3_manipulator (Optional[Type[S3Manipulator]]): An instance or subclass of S3Manipulator.
+        dataloader (Optional[Type[Dataloader]]): An instance or subclass of Dataloader.
         """
         self.database_structure = database_structure if database_structure is not None else self.DEFAULT_STRUCTURE
         self.db_paths = db_paths
@@ -141,7 +141,7 @@ class DatabaseManager:
         self.data_batches = {}
         self.control_queue = control_queue if control_queue is not None else multiprocessing.Queue()
         self.queue = data_queue if data_queue is not None else multiprocessing.Queue()
-        self.s3_manipulator = s3_manipulator
+        self.dataloader = dataloader
 
     def _init_database_manipulator(self, db_file):
         """
@@ -207,9 +207,7 @@ class DatabaseManager:
     def _resolve_db_conflict(self, recording_id: str, db_path: str):
         """ Resolve a database conflict by merging the new database with the existing one """
         from detectflow.manipulators.input_manipulator import InputManipulator
-        from detectflow.manipulators.manipulator import Manipulator
         from detectflow.manipulators.database_manipulator import merge_databases
-        import pytz
 
         logging.info(f"Resolving database conflict for recording ID {recording_id}.")
 
@@ -228,42 +226,16 @@ class DatabaseManager:
             logging.error(f"Error while searching database for recording ID {recording_id} from S3: {e}")
             online_file = None
 
-        try:
-            if online_file:
-                online_date = self.s3_manipulator.get_metadata_s3(online_file, 'LastModified')
-                if online_date.tzinfo is not None and online_date.utcoffset() is not None:
-                    local_timezone = pytz.timezone("Europe/Prague")
-                    online_date = online_date.astimezone(local_timezone).replace(tzinfo=None)
-                online_dict = {'file': online_file,
-                               'date': online_date,
-                               'size': int(self.s3_manipulator.get_metadata_s3(online_file, 'ContentLength'))}
-            else:
-                online_dict = None
-        except Exception as e:
-            logging.error(f"Error while getting metadata for recording ID {recording_id} from S3: {e}")
-            online_dict = {'file': online_file, 'date': None, 'size': None}
+        # Attempt to locate the database file online and locally
+        online_file = self.dataloader.locate_file_s3(rf'{directory_name}/({recording_id}|{directory_name}).db',
+                                                    bucket_name, 'name')
+        local_file = self.dataloader.locate_file_local(rf'({recording_id}|{directory_name}).db', os.path.dirname(db_path), 'name')
 
-        # Check in scratch for the database
-        try:
-            local_files = Manipulator.find_files(os.path.dirname(db_path), rf'({recording_id}|{directory_name}).db')
-            if len(local_files) > 1:
-                local_files = Manipulator.sort_files(local_files, sort_by='name', ascending=True)
-            local_file = local_files[0] if len(local_files) > 0 else None
-        except Exception as e:
-            logging.error(f"Error while searching database for recording ID {recording_id} from scratch: {e}")
-            local_file = None
+        # Get metadata of both files to resolve conflicts
+        online_dict = self.dataloader.get_version_metadata_s3(online_file)
+        local_dict = self.dataloader.get_version_metadata_local(local_file)
 
-        try:
-            if local_file:
-                local_dict = {'file': local_file,
-                              'date': datetime.fromtimestamp(os.path.getmtime(local_file)),
-                              'size': int(os.path.getsize(local_file))}
-            else:
-                local_dict = None
-        except Exception as e:
-            logging.error(f"Error while getting metadata for recording ID {recording_id} from scratch: {e}")
-            local_dict = {'file': local_file, 'date': None, 'size': None}
-
+        # Resolve conflict based on the metadata
         if online_file is None:
             final_db_path = local_file if local_file else db_path
             logging.info(f"Database for recording ID {recording_id} not found online. Using local database: {os.path.basename(final_db_path)}.")
@@ -289,7 +261,7 @@ class DatabaseManager:
                 download_path = self.fetch_from_s3(online_file, tmp_path_online)
 
                 # Rename the local file
-                move_path = Manipulator.move_file(local_file, os.path.dirname(db_path),
+                move_path = self.dataloader.move_file(local_file, os.path.dirname(db_path),
                                                   f"{os.path.splitext(os.path.basename(db_path))[0]}_local.db",
                                                   overwrite=True)
 
@@ -307,7 +279,7 @@ class DatabaseManager:
     def backup_to_s3(self, recording_id: str, validate_upload: bool = True):
         from detectflow.manipulators.input_manipulator import InputManipulator
 
-        if self.s3_manipulator is None:
+        if self.dataloader is None:
             logging.warning("No S3 manipulator provided. Skipping database S3 backup.")
             return
 
@@ -328,7 +300,7 @@ class DatabaseManager:
 
         # Upload the file to S3
         try:
-            self.s3_manipulator.backup_file_s3(bucket_name, directory_name, local_file_path)
+            self.dataloader.backup_file_s3(bucket_name, directory_name, local_file_path)
         except Exception as e:
             logging.error(f"Failed to backup database for recording ID {recording_id} to S3: {e}")
             return
@@ -343,7 +315,7 @@ class DatabaseManager:
                 db.close_connection()
 
         try:
-            download_path = self.s3_manipulator.download_file_s3(*self.s3_manipulator._parse_s3_path(s3_path), local_path)
+            download_path = self.dataloader.download_file_s3(*self.dataloader.parse_s3_path(s3_path), local_path)
             logging.info(f"Database for recording ID {os.path.basename(local_path)} downloaded from S3.")
         except Exception as e:
             logging.error(f"Error while downloading database for recording ID {os.path.basename(local_path)} from S3: {e}")
@@ -367,9 +339,9 @@ class DatabaseManager:
         logging.info(f"Database manipulators initialized: #{len(self.db_manipulators)}.")
 
         # Initialize S3Manipulator if not provided
-        if self.s3_manipulator is None:
-            self.s3_manipulator = S3Manipulator(S3_CONFIG)
-            logging.warning("No S3 manipulator provided. Using a new instance for S3 backup.")
+        if self.dataloader is None:
+            self.dataloader = Dataloader(S3_CONFIG)
+            logging.warning("No Dataloader provided. Using a new instance for S3 backup.")
 
         # Start the processing
         logging.info(f"Process {multiprocessing.current_process().name} started.")
@@ -508,18 +480,14 @@ class DatabaseManager:
 def start_db_manager(db_paths: Dict[str, str],
                      batch_size: int = 100,
                      backup_interval: int = 500,
-                     s3_manipulator: Optional[S3Manipulator] = None,
+                     dataloader: Optional[Dataloader] = None,
                      database_structure: Optional[Dict[str, Any]] = None):
 
     control_queue = multiprocessing.Queue()
     data_queue = multiprocessing.Queue()
 
-    manager = DatabaseManager(db_paths=db_paths,
-                              batch_size=batch_size,
-                              backup_interval=backup_interval,
-                              control_queue=control_queue,
-                              data_queue=data_queue,
-                              s3_manipulator=s3_manipulator,
+    manager = DatabaseManager(db_paths=db_paths, batch_size=batch_size, backup_interval=backup_interval,
+                              control_queue=control_queue, data_queue=data_queue, dataloader=dataloader,
                               database_structure=database_structure)
     manager_process = multiprocessing.Process(target=manager.run, name="DatabaseManager")
     manager_process.start()

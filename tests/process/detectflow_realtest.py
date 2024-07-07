@@ -31,10 +31,7 @@ if __name__ == '__main__':
     }
 
     # Init a database manager instance and process
-    db_man_info = start_db_manager(db_paths=db_paths,
-                                   batch_size=100,
-                                   backup_interval=500,
-                                   s3_manipulator=None,
+    db_man_info = start_db_manager(db_paths=db_paths, batch_size=100, backup_interval=500, dataloader=None,
                                    database_structure=None)
     # init dataloader
     dataloader = Dataloader(S3_CONFIG)

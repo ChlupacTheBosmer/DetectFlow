@@ -207,6 +207,7 @@ class S3Manipulator(S3Validator):
             logging.error(f"Unexpected error while listing directories in S3: {e}")
             return []
 
+    # TODO: Test and fix, unreliable
     def download_directory_s3(self, bucket_name: str, folder_name: str, local_dir: str,
                               use_batch_download: bool = False, max_workers: int = 5):
         """
@@ -590,68 +591,4 @@ class S3Manipulator(S3Validator):
         except Exception as e:
             logging.error(f"Unexpected error while accessing S3 object {s3_path}: {e}")
             return None
-
-    def backup_file_s3(self, bucket_name, directory_name, local_file_path, validate_upload=True, validate_callback=None, fallback_bucket_name='data'):
-        try:
-            if not self.is_s3_bucket(bucket_name):
-                logging.warning(f"Bucket {bucket_name} does not exist. Attempting backup into the '{fallback_bucket_name}' bucket.")
-                bucket_name = fallback_bucket_name
-                self.create_bucket_s3(bucket_name)
-        except Exception as e:
-            logging.error(f"Error during bucket resolution. Attempted to create bucket: {bucket_name}: {e}")
-            bucket_name = fallback_bucket_name
-            if self.is_s3_bucket(bucket_name):
-                logging.warning(f"Bucket {bucket_name} exists. Proceeding with backup into the '{fallback_bucket_name}' bucket.")
-
-        try:
-            if not self.is_s3_directory(f"{bucket_name}/{directory_name}"):
-                logging.warning(f"Directory {directory_name} does not exist. File backed up into the '{fallback_bucket_name}' bucket.")
-                bucket_name = fallback_bucket_name
-                self.create_directory_s3(bucket_name, directory_name)
-        except Exception as e:
-            logging.error(
-                f"Error during directory resolution. Attempted to create directory: {bucket_name}/{directory_name}: {e}")
-            bucket_name = fallback_bucket_name
-            if self.is_s3_directory(f"{bucket_name}/{directory_name}"):
-                logging.warning(
-                    f"Directory {bucket_name}/{directory_name} exists. Proceeding with backup into the '{fallback_bucket_name}' bucket.")
-
-        s3_file_path = f"{directory_name}{os.path.basename(local_file_path)}"  # Path in the bucket where the file will be uploaded
-        try:
-            # Upload a file to the specified directory
-            self.upload_file_s3(bucket_name, local_file_path, s3_file_path)
-            logging.info(f"Uploaded {local_file_path} to S3 bucket {bucket_name}/{s3_file_path}.")
-        except Exception as e:
-            logging.error(f"Failed to upload {local_file_path} to S3: {e}")
-
-        if validate_upload:
-            self.validate_backup_s3(bucket_name, s3_file_path, local_file_path, validate_callback)
-
-    def validate_backup_s3(self, bucket_name: str, s3_file_path: str, orig_file_path: str, validate_callback=None):
-        from detectflow.utils.file import compare_file_sizes
-
-        tmp_folder = os.path.join(DOWNLOADS_DIR, os.path.dirname(orig_file_path))
-        tmp_file_path = os.path.join(tmp_folder, os.path.basename(orig_file_path))
-        os.makedirs(tmp_folder, exist_ok=True)
-
-        try:
-            # Validate the upload
-            if self.is_s3_file(f"s3://{bucket_name}/{s3_file_path}"):
-                self.download_file_s3(bucket_name, s3_file_path, tmp_file_path)
-                if compare_file_sizes(orig_file_path, tmp_file_path, 0.05):  # Tolerance of 5%
-                    if validate_callback:
-                        if not validate_callback(filepath=tmp_file_path, s3_path=s3_file_path,
-                                                 orig_filepath=orig_file_path):
-                            raise RuntimeError(
-                                f"Failed to validate the upload of {orig_file_path} to S3 bucket {bucket_name}/{s3_file_path} using custom callback.")
-                    logging.info(
-                        f"Successfully validated the upload of {orig_file_path} to S3 bucket {bucket_name}/{s3_file_path}.")
-                else:
-                    raise RuntimeError(
-                        f"Partially validated the upload of {orig_file_path} to S3 bucket {bucket_name}/{s3_file_path}. Size discrepancy found.")
-            else:
-                raise RuntimeError(
-                    f"Failed to validate the upload of {orig_file_path} to S3 bucket {bucket_name}/{s3_file_path}.")
-        except Exception as e:
-            raise RuntimeError(f"Validation error: {e}") from e
 

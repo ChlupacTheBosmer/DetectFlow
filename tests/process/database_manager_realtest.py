@@ -42,10 +42,7 @@ class TestDatabaseManager():
 
         self.s3_manipulator = S3Manipulator()
 
-        manager_dict = start_db_manager(db_paths=db_paths,
-                                        batch_size=100,
-                                        backup_interval=500,
-                                        s3_manipulator=None,
+        manager_dict = start_db_manager(db_paths=db_paths, batch_size=100, backup_interval=500, dataloader=None,
                                         database_structure=None)
 
         self.db_manager = manager_dict['manager']
