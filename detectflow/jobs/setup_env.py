@@ -22,18 +22,19 @@ def set_environment_variables():
     logging.info(f"PYTHONPATH updated: {os.environ['PYTHONPATH']}")
 
 
-def install_package(package_name, no_deps=False):
+def install_package(package_name, version_constraint=None, no_deps=False):
     """Install a package using pip into PYTHONBASE."""
     python_base = os.getenv('PYTHONBASE')
+    package_spec = package_name if version_constraint is None else f"{package_name}{version_constraint}"
     command = [sys.executable, '-m', 'pip', 'install', '--target',
-               os.path.join(python_base, 'lib', 'python3.10', 'site-packages'), package_name]
+               os.path.join(python_base, 'lib', 'python3.10', 'site-packages'), package_spec]
     if no_deps:
         command.append('--no-deps')
     try:
         subprocess.check_call(command)
-        logging.info(f"{package_name} package installed successfully.")
+        logging.info(f"{package_spec} package installed successfully.")
     except subprocess.CalledProcessError as e:
-        logging.error(f"Failed to install {package_name} package: {e}")
+        logging.error(f"Failed to install {package_spec} package: {e}")
         sys.exit(1)
 
 
@@ -45,6 +46,17 @@ def uninstall_package(package_name):
         logging.info(f"{package_name} package uninstalled successfully.")
     except subprocess.CalledProcessError as e:
         logging.warning(f"{package_name} package was not installed: {e}")
+
+
+def get_installed_packages():
+    """Get a list of currently installed packages and their versions."""
+    result = subprocess.run([sys.executable, '-m', 'pip', 'list', '--format=freeze'], stdout=subprocess.PIPE, text=True)
+    installed_packages = {}
+    for line in result.stdout.split('\n'):
+        if '==' in line:
+            package, version = line.split('==')
+            installed_packages[package] = version
+    return installed_packages
 
 
 def get_detectflow_requirements():
@@ -66,18 +78,32 @@ def get_detectflow_requirements():
     return required_packages
 
 
-def validate_environment(required_packages):
+def validate_environment(required_packages, installed_packages):
     """Validate and install missing packages."""
     logging.info("Validating environment...")
 
-    for package in required_packages:
-        package_name = package.split('==')[0]  # Extract package name from version specifier
-        if package_name and not package_name.startswith("#"):
-            try:
-                importlib.util.find_spec(package_name)
-                logging.info(f"{package_name} package is installed.")
-            except ImportError:
-                logging.warning(f"{package_name} package not found. Installing...")
+    for package_spec in required_packages:
+        if '==' in package_spec:
+            package_name, required_version = package_spec.split('==')
+        elif '>=' in package_spec:
+            package_name, required_version = package_spec.split('>=')
+        elif '<=' in package_spec:
+            package_name, required_version = package_spec.split('<=')
+        else:
+            package_name = package_spec
+            required_version = None
+
+        if package_name in installed_packages:
+            installed_version = installed_packages[package_name]
+            if required_version and installed_version != required_version:
+                logging.warning(
+                    f"{package_name} version {installed_version} is installed, but {required_version} is required. Reinstalling...")
+                install_package(package_name, version_constraint=f"=={required_version}")
+        else:
+            logging.warning(f"{package_name} package not found. Installing...")
+            if required_version:
+                install_package(package_name, version_constraint=f"=={required_version}")
+            else:
                 install_package(package_name)
 
 
@@ -115,9 +141,25 @@ def setup_environment():
     # Install DetectFlow without dependencies
     install_package('git+https://github.com/ChlupacTheBosmer/DetectFlow.git@main#egg=DetectFlow', no_deps=True)
 
+    # Get installed packages
+    installed_packages = get_installed_packages()
+
     # Validate and install missing dependencies
     required_packages = get_detectflow_requirements()
-    validate_environment(required_packages)
+    validate_environment(required_packages, installed_packages)
+
+    # Install specific versions of numpy and urllib3 if not present or different version is required
+    if 'numpy' in installed_packages:
+        if not installed_packages['numpy'].startswith('1.'):
+            install_package('numpy>=1.21.6,<1.27')
+    else:
+        install_package('numpy>=1.21.6,<1.27')
+
+    if 'urllib3' in installed_packages:
+        if not installed_packages['urllib3'].startswith('1.'):
+            install_package('urllib3<2.0')
+    else:
+        install_package('urllib3<2.0')
 
     check_cuda_availability()
 
