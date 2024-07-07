@@ -34,7 +34,7 @@ VISITS_SQL = """
             """
 
 VISITS_COLS = [
-    ("frame_number", "integer", "PRIMARY KEY"),
+    ("frame_number", "integer", ""),
     ("video_time", "text", "NOT NULL"),
     ("life_time", "text", ""),
     ("year", "integer", ""),
@@ -51,6 +51,8 @@ VISITS_COLS = [
     ("on_flower", "boolean", ""),
     ("flags", "text", "")
 ]
+
+VISITS_CONSTR = 'PRIMARY KEY (frame_number, video_id)'
 
 VIDEOS_SQL = """
             CREATE TABLE IF NOT EXISTS videos (
@@ -109,6 +111,7 @@ class DatabaseManager:
 
     DEFAULT_STRUCTURE = {
         "visits": {'columns': VISITS_COLS,
+                   'constraints': VISITS_CONSTR,
                    'batching': True},
         "videos": {'columns': VIDEOS_COLS,
                    'batching': False}
@@ -157,8 +160,9 @@ class DatabaseManager:
         """
         for table_name, table_info in self.database_structure.items():
             columns = table_info['columns']
+            constraints = table_info.get('constraints', '')
             if table_name not in db_manipulator.get_table_names():
-                db_manipulator.create_table(table_name, columns)
+                db_manipulator.create_table(table_name, columns, constraints)
 
     def add_database(self, recording_id: str, db_path: str):
         """
