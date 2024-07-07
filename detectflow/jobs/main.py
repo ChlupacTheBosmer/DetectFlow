@@ -10,7 +10,7 @@ setup_environment()
 
 # Now import detectflow package
 from detectflow.utils.config import load_json_config, load_ini_config, load_config, merge_configs
-from detectflow.process.database_manager import start_db_manager
+from detectflow.process.database_manager import start_db_manager, stop_db_manager
 from detectflow.config import S3_CONFIG, DETECTFLOW_DIR
 from detectflow.manipulators.dataloader import Dataloader
 from detectflow.process.orchestrator import Orchestrator
@@ -122,6 +122,7 @@ def main(config_path: str, config_format: str, log_file: Optional[str], **kwargs
     except Exception as e:
         logging.error(f"An error occurred: {e}")
         traceback.print_exc()
+        stop_db_manager(db_man_info["control_queue"], db_man_info["process"])
         sys.exit(1)
 
 
