@@ -152,13 +152,6 @@ def setup_environment():
     installed_packages = get_installed_packages()
 
     # Install specific versions of numpy and urllib3 if not present or different version is required
-    if 'numpy' in installed_packages:
-        if not installed_packages['numpy'].startswith('1.'):
-            install_package('numpy>=1.21.6,<1.27')
-            logging.warning("Numpy version is not in the required range. Reinstalling...")
-    else:
-        install_package('numpy>=1.21.6,<1.27')
-        logging.warning("Numpy version is not in the required range. Reinstalling...")
 
     if 'urllib3' in installed_packages:
         if not installed_packages['urllib3'].startswith('1.'):
@@ -175,6 +168,14 @@ def setup_environment():
     else:
         install_package('opencv-python==4.7.0.72')
         logging.warning("OpenCV version is not in the required range. Reinstalling...")
+
+    if 'numpy' in installed_packages:
+        if not installed_packages['numpy'].startswith('1.'):
+            install_package('numpy>=1.21.6,<1.27')
+            logging.warning("Numpy version is not in the required range. Reinstalling...")
+    else:
+        install_package('numpy>=1.21.6,<1.27')
+        logging.warning("Numpy version is not in the required range. Reinstalling...")
 
     check_cuda_availability()
 
