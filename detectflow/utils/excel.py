@@ -10,6 +10,7 @@ try:
 except ImportError:
     excel_available = False
 
+
 class BaseAnnotationFile:
     def __init__(self, filepath, output_path: str = None):
 
@@ -1064,4 +1065,5 @@ def adjust_annotations_for_videos(annotations: AnnotationList, video_paths: List
                 adjusted_annotations.append(adjusted_annotation)
 
     return adjusted_annotations
+
 
