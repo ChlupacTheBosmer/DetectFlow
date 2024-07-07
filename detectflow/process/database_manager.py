@@ -308,6 +308,7 @@ class DatabaseManager:
             return
 
     def fetch_from_s3(self, s3_path: str, local_path: str):
+
         # Fetch the file from S3
         recording_id = os.path.splitext(os.path.basename(local_path))[0]
         if recording_id in self.db_manipulators:
@@ -332,13 +333,14 @@ class DatabaseManager:
 
         # Initialize the database manipulators
         self.db_manipulators = {}
-        for recording_id, db_path in self.db_paths.items():
-            db_manipulator = self._init_database_manipulator(db_path)
-            self.db_manipulators[recording_id] = db_manipulator
-            self._init_database(db_manipulator)
-            self.backup_counters[recording_id] = 0
-        self.data_batches = {recording_id: [] for recording_id in self.db_manipulators}
-        logging.info(f"Database manipulators initialized: #{len(self.db_manipulators)}.")
+        if self.db_paths is not None:
+            for recording_id, db_path in self.db_paths.items():
+                db_manipulator = self._init_database_manipulator(db_path)
+                self.db_manipulators[recording_id] = db_manipulator
+                self._init_database(db_manipulator)
+                self.backup_counters[recording_id] = 0
+            self.data_batches = {recording_id: [] for recording_id in self.db_manipulators}
+            logging.info(f"Database manipulators initialized: #{len(self.db_manipulators)}.")
 
         # Initialize S3Manipulator if not provided
         if self.dataloader is None:
@@ -349,10 +351,13 @@ class DatabaseManager:
         logging.info(f"Process {multiprocessing.current_process().name} started.")
         mark_keys = {'id', 'status'}
         stop = False
+        counter = 0
         while True:
             try:
                 # Check for control messages
-                print("Checking control queue.")
+                if counter > 9:
+                    print("Checking control queue.")
+                    counter = 0
                 if not self.control_queue.empty():
                     command, args = self.control_queue.get()
                     if command == 'add_database':
@@ -400,7 +405,8 @@ class DatabaseManager:
                             #self.queue.task_done() # TODO: Test this to see if it works as expected
 
                 # Sleep to prevent high CPU usage
-                time.sleep(2)
+                time.sleep(0.5)
+                counter += 1
             except TypeError as e:
                 logging.error(f"Type Error: {e} - {traceback.format_exc()}. Ignoring and continuing.")
             except Exception as e:
