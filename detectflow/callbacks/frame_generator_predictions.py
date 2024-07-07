@@ -25,7 +25,10 @@ def frame_generator_predict(**kwargs):
                - generator: The instance of the generator (default: None)
 
                Model parameters:
-               - model_config: Dictionary fo models and their paths and confs (default: model_defaults - see for dict structure)
+               - model_config: List or Dictionary of models and their paths and confs (default: model_defaults - see for dict structure)
+                               Note that the dictionary should have keys 0 and 1 for flowers and visitors models respectively.
+                               Having list with two elements is also acceptable because when loading from json dictionary
+                               is not acceptable data type.
 
                Passed in the kwargs dict passed from orchestrator_control_queue - fully optional
                - db_manager_data_queue: Queue to which results should be put for logging into database (default: None)
@@ -38,12 +41,6 @@ def frame_generator_predict(**kwargs):
                - crop_imgs:
 
     """
-
-    model_defaults = {0: {'path': "/storage/brno2/home/USER/Flowers/flowers_ours_f2s/weights/best.pt",
-                          'conf': 0.1},
-                      1: {
-                          'path': "/storage/brno2/home/USER/Dataset Composition Test/751e1107_enrich_single_cls/weights/best.pt",
-                          'conf': 0.1}}
 
     # Unpack keyword arguments with defaults
     frames = kwargs.get('frames_array', None)
