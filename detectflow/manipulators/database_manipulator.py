@@ -198,16 +198,23 @@ class DatabaseManipulator:
             return cur.fetchone()
         return None
 
-    def create_table(self, table_name: str, columns: list):
+    def create_table(self, table_name: str, columns: list, table_constraints: str = ''):
         """
-        Create a table using a list of column definitions.
+        Create a table using a list of column definitions and optional table constraints.
 
         :param table_name: Name of the table to create.
         :param columns: List of column definitions in the format (name, data_type, constraints).
+                        Example: [('id', 'INTEGER', 'PRIMARY KEY'), ('name', 'TEXT', 'NOT NULL')]
+        :param table_constraints: Optional string of table-level constraints.
+                                  Example: 'FOREIGN KEY (column_name) REFERENCES other_table (column_name)'
         """
         try:
             # Construct the column definitions string
             columns_str = ', '.join([f"{col[0]} {col[1]} {col[2]}" for col in columns])
+
+            # Include table constraints if provided
+            if table_constraints:
+                columns_str = f"{columns_str}, {table_constraints}"
 
             # Construct the CREATE TABLE SQL statement
             query = f"CREATE TABLE IF NOT EXISTS {table_name} ({columns_str});"
@@ -231,18 +238,35 @@ class DatabaseManipulator:
         columns = ', '.join(data.keys())
         placeholders = ', '.join('?' for _ in data)
 
-        if update_on_conflict:
-            update_placeholders = ', '.join(f"{col} = ?" for col in data.keys())
+        unique_constraints = []
+        try:
+            unique_constraints = self.get_unique_constraints(table)
+            primary_key_columns = self.get_primary_key_columns(table)
+
+            if primary_key_columns:
+                unique_constraints.append(primary_key_columns)
+        except Exception as e:
+            logging.error(f"Error fetching unique constraints for {table}: {e}")
+
+        if update_on_conflict and len(unique_constraints) > 0:
+            update_placeholders = ', '.join(f"{col} = EXCLUDED.{col}" for col in data.keys())
+
+            # Create ON CONFLICT clause for all constraints
+            on_conflict_clauses = [
+                f"ON CONFLICT({', '.join(constraint)}) DO UPDATE SET {update_placeholders}"
+                for constraint in unique_constraints
+            ]
+            on_conflict_query = ' '.join(on_conflict_clauses)
+
             query = f"""
-                INSERT INTO {table} ({columns}) VALUES ({placeholders})
-                ON CONFLICT({self.get_primary_key_column(table)}) DO UPDATE SET {update_placeholders};
-                """
-            query_data = tuple(data.values()) + tuple(data.values())
+                        INSERT INTO {table} ({columns}) VALUES ({placeholders})
+                        {on_conflict_query};
+                    """
+            query_data = tuple(data.values())
         else:
             query = f"INSERT INTO {table} ({columns}) VALUES ({placeholders});"
             query_data = tuple(data.values())
 
-        print(query, query_data)
         try:
             self.safe_execute(query, query_data, use_transaction=use_transaction)
         except sqlite3.IntegrityError as e:
@@ -319,17 +343,44 @@ class DatabaseManipulator:
         """
         if not self.batch_data:
             return
+
         try:
             columns = ', '.join(self.batch_data[0].keys())
             placeholders = ', '.join('?' for _ in self.batch_data[0])
+        except IndexError:
+            logging.warning("No data found in the batch.")
+            return
+        except TypeError:
+            logging.error("Invalid data format in the batch.") # TODO: Dump the data in the batch so we do not lose it?
+            return
 
-            if self.batch_update_on_conflict:
-                update_placeholders = ', '.join(f"{col} = ?" for col in self.batch_data[0].keys())
+        unique_constraints = []
+        try:
+            unique_constraints = self.get_unique_constraints(self.batch_table)
+            primary_key_columns = self.get_primary_key_columns(self.batch_table)
+
+            if primary_key_columns:
+                unique_constraints.append(primary_key_columns)
+        except Exception as e:
+            logging.error(f"Error fetching unique constraints for {self.batch_table}: {e}")
+
+        try:
+            if self.batch_update_on_conflict and len(unique_constraints) > 0:
+
+                update_placeholders = ', '.join(f"{col} = EXCLUDED.{col}" for col in self.batch_data[0].keys())
+
+                # Create ON CONFLICT clause for all constraints
+                on_conflict_clauses = [
+                    f"ON CONFLICT({', '.join(constraint)}) DO UPDATE SET {update_placeholders}"
+                    for constraint in unique_constraints
+                ]
+                on_conflict_query = ' '.join(on_conflict_clauses)
+
                 query = f"""
-                INSERT INTO {self.batch_table} ({columns}) VALUES ({placeholders})
-                ON CONFLICT({self.get_primary_key_column(self.batch_table)}) DO UPDATE SET {update_placeholders};
-                """
-                data = [tuple(d.values()) + tuple(d.values()) for d in self.batch_data]
+                            INSERT INTO {self.batch_table} ({columns}) VALUES ({placeholders})
+                            {on_conflict_query};
+                            """
+                data = [tuple(d.values()) for d in self.batch_data]
             else:
                 query = f"INSERT INTO {self.batch_table} ({columns}) VALUES ({placeholders});"
                 data = [tuple(d.values()) for d in self.batch_data]
@@ -345,18 +396,30 @@ class DatabaseManipulator:
             else:
                 raise RuntimeError(f"Error inserting batch data: {self._db_name} - {e}")
 
-    def get_primary_key_column(self, table_name):
+    def get_unique_constraints(self, table_name):
         """
-        Get the primary key column of a given table.
+        Retrieves the columns involved in unique constraints for the specified table.
 
         :param table_name: The name of the table.
-        :return: The name of the primary key column.
         """
-        columns_info = self.fetch_all(f"PRAGMA table_info({table_name})")
-        for col in columns_info:
-            if col[5]:  # Check if it's a primary key
-                return col[1]
-        return None
+        cursor = self.conn.execute(f"PRAGMA index_list('{table_name}')")
+        unique_constraints = []
+        for row in cursor.fetchall():
+            if row[2]:  # row[2] is True if the index is unique
+                index_name = row[1]
+                index_info = self.conn.execute(f"PRAGMA index_info('{index_name}')").fetchall()
+                unique_columns = [info[2] for info in index_info]  # info[2] is the column name
+                unique_constraints.append(unique_columns)
+        return unique_constraints
+
+    def get_primary_key_columns(self, table_name):
+        """
+        Retrieves the primary key columns for the specified table.
+        """
+        cursor = self.conn.execute(f"PRAGMA table_info('{table_name}')")
+        primary_key_columns = [row[1] for row in cursor.fetchall() if
+                               row[5]]  # row[5] is True if the column is part of the primary key
+        return primary_key_columns if primary_key_columns else None
 
     def get_table_names(self):
         """
