@@ -1,6 +1,8 @@
+import random
 import multiprocessing
 import sqlite3
 from sqlite3 import Error
+import re
 import csv
 import os
 import threading
@@ -138,11 +140,15 @@ class DatabaseManipulator:
                         self.conn.rollback()
                     if attempt == retries - 1:
                         if data and enable_emergency_dumps:
+                            try:
+                                table_name = extract_table_name(sql)
+                            except Exception as e:
+                                table_name = None
                             if isinstance(data, list) and all(isinstance(d, tuple) for d in data):
                                 for d in data:
-                                    self.dump_to_csv(d)  # Dump data to CSV on final failure
+                                    self.dump_to_csv(table_name, d)  # Dump data to CSV on final failure
                             else:
-                                self.dump_to_csv(data)  # Dump data to CSV on final failure
+                                self.dump_to_csv(table_name, data)  # Dump data to CSV on final failure
                             print(f"Data dumped to CSV file: {self._db_name}")
                             if not sustain_emergency_dumps:
                                 raise RuntimeError(f"Failed to execute SQL query: {self._db_name} - {e}")
@@ -155,10 +161,12 @@ class DatabaseManipulator:
             self.close_connection()
 
 
-    def dump_to_csv(self, data):
-        """ Dump data to a CSV file as a fallback """
-        destination_folder = Manipulator.create_folders(directories="dumps")[0]
-        filepath = os.path.join(destination_folder, f"emergency_dump_{self._db_name}_{get_numeric_hash()}.csv")
+    def dump_to_csv(self, table_name, data):
+        """ Dump data to a CSV file as a fallback
+        :param table_name:
+        """
+        destination_folder = Manipulator.create_folders(directories="dumps", parent_dir=os.path.dirname(self.db_file))[0]
+        filepath = os.path.join(destination_folder, f"db_{self._db_name}_t_{table_name}_id_{get_numeric_hash()}{random.randint(0,9)}.csv")
         with open(filepath, 'a', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(data)
@@ -369,37 +377,69 @@ class DatabaseManipulator:
             print(f"Error accessing SQLite database: {self._db_name} - {e}")
             return []
 
-    def get_column_names(self, table_name, exclude_autoincrement_pks: bool = True):
-        """Fetches column names for a given table excluding autoincrement primary key."""
-        columns = []
-        #print(self.fetch_all(f"PRAGMA table_info({table_name})"))
-        for column in self.fetch_all(f"PRAGMA table_info({table_name})"):
-            # Column format: (cid, name, type, notnull, dflt_value, pk)
-            # We exclude columns that are primary key and autoincrement
-            if exclude_autoincrement_pks:
-                if not (column[5] == 1 and 'INTEGER' in column[2]):
-                    columns.append(column[1])
-            else:
-                columns.append(column[1])
-        return columns
+    def get_column_names(self, table_name, exclude_autoincrement: bool = True):
+        """
+            Retrieves the column names for the specified table, excluding autoincrement columns.
 
-    def gather_dump_data(self, table_name: Optional[str] = None, dumps_folder: str = "dumps", delete_dumps: bool = False):
+            :param table_name: Name of the table
+            :param exclude_autoincrement: Whether to exclude autoincrement primary key columns
+            :return: List of column names excluding autoincrement columns
+            """
+        import re
+
+        cursor = self.conn.cursor()
+
+        # Get table creation SQL
+        cursor.execute(f"SELECT sql FROM sqlite_master WHERE type='table' AND name='{table_name}';")
+        table_sql = cursor.fetchone()[0]
+
+        # Find autoincrement columns using regex
+        autoincrement_columns = re.findall(r'(\w+)\s+INTEGER\s+PRIMARY\s+KEY\s+AUTOINCREMENT', table_sql, re.IGNORECASE)
+
+        # Get all column names from PRAGMA table_info
+        cursor.execute(f"PRAGMA table_info({table_name});")
+        columns_info = cursor.fetchall()
+
+        # Exclude autoincrement columns
+        if exclude_autoincrement:
+            column_names = [col[1] for col in columns_info if col[1] not in autoincrement_columns]
+        else:
+            column_names = [col[1] for col in columns_info]
+
+        return column_names
+
+    def gather_dump_data(self, table_name: Optional[str] = None, dumps_folder: str = "dumps", delete_dumps: bool = False, update_on_conflict: bool = True):
         """
         Retrieve data from CSV files in the "dumps" folder and insert it into the SQLite database.
         """
+
+        def parse_dump_name(filepath):
+            """
+            Extracts the table name from a file path based on the new naming convention.
+
+            :param filepath: The file path string
+            :return: Extracted table name if the pattern matches, else None
+            """
+            pattern = r't_([^_]+)_id'  # Regex to find text between 't_' and '_id'
+            filename = os.path.basename(filepath)
+            match = re.search(pattern, filename)
+
+            if match:
+                return match.group(1)
+            else:
+                return None
+
         try:
             if not table_name:
-                query = "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name LIMIT 1"
-                table_name = self.fetch_one(query)[0]
-                if not table_name:
+                default_table_name = self.get_table_names()[0]
+                if not default_table_name:
                     raise RuntimeError(
-                        f"Table name not specified and cannot be extracted from the database. Table name: {table_name}")
+                        f"Table name not specified and cannot be extracted from the database. Table name: {default_table_name}")
+            else:
+                default_table_name = table_name
         except Exception as e:
-            raise RuntimeError(f"Error when accessing database table: {self._db_name} - {e}")
-
-        column_names = self.get_column_names(table_name)
-        columns_str = ', '.join(column_names)
-        placeholders = ', '.join('?' for _ in column_names)
+            logging.error(f"Error when accessing database table: {self._db_name} - {e}")
+            default_table_name = table_name
 
         try:
             # Check if the dumps folder exists
@@ -417,14 +457,25 @@ class DatabaseManipulator:
             for csv_file in csv_files:
                 if f"_{self._db_name}_" in csv_file:
                     try:
+                        # Extract the table name from the CSV file name
+                        table_name = parse_dump_name(csv_file)
+                        table_name = table_name if table_name and table_name != 'None' else default_table_name
+
+                        # Construct placeholders for the SQL query
+                        column_names = self.get_column_names(table_name)
+
                         # Read data from the CSV file
                         with open(csv_file, 'r', newline='') as file:
                             reader = csv.reader(file)
                             # next(reader, None)  # Skip the header if present
                             for row in reader:
-                                query = f"INSERT INTO {table_name} ({columns_str}) VALUES ({placeholders})"
-                                # Using safe_execute to handle the SQL execution
-                                self.safe_execute(query, tuple(row), use_transaction=True, enable_emergency_dumps=False)
+
+                                # Construct a dictionary of column names and data values
+                                data = {col: cell for col, cell in zip(column_names, row)}
+
+                                # Insert the data into the database and update on conflict
+                                self.insert(table_name, data, use_transaction=True, update_on_conflict=update_on_conflict)
+
                         # Delete the CSV file after inserting its data into the database
                         if delete_dumps:
                             Manipulator.delete_file(csv_file)
@@ -461,8 +512,8 @@ def merge_databases(db1_path: str, db2_path: str, output_db_path: str):
 
         for table in table_names:
             print(f"Merging table: {table}")
-            db1_columns = db1.get_column_names(table, exclude_autoincrement_pks=False)
-            db2_columns = db2.get_column_names(table, exclude_autoincrement_pks=False)
+            db1_columns = db1.get_column_names(table, exclude_autoincrement=False)
+            db2_columns = db2.get_column_names(table, exclude_autoincrement=False)
 
             # Ensure that both tables have the same columns
             if set(db1_columns) != set(db2_columns):
@@ -470,9 +521,18 @@ def merge_databases(db1_path: str, db2_path: str, output_db_path: str):
 
             # Fetch the table schema from the first database
             columns_info = db1.fetch_all(f"PRAGMA table_info({table})")
+            primary_keys = [col[1] for col in columns_info if col[5]]
             columns_definitions = ', '.join(
-                [f"{col[1]} {col[2]} PRIMARY KEY" if col[5] else f"{col[1]} {col[2]}" for col in columns_info])
-            create_table_query = f"CREATE TABLE IF NOT EXISTS {table} ({columns_definitions});"
+                [f"{col[1]} {col[2]} PRIMARY KEY" if col[5] and len(primary_keys) == 1 else f"{col[1]} {col[2]}" for col
+                 in columns_info]
+            )
+
+            if len(primary_keys) > 1:
+                primary_key_str = f", PRIMARY KEY ({', '.join(primary_keys)})"
+            else:
+                primary_key_str = ""
+
+            create_table_query = f"CREATE TABLE IF NOT EXISTS {table} ({columns_definitions}{primary_key_str});"
             output_db.safe_execute(create_table_query)
 
             # Fetch all data from the first database table
@@ -507,3 +567,27 @@ def merge_databases(db1_path: str, db2_path: str, output_db_path: str):
         output_db.close_connection()
 
     return output_db_path
+
+
+def extract_table_name(query):
+    """
+    Extract the table name from an SQLite query.
+
+    :param query: SQL query string
+    :return: Table name if found, else None
+    """
+    # Define regular expressions for different SQL commands
+    patterns = [
+        r"FROM\s+([a-zA-Z_][a-zA-Z0-9_]*)",  # SELECT ... FROM table_name
+        r"JOIN\s+([a-zA-Z_][a-zA-Z0-9_]*)",  # ... JOIN table_name ...
+        r"INTO\s+([a-zA-Z_][a-zA-Z0-9_]*)",  # INSERT INTO table_name ...
+        r"UPDATE\s+([a-zA-Z_][a-zA-Z0-9_]*)",  # UPDATE table_name SET ...
+        r"TABLE\s+([a-zA-Z_][a-zA-Z0-9_]*)"
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, query, re.IGNORECASE)
+        if match:
+            return match.group(1)
+
+    return None
