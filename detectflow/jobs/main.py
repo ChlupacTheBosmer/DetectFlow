@@ -118,7 +118,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Orchestrator with specified configuration.")
     parser.add_argument('--config_path', type=str, help="Path to the configuration file.")
     parser.add_argument('--config_format', type=str, choices=['json', 'ini'], default='json', help="Configuration file format.")
-    parser.add_argument('--log_file', type=str, help="Path to the log file.")
+    parser.add_argument('--log_file', type=str, default="orchestrator.log", help="Path to the log file.")
 
     # Additional keyword arguments
     parser.add_argument('--batch_size', type=int, help="Batch size for processing.")
