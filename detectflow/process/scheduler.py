@@ -41,7 +41,7 @@ class Scheduler(ConfigHandler):
         super().__init__(None, "json", {})
 
         self.local_work_dir = local_work_dir
-        self.remote_work_dir = remote_work_dir.replace("\\", "/")
+        self.remote_work_dir = remote_work_dir.replace("\\", "/") if remote_work_dir else None
         self.jobs_dir = Manipulator.create_folders(["jobs"], local_work_dir)[0]
         self.database_path = database_path
         self.database_manipulator = None
