@@ -3,8 +3,6 @@ decord
 hachoir
 imageio
 matplotlib
-numpy>=1.22.2,<1.27
-opencv_python
 opencv_contrib_python
 pandas
 Pillow
@@ -18,3 +16,5 @@ paramiko
 pytz
 jinja2
 git+https://github.com/ChlupacTheBosmer/sahi.git@main#egg=sahi
+opencv_python>=4.8.
+numpy>=1.22.2,<1.27
