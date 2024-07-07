@@ -152,7 +152,6 @@ def setup_environment():
     installed_packages = get_installed_packages()
 
     # Install specific versions of numpy and urllib3 if not present or different version is required
-
     if 'urllib3' in installed_packages:
         if not installed_packages['urllib3'].startswith('1.'):
             install_package('urllib3<2.0')
