@@ -148,8 +148,7 @@ def process_video_callback(task: Task,
 
     # Load videos and validate them
     try:
-        dataloader = Dataloader()
-        valid, invalid = dataloader.prepare_data(files, scratch, False)
+        dataloader = dataloader or Dataloader()
         valid, invalid = dataloader.prepare_videos(files, scratch, False)
 
         if not len(valid) == len(files) or len(invalid) > 0:
