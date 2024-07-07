@@ -26,7 +26,7 @@ class DatabaseManipulator:
         """
         self.db_file = db_file
         self._db_name = os.path.splitext(os.path.basename(self.db_file))[0]
-        self.conn = None
+        self._conn = None
         self._lock_type = lock_type
         self._lock = None
         self.batch_data = []
@@ -44,6 +44,12 @@ class DatabaseManipulator:
     def lock(self, value):
         self._lock = value
 
+    @property
+    def conn(self):
+        if self._conn is None:
+            self._conn = self.create_connection()
+        return self._conn
+
     def create_connection(self):
         """
         Create a database connection to the SQLite database specified by the db_file.
@@ -51,8 +57,9 @@ class DatabaseManipulator:
         """
         with self.lock:
             try:
-                self.conn = sqlite3.connect(self.db_file, detect_types=sqlite3.PARSE_DECLTYPES)
+                conn = sqlite3.connect(self.db_file, detect_types=sqlite3.PARSE_DECLTYPES)
                 print(f"SQLite connection is opened to {self._db_name}")
+                return conn
             except Exception as e:
                 raise RuntimeError(f"Error connecting to database: {self._db_name} - {e}")
 
@@ -61,9 +68,9 @@ class DatabaseManipulator:
         Close the database connection.
         """
         with self.lock:
-            if self.conn:
-                self.conn.close()
-                self.conn = None
+            if self._conn:
+                self._conn.close()
+                self._conn = None
                 print(f"The SQLite connection is closed for {self._db_name}")
 
     def execute_query(self, query, params=None):
@@ -78,8 +85,6 @@ class DatabaseManipulator:
         """
         with self.lock:
             try:
-                if not self.conn:
-                    self.create_connection()
                 cur = self.conn.cursor()
                 if params:
                     cur.execute(query, params)
@@ -112,8 +117,6 @@ class DatabaseManipulator:
             for attempt in range(retries):
                 try:
                     with self.lock:
-                        if not self.conn:
-                            self.create_connection()
                         cur = self.conn.cursor()
                         if use_transaction:
                             cur.execute("BEGIN;")
