@@ -42,7 +42,7 @@ class TestDatabaseManipulator(unittest.TestCase):
 
     @patch('detectflow.manipulators.database_manipulator.open', new_callable=mock_open, read_data='data')
     def test_dump_to_csv(self, mock_file):
-        self.manipulator.dump_to_csv(("test_data",))
+        self.manipulator.dump_to_csv("test", ("test_data",))
         mock_file.assert_called_once()
 
     def test_fetch_all(self):
