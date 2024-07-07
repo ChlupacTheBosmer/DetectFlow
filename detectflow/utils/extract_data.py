@@ -55,7 +55,7 @@ def safe_json(value):
 
 
 @lru_cache(maxsize=4)
-def extract_data_from_video(video_path: Optional[str] = None, video_file: Optional[Type["Video"]] = None, s3_path: str = None, **kwargs):
+def extract_data_from_video(video_path: Optional[str] = None, video_file: Optional[Type["Video"]] = None, s3_path: str = None, return_raw_data: bool = False, **kwargs):
     """
     Extract data from a video file and pack as a dictionary
 
@@ -75,7 +75,7 @@ def extract_data_from_video(video_path: Optional[str] = None, video_file: Option
             if s3_path:
                 video.s3_path = s3_path
         elif video_path:
-            video = Video(video_path, s3_path)
+            video = Video(video_path, s3_path=s3_path)
         else:
             raise ValueError("No video file or video object supplied")
     except Exception as e:
@@ -164,7 +164,17 @@ def extract_data_from_video(video_path: Optional[str] = None, video_file: Option
         "motion": safe_float(diag_results.get("mean_motion"))
     }
 
-    return video_data
+    raw_data = {
+        'reference_boxes': diag_results.get("reference_boxes"),
+        'start_time': vid_results.get("start_time"),
+        'end_time': vid_results.get("end_time"),
+        'fps': vid_results.get("fps")
+    }
+
+    if return_raw_data:
+        return video_data, raw_data
+    else:
+        return video_data
 
 
 def extract_data_from_result(result: DetectionResults) -> Dict[str, Any]:
