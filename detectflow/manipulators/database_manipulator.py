@@ -555,7 +555,10 @@ class DatabaseManipulator:
         try:
             self.flush_batch()
         except Exception as e:
-            print(f"Failed to insert batch data into {self._db_name} - {self.batch_table}: {e}")
+            if hasattr(self, '_db_name') and hasattr(self, 'batch_table'):
+                print(f"Failed to insert batch data into {self._db_name} - {self.batch_table}: {e}")
+            else:
+                print(f"Failed to insert batch data: {e}")
 
 
 def merge_databases(db1_path: str, db2_path: str, output_db_path: str):
