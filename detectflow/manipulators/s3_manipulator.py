@@ -1,17 +1,15 @@
 import boto3
 import botocore
 from botocore.exceptions import ClientError
-import configparser
 import logging
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Optional, Tuple, Union
+from typing import List, Union
 import time
 from detectflow.validators.s3_validator import S3Validator
-from detectflow.utils.s3.cfg import parse_s3_config
+from detectflow.utils.cfg import parse_s3_config
 from detectflow.config import S3_CONFIG
-from detectflow.utils import DOWNLOADS_DIR
 
 
 class S3Manipulator(S3Validator):

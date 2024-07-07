@@ -1,6 +1,6 @@
 import re
 import boto3
-from detectflow.utils.s3.cfg import parse_s3_config
+from detectflow.utils.cfg import parse_s3_config
 from detectflow import S3_CONFIG
 
 class S3Validator:

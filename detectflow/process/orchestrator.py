@@ -8,7 +8,7 @@ from typing import Dict, Optional
 from detectflow.handlers.config_handler import ConfigHandler
 from detectflow.manipulators.dataloader import Dataloader
 from detectflow.utils.threads import profile_threads, manage_threads
-from detectflow.utils.s3.input import validate_and_process_input
+from detectflow.utils.input import validate_and_process_input
 from detectflow.utils import WINDOWS, CHECKPOINTS_DIR, DOWNLOADS_DIR
 from detectflow.utils.dependencies import get_import_path, get_callable
 from detectflow.manipulators.manipulator import Manipulator

@@ -63,7 +63,14 @@ def check_cuda_availability():
 
 
 def setup_environment():
-    check_and_install_package('git+https://github.com/ChlupacTheBosmer/DetectFlow.git@main#egg=DetectFlow')
+    package_name = 'git+https://github.com/ChlupacTheBosmer/DetectFlow.git@main#egg=DetectFlow'
+
+    try:
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', package_name])
+        logging.info(f"{package_name} package installed successfully.")
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Failed to install {package_name} package: {e}")
+        sys.exit(1)
 
     # Get the site-packages directory
     site_packages_dir = site.getusersitepackages()

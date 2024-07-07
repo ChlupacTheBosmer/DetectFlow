@@ -1,6 +1,11 @@
+import os
+
 from typing import List, Dict, Tuple, Union
 from datetime import timedelta
 import re
+
+from detectflow import Manipulator
+
 
 def validate_flags(input_flags: Union[str, int, List[Union[str, int]], Tuple[Union[str, int], ...]],
                    flag_map: Union[Dict[int, str], List[str], Tuple[str, ...]],
@@ -119,3 +124,47 @@ def make_hashable(input_dict: dict, filter_unhashable=False):
 
     return result_dict
 
+
+def validate_and_process_input(input_data, s3_manipulator):
+
+    if isinstance(input_data, str):
+        return process_single_input(input_data, s3_manipulator)
+    elif isinstance(input_data, (list, tuple)):
+        return process_multiple_inputs(input_data, s3_manipulator)
+    else:
+        raise ValueError("Invalid input format")
+
+
+def process_single_input(input_data, s3_manipulator):
+
+    if s3_manipulator.is_s3_bucket(input_data):
+        # Fetch directories from the S3 bucket
+        return s3_manipulator.list_directories_s3(input_data, full_path=True), (True, False, False, False)
+
+    elif s3_manipulator.is_s3_directory(input_data):
+        # Fetch files from the S3 directory
+        bucket_name, prefix = s3_manipulator.parse_s3_path(input_data)
+        return [input_data], (True, False, False, False)
+
+    elif s3_manipulator.is_s3_file(input_data):
+        return [input_data], (False, True, False, False)
+
+    elif os.path.isdir(input_data):
+        # Fetch subdirectories from the local directory
+        return Manipulator.list_folders(input_data, return_full_path=True), (False, False, True, False)
+
+    elif os.path.isfile(input_data):
+        return [input_data], (False, False, False, True)
+
+    else:
+        raise FileNotFoundError(f"File or directory not found: {input_data}")
+
+
+def process_multiple_inputs(input_data, s3_manipulator):
+    directories = []
+    flags = (False, False, False, False)  # default flags
+    for item in input_data:
+        processed_item, item_flags = process_single_input(item, s3_manipulator)
+        directories.extend(processed_item)
+        flags = tuple(any(pair) for pair in zip(flags, item_flags))
+    return directories, flags

@@ -170,7 +170,7 @@ class Scheduler(ConfigHandler):
             home_dir = self.remote_work_dir
             task_folder = "/".join((self.remote_work_dir, 'jobs', job_name)).replace("\\", "/")
             config_path = "/".join((task_folder, os.path.basename(config_path))).replace("\\", "/")
-            python_script_path = "/".join((task_folder, os.path.basename(python_script_path))).replace("\\", "/")
+            python_script_path = python_script_path
         else:
             home_dir = self.local_work_dir
             task_folder = os.path.join(self.jobs_dir, job_name)
@@ -213,7 +213,7 @@ class Scheduler(ConfigHandler):
         """
         # Create the task specific remote paths
         task_folder = "/".join((self.remote_work_dir, 'jobs', job_name))
-        remote_python_script_path = "/".join((task_folder, os.path.basename(local_bash_script_path)))
+        remote_bash_script_path = "/".join((task_folder, os.path.basename(local_bash_script_path)))
         remote_config_path = "/".join((task_folder, os.path.basename(local_config_path)))
 
         # Create folder and upload files
@@ -232,7 +232,7 @@ class Scheduler(ConfigHandler):
                     print(f"Remote directory {folder} does not exist, creating it")
                     sftp.mkdir(folder)
 
-            for local_filepath, remote_filepath in [(local_bash_script_path, remote_python_script_path),
+            for local_filepath, remote_filepath in [(local_bash_script_path, remote_bash_script_path),
                                                     (local_config_path, remote_config_path)]:
                 sftp.put(local_filepath, remote_filepath)
                 print(f"Successfully copied {local_filepath} to {remote_filepath}")
@@ -256,7 +256,7 @@ class Scheduler(ConfigHandler):
             if ssh:
                 ssh.close()
 
-        return remote_python_script_path, remote_config_path
+        return remote_bash_script_path, remote_config_path
 
     def _download_log_files(self, remote_files, local_files):
         ssh = paramiko.SSHClient()
