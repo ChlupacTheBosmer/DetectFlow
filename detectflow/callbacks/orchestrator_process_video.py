@@ -24,8 +24,9 @@ def diagnose_video_callback(**kwargs):
     dataloader = None
 
     # Unpack Task
-    directory = task.directory
-    files = task.files
+    if task:
+        directory = task.directory
+        files = task.files
 
     if not task:
         return None
@@ -97,13 +98,19 @@ def process_video_callback(task: Task,
                   "model_config": (dict, list),
                   "device": object,
                   "track_results": bool,
-                  "tracker_type": str,
+                  "tracker_type": (str, type(None)),
                   "inspect": bool}
 
+    logging.info(f"Processing video task: {task}: kwargs: {kwargs}")
+
     # Unpack Task
-    directory = task.directory
-    files = task.files
-    print(files)
+    if task:
+        directory = task.directory
+        files = task.files
+        print(files)
+    else:
+        logging.error(f"{name} - Task not defined")
+        return
 
     # Fix kwargs
     if kwargs:
