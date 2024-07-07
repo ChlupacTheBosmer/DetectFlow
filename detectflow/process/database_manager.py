@@ -282,11 +282,19 @@ class DatabaseManager:
             logging.error(f"Database manipulator for recording ID {recording_id} not found. Skipping S3 backup.")
             return
 
-        # Close db connection for safety
-        db_manipulator.close_connection()
-
         # Get the local file path
         local_file_path = db_manipulator.db_file
+
+        # Re-insert any emergency dumps
+        try:
+            if os.path.isdir(os.path.dirname(local_file_path)):
+                db_manipulator.gather_dump_data(dumps_folder=os.path.dirname(local_file_path), delete_dumps=True, update_on_conflict=False)
+                logging.info(f"Emergency dumps re-inserted for recording ID {recording_id}.")
+        except Exception as e:
+            logging.error(f"Error while gathering emergency dumps for recording ID {recording_id}: {e}")
+
+        # Close db connection for safety
+        db_manipulator.close_connection()
 
         # Specify the bucket and directory names
         bucket_name = InputManipulator.get_bucket_name_from_id(recording_id)
