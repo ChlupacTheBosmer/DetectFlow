@@ -372,6 +372,9 @@ class DatabaseManager:
                     elif command == 'flush_batch':
                         self.flush_batch(*args)
                         logging.info(f"Flushing batch for recording ID {args[0]}.")
+                    elif command == 'mark_processed':
+                        self._mark_recording_processed(*args)
+                        logging.info(f"Marking recording as processed for recording ID {args[0]}.")
                     elif command == 'backup_to_s3':
                         self.backup_to_s3(*args)
                         logging.info(f"Backing up database for recording ID {args[0]} to S3.")
@@ -522,6 +525,10 @@ def flush_one_db_manager(control_queue, recording_id):
 
 def flush_all_db_manager(control_queue):
     control_queue.put(('flush_all_batches', []))
+
+
+def mark_processed_db_manager(control_queue, recording_id):
+    control_queue.put(('mark_processed', (recording_id,)))
 
 
 def backup_file_db_manager(control_queue, recording_id):
