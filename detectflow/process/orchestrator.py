@@ -118,7 +118,7 @@ class Orchestrator(ConfigHandler):
                  config_path: Optional[str] = None,
                  config_format: str = "json",
                  config_defaults: Optional[Dict] = None,
-                 parallelism: Optional[str] = None,
+                 parallelism: Optional[str] = "process",
                  **kwargs):
 
         if not config_defaults:

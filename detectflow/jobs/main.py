@@ -2,7 +2,7 @@ import argparse
 import logging
 import os
 import sys
-import json
+import traceback
 from typing import Optional, Dict, Any
 from setup_env import setup_environment
 
@@ -76,7 +76,8 @@ def main(config_path: str, config_format: str, log_file: Optional[str], **kwargs
         'scratch_path',
         'user_name',
         'dataloader',
-        'process_task_callback'
+        'process_task_callback',
+        'parallelism'
     }
 
     database_manager_kwargs_keys = {
@@ -115,11 +116,12 @@ def main(config_path: str, config_format: str, log_file: Optional[str], **kwargs
 
     logging.info("Initializing Orchestrator...")
     try:
-        orchestrator = Orchestrator(config_path=config_path, config_format=config_format, dataloader=dataloader, parallelism="process", **orchestrator_kwargs, **callback_kwargs)
+        orchestrator = Orchestrator(config_path=config_path, config_format=config_format, dataloader=dataloader, **orchestrator_kwargs, **callback_kwargs)
         orchestrator.run()
         logging.info("Orchestrator run completed successfully.")
     except Exception as e:
         logging.error(f"An error occurred: {e}")
+        traceback.print_exc()
         sys.exit(1)
 
 
