@@ -1,4 +1,3 @@
-#PyPi requirements
 boto3
 decord
 hachoir
@@ -17,6 +16,7 @@ ultralytics
 python-dateutil
 paramiko
 pytz
+jinja2
 
-# GitHub repositories for the forked packages
+
 git+https://github.com/ChlupacTheBosmer/sahi.git@main#egg=sahi
