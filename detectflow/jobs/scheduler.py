@@ -108,7 +108,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--walltime', type=int, default=1, help="Walltime for the scheduled jobs (HH).")
     parser.add_argument('--ncpus', type=int, default=5, help="Number of CPUs to request for the scheduled jobs.")
-    parser.add_argument('--use_gpu', type=bool, help="Whether to request GPU for the scheduled jobs.")
+    parser.add_argument('--use_gpu', type=bool, default=False, help="Whether to request GPU for the scheduled jobs.")
     parser.add_argument('--memory', type=int, default=32, help="Memory to request for the scheduled jobs (GB).")
     parser.add_argument('--scratch_size', type=int, default=2, help="Scratch size to request for the scheduled jobs (GB).")
 

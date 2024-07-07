@@ -5,6 +5,7 @@ import sys
 import traceback
 from typing import Optional, Dict, Any
 from setup_env import setup_environment
+import multiprocessing
 
 setup_environment()
 
@@ -34,6 +35,8 @@ def setup_logging(log_file: Optional[str] = None):
 
 
 def main(config_path: str, config_format: str, log_file: Optional[str], **kwargs):
+    multiprocessing.set_start_method('spawn')
+
     if kwargs.get('verbose') == 'false':
         os.environ['YOLO_VERBOSE'] = 'false'
 

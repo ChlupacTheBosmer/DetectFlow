@@ -350,7 +350,7 @@ class Scheduler(ConfigHandler):
         self.bucket_name = bucket_name
         self.directories = directories
         self.python_script_path = python_script_path
-        self.use_gpu = use_gpu
+        self.use_gpu = use_gpu if isinstance(use_gpu, bool) else False
         self.resources = resources if resources else {}
         self.config_path = job_config_path
         self.config = self.load_config() if not job_config else job_config
