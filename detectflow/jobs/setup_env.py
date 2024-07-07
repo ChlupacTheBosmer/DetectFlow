@@ -62,7 +62,7 @@ def check_cuda_availability():
 
 
 def setup_environment():
-    check_and_install_package('detectflow')
+    check_and_install_package('git+https://github.com/ChlupacTheBosmer/DetectFlow.git@main#egg=DetectFlow')
     required_packages = get_detectflow_requirements()
     validate_environment(required_packages)
     check_cuda_availability()
