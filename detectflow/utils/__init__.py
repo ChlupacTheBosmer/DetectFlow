@@ -10,7 +10,8 @@ import logging
 from detectflow.config import S3_CONFIG
 
 MACOS, LINUX, WINDOWS = (platform.system() == x for x in ['Darwin', 'Linux', 'Windows']) # operating system
-
+NUM_THREADS = min(8, max(1, os.cpu_count() - 1)) # Number of threads to use for parallel processing
+LOGGING_NAME = 'detectflow' # Name of the logger
 
 def is_dir_writeable(dir_path: Union[str, Path]) -> bool:
     """
