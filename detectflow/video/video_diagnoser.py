@@ -316,7 +316,10 @@ class VideoDiagnoser:
         if self._ref_bboxes:
             try:
                 for frame_regions, boxes in zip(self._focus_regions, self._ref_bboxes):
-                    focus_accuracy = BoxManipulator.get_coverage(boxes, frame_regions)
+                    if all([b is not None and isinstance(b, DetectionBoxes) for b in [frame_regions, boxes]]):
+                        focus_accuracy = BoxManipulator.get_coverage(boxes, frame_regions)
+                    else:
+                        focus_accuracy = None
                     focus_accuracies.append(focus_accuracy)
             except Exception as e:
                 logging.error(f"Focus accuracy could not be calculated: Error: {e}")
