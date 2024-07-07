@@ -5,29 +5,10 @@ import sys
 import os
 
 
-def set_environment_variables():
-    """Set the environment variables for PYTHONBASE."""
-    python_base = os.getenv('PYTHONBASE', os.path.expanduser('~/pythonbase'))
-    os.makedirs(python_base, exist_ok=True)
-    os.makedirs(os.path.join(python_base, 'lib', 'python3.10', 'site-packages'), exist_ok=True)
-    os.makedirs(os.path.join(python_base, 'bin'), exist_ok=True)
-
-    os.environ['PYTHONBASE'] = python_base
-    os.environ['PATH'] = os.path.join(python_base, 'bin') + os.pathsep + os.environ.get('PATH', '')
-    os.environ['PYTHONPATH'] = os.path.join(python_base, 'lib', 'python3.10',
-                                            'site-packages') + os.pathsep + os.environ.get('PYTHONPATH', '')
-
-    logging.info(f"PYTHONBASE set to {python_base}")
-    logging.info(f"PATH updated: {os.environ['PATH']}")
-    logging.info(f"PYTHONPATH updated: {os.environ['PYTHONPATH']}")
-
-
 def install_package(package_name, version_constraint=None, no_deps=False):
-    """Install a package using pip into PYTHONBASE."""
-    python_base = os.getenv('PYTHONBASE')
+    """Install a package using pip."""
     package_spec = package_name if version_constraint is None else f"{package_name}{version_constraint}"
-    command = [sys.executable, '-m', 'pip', 'install', '--target',
-               os.path.join(python_base, 'lib', 'python3.10', 'site-packages'), package_spec]
+    command = [sys.executable, '-m', 'pip', 'install', package_spec]
     if no_deps:
         command.append('--no-deps')
     try:
@@ -39,7 +20,7 @@ def install_package(package_name, version_constraint=None, no_deps=False):
 
 
 def uninstall_package(package_name):
-    """Uninstall a package using pip from PYTHONBASE."""
+    """Uninstall a package using pip."""
     command = [sys.executable, '-m', 'pip', 'uninstall', '-y', package_name]
     try:
         subprocess.check_call(command)
@@ -121,12 +102,6 @@ def check_cuda_availability():
 
 def setup_environment():
     """Setup the environment."""
-    set_environment_variables()
-
-    python_base = os.getenv('PYTHONBASE')
-    if not python_base:
-        logging.error("PYTHONBASE environment variable is not set correctly.")
-        sys.exit(1)
 
     # Update pip to the latest version
     try:
@@ -182,5 +157,3 @@ def setup_environment():
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     setup_environment()
-
-    import detectflow
