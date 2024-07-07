@@ -6,7 +6,7 @@ import json
 from typing import Optional, Dict, Any
 from setup_env import setup_environment
 
-#setup_environment()
+setup_environment()
 
 # Now import detectflow package
 from detectflow.utils.config import load_json_config, load_ini_config, load_config, merge_configs
