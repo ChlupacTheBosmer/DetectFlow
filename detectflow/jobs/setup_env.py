@@ -4,6 +4,7 @@ import sys
 import importlib.util
 import importlib.metadata
 import os
+import site
 
 
 def check_and_install_package(package_name):
@@ -63,6 +64,12 @@ def check_cuda_availability():
 
 def setup_environment():
     check_and_install_package('git+https://github.com/ChlupacTheBosmer/DetectFlow.git@main#egg=DetectFlow')
+
+    # Get the site-packages directory
+    site_packages_dir = site.getusersitepackages()
+    os.environ["PATH"] += os.pathsep + site_packages_dir
+    globals()["detectflow"] = __import__("detectflow")
+
     required_packages = get_detectflow_requirements()
     validate_environment(required_packages)
     check_cuda_availability()
