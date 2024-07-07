@@ -6,10 +6,11 @@ from detectflow.validators.validator import Validator
 from detectflow.models import DEFAULT_MODEL_CONFIG as model_defaults
 from detectflow.callbacks.frame_generator_predictions import frame_generator_predict
 from detectflow.utils.extract_data import extract_data_from_video
+from detectflow.utils.name import parse_recording_name
 import logging
-from queue import Queue
+from datetime import datetime
 import os
-from typing import Any
+from typing import Any, Type, Union, Optional, List
 
 
 def diagnose_video_callback(**kwargs):
@@ -167,30 +168,76 @@ def process_video_callback(task: Task,
         valid, invalid = [], []
 
     video_path = None
-    try:
-        for i, video_path in enumerate(valid):
+    for i, video_path in enumerate(valid):
 
+        # Retrieve the s3 path
+        s3_path = next((f for f in files if os.path.basename(f) == os.path.basename(video_path)), None)
+
+        try:
             # Get video_id
-            video_id, _ = os.path.splitext(os.path.basename(video_path))
+            try:
+                name_info = parse_recording_name(video_path)
+                video_id = name_info.get("video_id", None)
+                recording_id = name_info.get("recording_id", None)
+            except Exception as e:
+                logging.error(f"{name} - Error when parsing video name: {e}")
+                video_id, _ = os.path.splitext(os.path.basename(video_path))
+                recording_id = video_id
 
             # Get the status of the video processing
             status = task.get_status(file_name=os.path.basename(files[i]))
-            print("Status: ", status)
-            first_frame_number = status if status and status != -1 else 0
+            first_frame_number = status if status and status >= 0 else 0
             update_info = {"directory": directory, "file": files[i], "status": status}
-            if status == -1:
+            if status < 0:
                 continue
 
             # Initialize its database
-            add_database_to_db_manager(db_manager_control_queue, video_id, os.path.join(scratch, f"{video_id}.db"))
+            add_database_to_db_manager(db_manager_control_queue, recording_id, os.path.join(scratch, f"{recording_id}.db"))
 
             # Add video details data entry to database manager queue
+            video_raw_data = None
             if db_manager_data_queue is not None:  # Assumes that the video has not been processed before
                 if status == 0:
-                    video_data_entry = extract_data_from_video(video_path, frame_skip=100, motion_methods='SOM')
+                    video_data_entry, video_raw_data = extract_data_from_video(video_path,
+                                                                               s3_path=s3_path,
+                                                                               frame_skip=100,
+                                                                               motion_methods='SOM',
+                                                                               return_raw_data=True)
                     db_manager_data_queue.put(video_data_entry)
             else:
                 raise TypeError("Database task queue not defined")
+
+            # Decide whether to process the video,
+            checked_flowering_minutes = False
+            try:
+                if video_raw_data:
+                    flowering_minutes_db = get_flowering_minutes_db(recording_id=recording_id,
+                                                                    folder_path=scratch,
+                                                                    bucket_name='data',
+                                                                    prefix='flowering-minutes',
+                                                                    dataloader=dataloader)
+                    if flowering_minutes_db:
+                        process, flowers_frame_number = should_process_video_from_db(db_path=flowering_minutes_db,
+                                                                                     video_start=video_raw_data.get(
+                                                                                         'start_time'),
+                                                                                     video_end=video_raw_data.get(
+                                                                                         'end_time'),
+                                                                                     fps=video_raw_data.get('fps'))
+                        checked_flowering_minutes = True
+                        if not process:
+                            logging.info(f"{name} - Video {video_id} should not be processed.")
+                            continue
+                        else:
+                            first_frame_number = max(first_frame_number, flowers_frame_number if flowers_frame_number is not None else 0)
+            except Exception as e:
+                logging.error(f"{name} - Error when checking flowering minutes: {e}")
+
+            try:
+                if skip_empty_videos and not checked_flowering_minutes and not should_process_video_from_boxes(video_raw_data.get('reference_boxes')):
+                    logging.info(f"{name} - No consistent flowers detected. Video {video_id} should not be processed.")
+                    continue
+            except Exception as e:
+                logging.error(f"{name} - Error when checking reference boxes: {e}")
 
             callback_config = {
                 'db_manager_data_queue': db_manager_data_queue,
@@ -214,8 +261,8 @@ def process_video_callback(task: Task,
                                        **callback_config)
 
             generator.run(producers=max_producers, consumers=max_consumers, frame_batch_size=frame_batch_size)
-    except Exception as e:
-        logging.error(f"{name} - Error when processing video: {video_path} - {e}")
+        except Exception as e:
+            logging.error(f"{name} - Error when processing video: {video_path} - {e}")
 
     # After processing, delete the files
     try:
@@ -229,3 +276,138 @@ def process_video_callback(task: Task,
     finally:
         del dataloader
 
+
+def get_flowering_minutes_db(recording_id: str, folder_path: str, bucket_name: str, prefix: str, dataloader: Type[Dataloader]):
+    """
+    Fetches the database with the flowering minutes data from s3.
+    Assumes that the database is named according to the naming convention and is located in the correct
+    bucket and directory.
+
+    :param recording_id: Recording ID of the video to fetch the database for (as per the naming convention).
+    :param folder_path: Destination folder to save the database file.
+    :param bucket_name: Name of the s3 bucket to fetch the database from.
+    :param prefix: Prefix of the database file in the s3 bucket.
+    :return: path to the database file.
+    """
+
+    db_path = os.path.join(folder_path, f"{recording_id}_flowering_minutes.db")
+
+    # Check if the database already exists
+    if os.path.exists(db_path):
+        return db_path
+
+    # Attempt to locate the database in the s3 bucket
+    try:
+        online_file = dataloader.locate_file_s3(rf"({prefix}/{recording_id}_flowering_minutes.db|{recording_id}_flowering_minutes.db)", bucket_name, selection_criteria='name')
+    except Exception as e:
+        logging.error(f"Error when fetching the flowering minutes database from s3: {e}")
+        return None
+
+    if online_file is None:
+        logging.error(f"Flowering minutes database not found in the s3 bucket.")
+        return None
+
+    # Download the database from s3
+    try:
+        db_path = dataloader.download_file_s3(*dataloader.parse_s3_path(online_file), local_file_name=db_path)
+    except Exception as e:
+        logging.error(f"Error when downloading the flowering minutes database from s3: {e}")
+        return None
+
+    return db_path
+
+
+def should_process_video_from_db(db_path: str, video_start: datetime, video_end: datetime, fps: Union[int, float]):
+    from detectflow.manipulators.database_manipulator import DatabaseManipulator
+
+    if not video_start or not video_end or not fps:
+        logging.warning(f"Video start, end, or fps not defined.")
+        return True, None
+
+    # Create database manipulator
+    db = DatabaseManipulator(db_path)
+
+    if 'video_data' not in db.get_table_names():
+        logging.error(f"Table 'video_data' not found in the flowering minutes database.")
+        return False, None
+
+    # Query the video_data table for the given video_id
+    try:
+        query = f"""
+        SELECT year, month, day, hour, minute, no_of_flowers
+        FROM video_data
+        ORDER BY year, month, day, hour, minute
+        """
+        rows = db.fetch_all(query)
+    except Exception as e:
+        logging.error(f"Error when querying the flowering minutes database: {e}")
+        return False, None
+
+    try:
+        # Convert rows to datetime and flower count
+        flower_data = []
+        for row in rows:
+            year, month, day, hour, minute, no_of_flowers = row
+            time_point = datetime(year, month, day, hour, minute)
+            flower_data.append((time_point, no_of_flowers))
+    except Exception as e:
+        logging.error(f"Error when parsing the flowering minutes database: {e}")
+        return False, None
+
+    flowers_at_start = None
+    flowers_changed_during_video = False
+    first_flower_frame = None
+    try:
+        # Check the number of flowers at the start of the video
+        for time_point, no_of_flowers in reversed(flower_data):
+            if time_point <= video_start:
+                flowers_at_start = no_of_flowers
+                break
+
+        if flowers_at_start is None or flowers_at_start > 0:
+            # No data available before the video start
+            db.close_connection()
+            return True, 0
+
+        # Check if any time point during the video duration changes the number of flowers to non-zero
+        for time_point, no_of_flowers in flower_data:
+            if video_start < time_point <= video_end:
+                if no_of_flowers > 0:
+                    flowers_changed_during_video = True
+                    first_flower_frame = int((time_point - video_start).total_seconds() * fps)
+                    break
+    except Exception as e:
+        logging.error(f"Error when checking the flowering minutes data: {e}")
+        return False, None
+    finally:
+        db.close_connection()
+
+    if flowers_changed_during_video:
+        return True, first_flower_frame
+    else:
+        return False, None
+
+
+def should_process_video_from_boxes(reference_boxes: Optional[List[Type["DetectionBoxes"]]]):
+
+    from detectflow.manipulators.box_manipulator import BoxManipulator
+
+    try:
+        if not reference_boxes:
+            return True
+
+        if all(box is None for box in reference_boxes):
+            logging.info("All reference boxes are None. No flowers were detected.")
+            return False
+
+        if any(box is not None for box in reference_boxes):
+            reference_boxes = [box for box in reference_boxes if box is not None]
+
+        consistent_boxes = BoxManipulator.find_consistent_boxes(reference_boxes, iou_threshold=0.6, min_frames=3)
+
+        if not consistent_boxes or len(consistent_boxes) == 0:
+            logging.info("No consistent boxes found. No flowers were detected.")
+            return False
+    except Exception as e:
+        logging.error(f"Error when checking the reference boxes: {e}")
+        return True
