@@ -16,5 +16,5 @@ paramiko
 pytz
 jinja2
 git+https://github.com/ChlupacTheBosmer/sahi.git@main#egg=sahi
-opencv_python<=4.8.
+opencv_python<=4.8.0
 numpy>=1.22.2,<1.27
