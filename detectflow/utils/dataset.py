@@ -84,7 +84,7 @@ class Dataset(dict):
                         'detection': True if file_info.get('label_full_path', None) else False,
                         'label_full_path': file_info.get('label_full_path', None),
                         'label_relative_path': file_info.get('label_relative_path', None),
-                        'parent_folder': file_info.get('parent_folder', None),
+                        'parent_folder': file_info.get('parent_folder', None)
                     }
         return dataset
 
@@ -186,6 +186,14 @@ class Dataset(dict):
     def empty(self):
         return sum(1 for v in self.values() if not v['detection'])
 
+    @property
+    def dataset_names(self):
+        return set(v['dataset'] for v in self.values())
+
+    @property
+    def parent_folders(self):
+        return set(v['parent_folder'] for v in self.values())
+
     def class_distribution(self, class_names: dict) -> dict:
         distribution = {class_name: 0 for class_name in class_names.values()}
         for file_info in self.values():
@@ -251,13 +259,16 @@ class Dataset(dict):
                         items.remove(chosen)
             return subset
         else:
-            keys = random.sample(self.keys(), size)
+            keys = random.sample(list(self.keys()), size)
             subset = Dataset()
             for key in keys:
                 subset[key] = self[key]
             return subset
 
-    def reorganize_files(self, base_folder: str, by: str, keep_empty_separated: bool = True,
+    def reorganize_files(self,
+                         base_folder: str,
+                         by: str,
+                         keep_empty_separated: bool = True,
                          regex_pattern: Optional[str] = None):
         def move_file(file_info, dest_folder):
             os.makedirs(dest_folder, exist_ok=True)
@@ -312,7 +323,7 @@ class Dataset(dict):
                 except Exception as e:
                     logging.error(f"Error moving file {file_info['name']}: {e}")
 
-    def split_dataset(self, train_ratio: float, val_ratio: float, test_ratio: float):
+    def split_dataset(self, train_ratio: float, val_ratio: float, test_ratio: float = 0.0):
         """
         Split the dataset into train, val, and test partitions based on given ratios.
 
@@ -346,7 +357,7 @@ class Dataset(dict):
 
         Args:
             destination (str): The directory where the .txt and .yaml files will be saved.
-            classes (dict): Dictionary of class names to be included in the .yaml file.
+            classes (dict): Dictionary of class names to be included in the .yaml file. {0: 'class1', 1: 'class2', ...}
             absolute_paths (bool): Whether to use absolute paths in the .txt files.
             generate_yaml (bool): Whether to generate the dataset .yaml file.
         """
@@ -550,23 +561,31 @@ def process_image_file(image_path: str):
     """
     Processes a single image file to extract its dimensions and associated bounding box data.
     """
-    from detectflow.utils.file import yolo_label_load
+    from detectflow.utils.file import yolo_label_load, open_image
 
     base_name, extension = os.path.splitext(image_path)
     annotation_path = f'{base_name}.txt'
 
-    with Image.open(image_path) as img:
-        img_width, img_height = img.size
+    try:
+        image_array = open_image(image_path)
 
-    bbox_data = []
-    if os.path.exists(annotation_path):
-        bboxes = yolo_label_load(annotation_path)
-        bbox_count = len(bboxes)
-        for bbox in bboxes:
-            _, x_center, y_center, width, height = bbox
-            bbox_data.append((x_center, y_center, width, height))
-    else:
+        with Image.fromarray(image_array) as img:
+            img_width, img_height = img.size
+
+        bbox_data = []
+        if os.path.exists(annotation_path):
+            bboxes = yolo_label_load(annotation_path)
+            bbox_count = len(bboxes)
+            for bbox in bboxes:
+                _, x_center, y_center, width, height = bbox
+                bbox_data.append((x_center, y_center, width, height))
+        else:
+            bbox_count = 0
+    except Exception as e:
+        logging.error(f"Error processing image {image_path}: {e}")
+        img_width, img_height = None, None
         bbox_count = 0
+        bbox_data = []
 
     return (img_width, img_height), bbox_count, bbox_data
 
@@ -629,26 +648,36 @@ class DatasetDiagnoser:
         """
         Processes a single image file to extract its dimensions and associated bounding box data.
         """
-        from detectflow.utils.file import yolo_label_load
+        from detectflow.utils.file import yolo_label_load, open_image
 
         base_name, extension = os.path.splitext(image_path)
         annotation_path = f'{base_name}.txt'
 
-        with Image.open(image_path) as img:
-            img_width, img_height = img.size
-            brightness = np.array(img.convert('L')).mean()
+        try:
+            image_array = open_image(image_path)
 
-        bbox_data = []
-        classes = []
-        if os.path.exists(annotation_path):
-            bboxes = yolo_label_load(annotation_path)
-            bbox_count = len(bboxes)
-            for bbox in bboxes:
-                class_id, x_center, y_center, width, height = bbox
-                bbox_data.append((x_center, y_center, width, height))
-                classes.append(class_id)
-        else:
+            with Image.fromarray(image_array) as img:
+                img_width, img_height = img.size
+                brightness = np.array(img.convert('L')).mean()
+
+            bbox_data = []
+            classes = []
+            if os.path.exists(annotation_path):
+                bboxes = yolo_label_load(annotation_path)
+                bbox_count = len(bboxes)
+                for bbox in bboxes:
+                    class_id, x_center, y_center, width, height = bbox
+                    bbox_data.append((x_center, y_center, width, height))
+                    classes.append(class_id)
+            else:
+                bbox_count = 0
+        except Exception as e:
+            logging.error(f"Error processing image {image_path}: {e}")
+            img_width, img_height = None, None
+            brightness = None
+            classes = []
             bbox_count = 0
+            bbox_data = []
 
         return (img_width, img_height), bbox_count, bbox_data, classes, brightness
 
