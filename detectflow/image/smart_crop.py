@@ -12,6 +12,7 @@ import glob
 from PIL import Image
 import traceback
 from detectflow.handlers.checkpoint_handler import CheckpointHandler
+from detectflow.utils.dataset import Dataset
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from detectflow.utils.file import yolo_label_load
 
@@ -499,73 +500,95 @@ class FrameCropper(CheckpointHandler):
                                    crop_size=crop_size,
                                    **self.config)
 
-            logging.info(f"Created {len(crop_result.crops)} crops for {image_file}")
+            if not crop_result:
+                logging.warning(f"No crop result created for {image_file}")
+            else:
+                logging.info(f"Created {len(crop_result.crops)} crops for {image_file}")
 
-            for idx, crop in enumerate(crop_result.crops):
+                for idx, crop in enumerate(crop_result.crops):
 
-                # Take boxes and add dummy cls and probs
-                boxes = crop_result.annotations[idx]
-                if isinstance(boxes, DetectionBoxes):
-                    updated_boxes = np.hstack((boxes.data, np.zeros((boxes.data.shape[0], 2))))
-                    boxes.data = updated_boxes
-                result = DetectionResults(orig_img=crop, boxes=boxes)
+                    # Take boxes and add dummy cls and probs
+                    boxes = crop_result.annotations[idx]
+                    if isinstance(boxes, DetectionBoxes):
+                        updated_boxes = np.hstack((boxes.data, np.zeros((boxes.data.shape[0], 2))))
+                        boxes.data = updated_boxes
+                    result = DetectionResults(orig_img=crop, boxes=boxes)
 
-                # Assign attribute to results for correct naming convention
-                result.save_dir = output_folder
-                try:
-                    parts = os.path.basename(image_file).split(".")[0].split("_")
-                    result.source_name = f"{'_'.join(parts[:-1])}_{idx}"
-                    result.frame_number = parts[-1]
-                except Exception as e:
-                    result.source_name = f"{os.path.basename(image_file).split('.')[0]}_{idx}"
-                    result.frame_number = idx
+                    # Assign attribute to results for correct naming convention
+                    result.save_dir = output_folder
+                    try:
+                        parts = os.path.basename(image_file).split(".")[0].split("_")
+                        result.source_name = f"{'_'.join(parts[:-1])}_{idx}"
+                        result.frame_number = parts[-1]
+                    except Exception as e:
+                        logging.error(f"Failed to assign source name: {image_file}")
+                        result.source_name = f"{os.path.basename(image_file).split('.')[0]}_{idx}"
+                        result.frame_number = idx
 
-                # Save the result
-                result.save(save_txt=True, extension=extension_out)
+                    # Save the result
+                    result.save(save_txt=True, extension=extension_out)
 
-            # Update checkpoint after successfully processing the image
-            self.update_checkpoint(last_processed_file=image_file)
+                # Update checkpoint after successfully processing the image
+                if len(crop_result.crops) > 0:
+                    self.update_checkpoint(**{image_file: 1})
         except Exception as e:
             logging.error(f"ERROR: {e} {image_file}, {detection_boxes}")
             traceback.print_exc()
 
-    def process_folder(self, input_folder: str, output_folder: str, crop_size: Tuple[int, int] = (640, 640),
-                       max_workers: int = 4, extension_in: str = '.png', extension_out: str = '.jpg'):
+    def run(self, source: Union[str, Dataset], output_folder: str, crop_size: Tuple[int, int] = (640, 640),
+            max_workers: int = 4, extension_in: str = '.png', extension_out: str = '.jpg'):
         """
-        Process a folder of images, crop them based on the bounding boxes from corresponding .txt files,
-        and save the results to a new folder.
+        Process images from a source, which can be either a folder path or a Dataset object, crop the images based
+        on the bounding boxes from corresponding .txt files, and save the results to a new folder.
         """
         os.makedirs(output_folder, exist_ok=True)
-        image_files = glob.glob(os.path.join(input_folder, '**', f'*{extension_in}'), recursive=True)
 
-        # Load checkpoint to resume processing
-        last_processed_file = self.get_checkpoint_data('last_processed_file', None)
-        start_processing = False if last_processed_file else True
+        # Determine if source is a folder path or Dataset object
+        if isinstance(source, str):
+            image_files = glob.glob(os.path.join(source, '**', f'*{extension_in}'), recursive=True)
+        elif isinstance(source, Dataset):
+            image_files = [file_info['full_path'] for file_info in source.values()]
+        else:
+            raise ValueError("Source must be a folder path (str) or Dataset object")
 
-        if max_workers == 1:
-            for image_file in image_files:
-                if not start_processing:
-                    if image_file == last_processed_file:
-                        start_processing = True
-                    continue
+        # Initialize or load the checkpoint data
+        self.initialize_checkpoint_data(image_files)
+
+        def process_file(image_file):
+            self.process_image(image_file, output_folder, crop_size, extension_in, extension_out)
+
+        def process_files(files):
+            for image_file in files:
+                if self.get_checkpoint_data(image_file, 0) == 1:
+                    continue  # Skip already processed files
 
                 # Process the file without threading
-                self.process_image(image_file, output_folder, crop_size, extension_in, extension_out)
+                process_file(image_file)
 
+        if max_workers == 1:
+            process_files(image_files)
         else:
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = []
-                for image_file in image_files:
-                    if not start_processing:
-                        if image_file == last_processed_file:
-                            start_processing = True
-                        continue
-
-                    futures.append(executor.submit(self.process_image, image_file, output_folder, crop_size, extension_in, extension_out))
+                futures = [executor.submit(process_file, image_file) for image_file in image_files if self.get_checkpoint_data(image_file, 0) == 0]
 
                 for future in as_completed(futures):
                     try:
                         future.result()  # Get the result to raise any exceptions
                     except Exception as e:
                         logging.info(f"Exception occurred during processing: {e}")
+
+                if all(value == 1 for value in self.checkpoint_data.values()):
+                    logging.info("All images have been processed. Removing checkpoint.")
+                    self.remove_checkpoint()
+
+    def initialize_checkpoint_data(self, image_files):
+        """
+        Initialize the checkpoint data with the image files.
+        """
+        for image_file in image_files:
+            if image_file not in self.checkpoint_data:
+                self.update_checkpoint(**{image_file: 0})
+
+
+
 
