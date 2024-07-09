@@ -372,7 +372,7 @@ class BoxManipulator:
         done_boxes = []
         rois = []
 
-        while len(remaining_boxes) > 0:
+        while remaining_boxes is not None and len(remaining_boxes) > 0:
 
             logging.debug(f"Analysing boxes: {remaining_boxes.xyxy}")
             logging.debug(f"Done boxes: {done_boxes}")
