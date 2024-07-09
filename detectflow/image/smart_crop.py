@@ -326,6 +326,10 @@ class SmartCrop:
                    multiple_rois: bool = False,
                    allow_slicing: bool = True,
                    evenness_threshold: float = 0.66,
+                   crop_size_multiplier: float = 2.0,
+                   overlap_height_ratio: float = 0.2,
+                   overlap_width_ratio: float = 0.2,
+                   min_area_ratio: float = 0.1,
                    force_slice_empty: bool = True,
                    inspect: bool = False):
         '''
@@ -340,7 +344,7 @@ class SmartCrop:
         same_aspect_ratio = self.image_aspect_ratio == self.crop_aspect_ratio  # is img and crop AR the same?
         all_img_dims_in_expansion_limit = all(img_dim <= limit for img_dim, limit in zip(self.image_size,
                                                                                          max_expansion_limit))  # are all img dims smaller than their corresponding expansion limit of crop?
-        any_img_dim_large = any(img_dim > 2 * crop_dim for img_dim, crop_dim in zip(self.image_size,
+        any_img_dim_large = any(img_dim > crop_size_multiplier * crop_dim for img_dim, crop_dim in zip(self.image_size,
                                                                                     crop_size))  # is any img dim larger than twice the corresponding crop dim?
         all_img_dims_over_crop_size = all(img_dim > 1.3 * crop_dim for img_dim, crop_dim in zip(self.image_size,
                                                                                                 crop_size))  # are all img dims 1.3 times larger than corresponding crop dims?
@@ -348,10 +352,9 @@ class SmartCrop:
         # Boxes conditions
         empty = True if not isinstance(self.annotations, DetectionBoxes) else False
 
-        grid_dim = max(min(self.image_size) // 2, min(crop_size) // 2)  # grid dims based on img or crop dims
+        grid_dim = (3, 2) if self.image_aspect_ratio > 1 else (2, 3)  # grid dims based on img or crop dims
         box_dist_idx = 0 if empty else BoxManipulator.get_boxes_distribution_index(self.annotations.xyxy,
-                                                                                   self.image_size, grid_size=(grid_dim,
-                                                                                                               grid_dim))  # analyse distribution of bboxes
+                                                                                   self.image_size, grid_size=grid_dim)  # analyse distribution of bboxes
         even_dist = box_dist_idx >= evenness_threshold  # are boxes distributed in more than set proportion of grid cells?
 
         box_size_limit = max_expansion_limit if handle_overflow == "expand" else crop_size
@@ -364,9 +367,9 @@ class SmartCrop:
             logging.info("Slicing empty image")
 
             return self.tile(crop_size=crop_size,
-                             overlap_height_ratio=0.2,
-                             overlap_width_ratio=0.2,
-                             min_area_ratio=0.1,
+                             overlap_height_ratio=overlap_height_ratio,
+                             overlap_width_ratio=overlap_width_ratio,
+                             min_area_ratio=min_area_ratio,
                              inspect=inspect)
 
         # If the image has the same aspect ratio as the desired crop and the expansion limit is not exceeded
@@ -405,15 +408,32 @@ class SmartCrop:
             logging.info("Cropping image")
 
             # Then perform standard crop
-            return self.crop(inspect=inspect,
-                             auto_resize=True,
-                             ignore_empty=False,
-                             partial_overlap=partial_overlap,
-                             iou_threshold=iou_threshold,
-                             margin=margin,
-                             exhaustive_search=exhaustive_search,
-                             permutation_limit=permutation_limit,
-                             multiple_rois=multiple_rois)
+            result = self.crop(inspect=inspect,
+                               auto_resize=True,
+                               ignore_empty=False,
+                               partial_overlap=partial_overlap,
+                               iou_threshold=iou_threshold,
+                               margin=margin,
+                               exhaustive_search=exhaustive_search,
+                               permutation_limit=permutation_limit,
+                               multiple_rois=multiple_rois)
+
+            if result.crops is None or len(result.crops) == 0 and allow_slicing:
+                logging.warning("Failed to construct valid crop of the image. Slicing instead.")
+
+                new_image, new_annotations, new_image_size = self.adjust(crop_size=crop_size, inspect=inspect)
+                if new_image is not None:
+                    self.image = new_image
+                    self.annotations = new_annotations
+                    self.image_size = new_image_size
+
+                    return self.tile(crop_size=crop_size,
+                                     overlap_height_ratio=overlap_height_ratio,
+                                     overlap_width_ratio=overlap_width_ratio,
+                                     min_area_ratio=min_area_ratio,
+                                     inspect=inspect)
+            else:
+                return result
 
 
 class FrameCropper(CheckpointHandler):
