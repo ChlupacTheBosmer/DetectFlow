@@ -192,6 +192,29 @@ class Dataset(dict):
 
         return dataset
 
+    @classmethod
+    def from_datasets(cls, datasets: list) -> 'Dataset':
+        """
+        Merge multiple Dataset objects into a single Dataset object.
+
+        Args:
+            datasets (list): List of Dataset objects to merge.
+
+        Returns:
+            Dataset: The merged Dataset object.
+        """
+        merged_dataset = cls()
+        for dataset in datasets:
+            for key, value in dataset.items():
+                if key in merged_dataset:
+                    logging.warning(f"Duplicate key '{key}' found during merge. Overwriting entry.")
+                merged_dataset[key] = value
+
+        # Set the dataset name of the merged dataset
+        merged_dataset.dataset_name = "_".join([ds.dataset_name for ds in datasets if ds.dataset_name])
+
+        return merged_dataset
+
     @property
     def size(self):
         """Return the size of the dataset."""
@@ -343,6 +366,7 @@ class Dataset(dict):
             subset = Dataset()
             for key in keys:
                 subset[key] = self[key]
+            subset.dataset_name = f"{self.dataset_name}_subset"
             return subset
 
     def reorganize_files(self,
@@ -504,6 +528,7 @@ class Dataset(dict):
         """
         from detectflow.utils.file import open_image, yolo_label_load
         from detectflow.utils.inspector import Inspector
+        from detectflow.predict.results import DetectionBoxes
 
         image_path = self[key]['full_path']
         labels_path = self[key]['label_full_path']
@@ -511,6 +536,7 @@ class Dataset(dict):
         image = open_image(image_path)
         if labels_path and os.path.exists(labels_path):
             boxes = yolo_label_load(labels_path)
+            boxes = DetectionBoxes.from_custom_format(boxes, image.shape[:2], "cxywhn")
         else:
             boxes = None
         Inspector.display_frames_with_boxes(image, boxes)
