@@ -195,8 +195,8 @@ class SmartCrop:
 
             # Extract annotations from coco annotations
             annotations = [coco_annotation.bbox for coco_annotation in sliced_image.coco_image.annotations]
-            confs = [float(coco_annotation.category.name) for coco_annotation in sliced_image.coco_image.annotations]
-            classes = [int(coco_annotation.category.id) for coco_annotation in sliced_image.coco_image.annotations]
+            confs = [float(coco_annotation.category_name) for coco_annotation in sliced_image.coco_image.annotations]
+            classes = [int(coco_annotation.category_id) for coco_annotation in sliced_image.coco_image.annotations]
 
             # Stack the lists as columns into a 2D array
             data = np.column_stack((annotations, confs, classes))
@@ -224,7 +224,7 @@ class SmartCrop:
                 ignore_aspect_ratio: bool = False,
                 inspect: bool = False):
         '''
-        Rescale the image to met the requirements
+        Rescale the image to meet the requirements
         '''
 
         logging.info("Running rescale()")
