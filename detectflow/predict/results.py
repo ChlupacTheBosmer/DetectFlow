@@ -16,43 +16,47 @@ from functools import lru_cache
 
 
 def process_box(box, orig_shape, format_flag):
+    from detectflow.manipulators.box_manipulator import BoxManipulator
+
     format_map = {'x': 0, 'y': 1, 'w': 2, 'h': 3, 'p': 4, 'c': 5, 't': 6}
     normalize = 'n' in format_flag
     format_flag = format_flag.replace("n", "")
-    iters = {'x': 0, 'y': 0}
 
     # Initialize new_box with the correct number of elements based on format_flag
-    new_box = [0] * len(format_flag)  # Initialize for all needed values
+    init_multiplier = 4 if all(char not in format_flag for char in 'pct') else 7 if 't' in format_flag else 6 if 'c' in format_flag else 5
+    new_box = [0] * init_multiplier  # Initialize for all needed values
 
-    # Process box based on format_flag
-    for i, char in enumerate(format_flag):
-        if char in 'xy':
-            # Multiple 'x' and 'y', handle 'xyxy' format
-            new_box[format_map[char] + (iters[char] * 2)] = float(box[i])
-            iters[char] = 1
-        elif char in 'wh':  # Handle 'xywh' format
-            x_center, y_center, width, height = box[:4]
-            x_min = x_center - width / 2
-            y_min = y_center - height / 2
-            x_max = x_center + width / 2
-            y_max = y_center + height / 2
-            new_box[:4] = [float(x_min), float(y_min), float(x_max), float(y_max)]
-            break  # Exit loop after assigning xywh
-        elif char in 'cp' or (char == 't' and 't' in format_map):
-            # Assign class, confidence, and track ID directly
-            new_box[format_map[char]] = box[i]
+    if 'xywh' in format_flag:
+        x = format_flag.index('x')
+        y = format_flag.index('y')
+        w = format_flag.index('w')
+        h = format_flag.index('h')
 
-    # Normalize if required
-    if normalize and 'xywh' in format_flag:
-        new_box[0] *= orig_shape[1]  # Normalize x_min
-        new_box[1] *= orig_shape[0]  # Normalize y_min
-        new_box[2] *= orig_shape[1]  # Normalize x_max
-        new_box[3] *= orig_shape[0]  # Normalize y_max
+        xywh = np.array([box[x], box[y], box[w], box[h]])
+        xyxy = BoxManipulator.xywh_to_xyxy(xywh)
 
-    # # Remove unused elements if format flag does not include 't'
-    # if 't' not in format_flag:
-    #     # new_box = new_box[:-1]
-    #     new_box = np.hstack((new_box[:4], new_box[5:]))
+    else:
+        x_indices = [i for i, char in enumerate(format_flag) if char == 'x']
+        y_indices = [i for i, char in enumerate(format_flag) if char == 'y']
+
+        xyxy = np.array([box[x_indices[0]], box[y_indices[0]], box[x_indices[1]], box[y_indices[1]]])
+
+    new_box[:4] = xyxy
+
+    if 'p' in format_flag:
+        new_box[format_map['p']] = float(box[format_flag.index('p')])
+
+    if 'c' in format_flag:
+        new_box[format_map['c']] = int(box[format_flag.index('c')])
+
+    if 't' in format_flag:
+        new_box[format_map['t']] = int(box[format_flag.index('t')])
+
+    if normalize:
+        new_box[0] *= orig_shape[1]
+        new_box[1] *= orig_shape[0]
+        new_box[2] *= orig_shape[1]
+        new_box[3] *= orig_shape[0]
 
     return new_box
 

@@ -20,6 +20,62 @@ class TestDetectionBoxes(unittest.TestCase):
         self.assertEqual(self.detection_boxes.orig_shape, self.orig_shape)
         self.assertTrue(self.detection_boxes.is_track)
 
+    def test_process_boxes(self):
+        from detectflow.predict.results import process_box
+
+        def box_to_str(box):
+            return ", ".join([f"{x:.2f}" for x in box])
+
+        orig_shape = (720, 1280)
+
+        # Example Boxes
+        boxes = {
+            'xywh': [0.5, 0.5, 0.2, 0.2],
+            'cxywh': [1, 0.5, 0.5, 0.2, 0.2],
+            'xywhp': [0.5, 0.5, 0.2, 0.2, 0.9],
+            'cxywhp': [1, 0.5, 0.5, 0.2, 0.2, 0.9],
+            'xyxyc': [0.2, 0.2, 0.8, 0.8, 1],
+            'xyxy': [0.2, 0.2, 0.8, 0.8],
+            'xywhct': [0.5, 0.5, 0.2, 0.2, 1, 2],
+            'xywhpnt': [0.5, 0.5, 0.2, 0.2, 0.9, 2],
+            'xywhnt': [0.5, 0.5, 0.2, 0.2, 2]
+        }
+
+        # Expected Results
+        expected_results = {
+            'xywh': [0.4, 0.4, 0.6, 0.6],
+            'cxywh': [0.4, 0.4, 0.6, 0.6, 0.0, 1],
+            'xywhp': [0.4, 0.4, 0.6, 0.6, 0.9],
+            'cxywhp': [0.4, 0.4, 0.6, 0.6, 0.9, 1],
+            'xyxyc': [0.2, 0.2, 0.8, 0.8, 0.0, 1],
+            'xyxy': [0.2, 0.2, 0.8, 0.8],
+            'xywhct': [0.4, 0.4, 0.6, 0.6, 0.0, 1, 2],
+            'xywhpnt': [512.0, 288.0, 768.0, 432.0, 0.9, 0, 2],
+            'xywhnt': [512.0, 288.0, 768.0, 432.0, 0.0, 0, 2]
+        }
+
+        # Test Cases
+        format_flags = [
+            'xywh', 'cxywh', 'xywhp', 'cxywhp', 'xyxyc', 'xyxy', 'xywhct', 'xywhpnt', 'xywhnt'
+        ]
+
+        # Run tests
+        all_tests_passed = True
+
+        for format_flag in format_flags:
+            box = boxes[format_flag]
+            expected_result = expected_results[format_flag]
+            result = process_box(box, orig_shape, format_flag)
+
+            if np.allclose(result, expected_result):
+                print(f"Test Passed for format_flag: {format_flag}. Result: {box_to_str(result)}")
+            else:
+                print(
+                    f"Test Failed for format_flag: {format_flag}. Result: {box_to_str(result)}, Expected: {box_to_str(expected_result)}")
+                all_tests_passed = False
+
+        self.assertTrue(all_tests_passed)
+
     def test_from_boxes_instance(self):
         from ultralytics.engine.results import Boxes
 
