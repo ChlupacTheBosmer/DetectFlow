@@ -252,6 +252,43 @@ class SmartCrop:
 
         return CropResult([crop], [annotations])
 
+    def adjust(self, crop_size: Tuple[int, int], inspect: bool = False):
+        """
+        Adjust the image to fit the crop size while maintaining the aspect ratio.
+
+        Args:
+            crop_size (Tuple[int, int]): The target crop size.
+            inspect (bool): If True, display the adjusted image.
+
+        Returns:
+            Tuple[np.ndarray, Optional[DetectionBoxes], Tuple[int, int]]: The adjusted image, annotations, and new image size.
+        """
+        logging.info("Running adjust()")
+        try:
+            factor = max(self.image_size[0] / crop_size[0], self.image_size[1] / crop_size[1])
+            if factor > 1:
+                target_size = (int(self.image_size[0] * factor), int(self.image_size[1] * factor))
+                resized_image = FrameManipulator.resize_frames(self.image, target_size)[0]
+                if resized_image is not None:
+                    new_image_size = resized_image.shape[:2][::-1]
+                    if self.annotations is not None:
+                        adjusted_annotations = BoxManipulator.adjust_boxes_for_resize(self.annotations,
+                                                                                      orig_shape=self.image_size,
+                                                                                      new_shape=target_size)
+                    else:
+                        adjusted_annotations = None
+                else:
+                    raise RuntimeError("Failed to resize image")
+
+                if inspect:
+                    Inspector.display_frames_with_boxes([resized_image], [adjusted_annotations])
+
+                return resized_image, adjusted_annotations, new_image_size
+        except Exception as e:
+            logging.error(f"Failed to adjust image: {e}")
+            return None, None, None
+
+
     def subcrop(self,
                 aspect_ratio: Union[int, float] = 1,
                 inspect: bool = False):
