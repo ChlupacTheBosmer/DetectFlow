@@ -12,6 +12,8 @@ import matplotlib.pyplot as plt
 from concurrent.futures import ThreadPoolExecutor
 from PIL import Image
 from multiprocessing import Pool, cpu_count
+from collections import defaultdict
+from tqdm import tqdm
 
 
 def get_file_data(root: str, folder: str, file: str) -> Dict[str, Union[str, None]]:
@@ -27,8 +29,8 @@ def get_file_data(root: str, folder: str, file: str) -> Dict[str, Union[str, Non
     parent_folder = os.path.basename(folder)
 
     # Label file
-    label_file = os.path.splitext(full_path)[0] + '.txt'
-    label_path = os.path.relpath(label_file, root) if os.path.exists(label_file) and is_yolo_label(label_file) else None
+    label_file = os.path.splitext(full_path)[0] + '.txt' if os.path.isfile(os.path.splitext(full_path)[0] + '.txt') else None
+    label_path = os.path.relpath(label_file, root) if label_file and os.path.exists(label_file) and is_yolo_label(label_file) else None
 
     return {'full_path': full_path, 'relative_path': relative_path, 'label_full_path': label_file, 'label_relative_path': label_path, 'parent_folder': parent_folder}
 
@@ -54,6 +56,15 @@ def get_relative_path(full_path, folder_name):
 
 
 class Dataset(dict):
+    """
+    A dictionary-like object to store information about a dataset. The keys are the file names and the values are
+    dictionaries containing information about the files. Methods are provided to load the dataset from a folder,
+    a database, or YOLO .txt files. The dataset can be reorganized based on various criteria, and subsets can be
+    extracted based on partition names or custom keys. The dataset can be balanced by class, and annotations can be
+    exported in different formats. The dataset can be visualized, and basic statistics can be calculated.
+
+    For initialization, use the 'from_folder', 'from_database', or 'from_yolo_txt' class methods.
+    """
     def __init__(self):
         super().__init__()
 
@@ -62,7 +73,18 @@ class Dataset(dict):
     @classmethod
     def from_folder(cls, folder_path: str) -> 'Dataset':
         """
-        Initialize the Dataset from a folder structure.
+        Initialize the Dataset from a folder structure. The root folder name is considered the dataset name.
+        The dataset name can be changed by assigning a value to the 'dataset_name' attribute. The 'dataset'
+        key values are populated by the partition name, defaults to 'train'. If the folder structure contains
+        'train', 'val', 'test' folders, the 'dataset' key values are set accordingly. The 'parent_folder' key
+        values are set to the name of the parent folder of the image. This will remain independent of the partition
+        ('dataset') key values in subsequent modifications, until reorganizing the dataset.
+
+        Args:
+            folder_path (str): Path to the folder containing the dataset.
+
+        Returns:
+            Dataset: The Dataset object.
         """
         dataset = cls()
 
@@ -78,7 +100,7 @@ class Dataset(dict):
 
                     dataset[file] = {
                         'name': file,
-                        'dataset': 'train',
+                        'dataset': 'train' if file_info.get('parent_folder', None) not in ['train', 'val', 'test'] else file_info.get('parent_folder', None),  # 'train', 'val', 'test'
                         'full_path': file_info.get('full_path', None),
                         'relative_path': file_info.get('relative_path', None),
                         'detection': True if file_info.get('label_full_path', None) else False,
@@ -89,17 +111,25 @@ class Dataset(dict):
         return dataset
 
     @classmethod
-    def from_database(cls, db_path: str) -> 'Dataset':
+    def from_database(cls, db_path: str, table_name: str = 'metadata') -> 'Dataset':
         """
         Initialize the Dataset from a SQLite database.
+
+        Args:
+            db_path (str): Path to the SQLite database. Which should have columns: name, dataset, full_path, label_path,
+                           parent_folder.
+            table_name (str): Name of the table in the database.
+
+        Returns:
+            Dataset: The Dataset object.
         """
         dataset = cls()
         manipulator = DatabaseManipulator(db_path)
         try:
-            if 'metadata' in manipulator.get_table_names():
-                data = manipulator.fetch_all("SELECT name, dataset, full_path, label_path, parent_folder FROM metadata")
+            if table_name in manipulator.get_table_names():
+                data = manipulator.fetch_all(f"SELECT name, dataset, full_path, label_path, parent_folder FROM {table_name}")
             else:
-                raise AttributeError(f"Table 'metadata' not found in database {db_path}.")
+                raise AttributeError(f"Table {table_name} not found in database {db_path}.")
         except Exception as e:
             logging.error(f"Error loading database {db_path}: {e}")
             return dataset
@@ -125,6 +155,15 @@ class Dataset(dict):
                       test_file: Optional[str] = None, path_to_root: str = None) -> 'Dataset':
         """
         Initialize the Dataset from YOLO .txt files containing paths to images.
+
+        Args:
+            train_file (str): Path to the .txt file containing paths to training images.
+            val_file (str): Path to the .txt file containing paths to validation images.
+            test_file (str): Path to the .txt file containing paths to test images.
+            path_to_root (str): Path to the root directory containing the images.
+
+        Returns:
+            Dataset: The Dataset object.
         """
         dataset = cls()
 
@@ -155,23 +194,49 @@ class Dataset(dict):
 
     @property
     def size(self):
+        """Return the size of the dataset."""
         return len(self)
 
     @property
     def train_size(self):
+        """Return the size of the training partition."""
         return sum(1 for v in self.values() if v['dataset'] == 'train')
 
     @property
     def val_size(self):
+        """Return the size of the validation partition."""
         return sum(1 for v in self.values() if v['dataset'] == 'val')
 
     @property
     def test_size(self):
+        """Return the size of the test partition."""
         return sum(1 for v in self.values() if v['dataset'] == 'test')
 
+    def get_partition_size(self, partition_name: str) -> int:
+        """
+        Get the size of a specific partition.
+
+        Args:
+            partition_name (str): The name of the partition ('train', 'val', 'test') or any custom value assigned
+                                  to the 'dataset' key of the images.
+
+        Returns:
+            int: The size of the partition.
+        """
+        return sum(1 for v in self.values() if v['dataset'] == partition_name)
+
     def get_subset(self, subset_type: str) -> 'Dataset':
-        if subset_type not in ['train', 'val', 'test']:
-            raise ValueError("subset_type must be 'train', 'val', or 'test'")
+        """
+        Get a subset of the dataset based on the partition name.
+        Args:
+            subset_type (str): The name of the partition to extract ('train', 'val', 'test') or
+                               custom key assigned to the 'dataset' key of images.
+
+        Returns:
+            Dataset: The subset of the dataset.
+        """
+        if subset_type not in self.dataset_names:
+            raise ValueError("subset_type must be a valid partition name ('train', 'val', 'test') or custom.")
         subset = Dataset()
         for key, value in self.items():
             if value['dataset'] == subset_type:
@@ -195,6 +260,15 @@ class Dataset(dict):
         return set(v['parent_folder'] for v in self.values())
 
     def class_distribution(self, class_names: dict) -> dict:
+        """
+        Get the distribution of classes in the dataset.
+
+        Args:
+            class_names (dict): Dictionary of class names. {0: 'class1', 1: 'class2', ...}
+
+        Returns:
+            dict: Distribution of classes in the dataset.
+        """
         distribution = {class_name: 0 for class_name in class_names.values()}
         for file_info in self.values():
             try:
@@ -209,7 +283,7 @@ class Dataset(dict):
         return distribution
 
     @property
-    def with_detection_boxes(self):
+    def with_detection_boxes(self) -> 'Dataset':
         """
         Returns the dataset with added 'detection_boxes' key for each entry.
         """
@@ -241,7 +315,13 @@ class Dataset(dict):
         """
         Generate a random subset of the dataset.
 
-        by: str valid keys of the file dictionary
+        Args:
+            size: int - The size of the subset.
+            balanced: bool - Whether to balance the subset by the specified key.
+            by: str - Valid keys of the file dictionary by which to balance the subset.
+
+        Returns:
+            Dataset - The random subset of the dataset.
         """
         if by in self.values():
             raise KeyError(f"Key '{by}' not found in dataset values.")
@@ -270,6 +350,20 @@ class Dataset(dict):
                          by: str,
                          keep_empty_separated: bool = True,
                          regex_pattern: Optional[str] = None):
+        """
+        Reorganizes files within the dataset based on specified criteria.
+
+        This method moves image and label files into new directory structures within the base folder
+        according to the criteria specified by the 'by' parameter. It supports organizing by whether
+        images have detections ('empty_object'), by dataset type ('train', 'val', 'test'), or based on
+        a regex pattern matching the file names.
+
+        Args:
+            base_folder (str): The base directory where the reorganized files will be stored.
+            by (str): The criterion for reorganization. Can be 'empty_object', 'dataset_type', or 'regex'.
+            keep_empty_separated (bool): Whether to keep empty and object images separated when organizing by 'empty_object' or 'regex'.
+            regex_pattern (str): The regex pattern to match file names when organizing by 'regex'.
+        """
         def move_file(file_info, dest_folder):
             os.makedirs(dest_folder, exist_ok=True)
             new_full_path = os.path.join(dest_folder, file_info['name'])
@@ -296,6 +390,8 @@ class Dataset(dict):
         if by == 'empty_object':
             empty_folder = os.path.join(base_folder, 'empty')
             object_folder = os.path.join(base_folder, 'object')
+            os.makedirs(empty_folder, exist_ok=True)
+            os.makedirs(object_folder, exist_ok=True)
             for file_info in self.values():
                 try:
                     if file_info['detection']:
@@ -307,6 +403,7 @@ class Dataset(dict):
         elif by == 'dataset_type':
             for file_info in self.values():
                 dest_folder = os.path.join(base_folder, file_info['dataset'])
+                os.makedirs(dest_folder, exist_ok=True)
                 try:
                     move_files_within_folder(dest_folder, file_info)
                 except Exception as e:
@@ -314,6 +411,8 @@ class Dataset(dict):
         elif by == 'regex' and regex_pattern is not None:
             match_folder = os.path.join(base_folder, 'match')
             other_folder = os.path.join(base_folder, 'other')
+            os.makedirs(match_folder, exist_ok=True)
+            os.makedirs(other_folder, exist_ok=True)
             for key, file_info in self.items():
                 try:
                     if re.match(regex_pattern, key):
@@ -438,12 +537,15 @@ class Dataset(dict):
         print(f"Corrupted images: {len(corrupted_images)}")
         return missing_labels, corrupted_images
 
-    def balance_by_class(self, target_size: int):
+    def balance_by_class(self, target_size: int) -> 'Dataset':
         """
         Balance the dataset by class to the specified target size.
 
         Args:
             target_size (int): Target size for each class.
+
+        Returns:
+            Dataset: The balanced dataset.
         """
         from collections import defaultdict
 
@@ -590,6 +692,21 @@ def process_image_file(image_path: str):
     return (img_width, img_height), bbox_count, bbox_data
 
 
+def chunk_data(data, num_chunks):
+    """
+    Splits data into chunks.
+    """
+    avg = len(data) / float(num_chunks)
+    chunks = []
+    last = 0.0
+
+    while last < len(data):
+        chunks.append(data[int(last):int(last + avg)])
+        last += avg
+
+    return chunks
+
+
 def update_heatmap_chunk(bbox_chunk, heatmap_size):
     """
     Updates a heatmap chunk with the given bounding box data.
@@ -609,9 +726,6 @@ def update_heatmap_chunk(bbox_chunk, heatmap_size):
         heatmap[y_min:y_max, x_min:x_max] += 1
     return heatmap
 
-
-from collections import defaultdict
-from tqdm import tqdm
 
 class DatasetDiagnoser:
     def __init__(self, dataset):
@@ -702,15 +816,23 @@ class DatasetDiagnoser:
         plt.title('Histogram of Bounding Box Counts per Image')
         plt.show()
 
-    def plot_bbox_heatmap(self, bbox_positions, image_sizes, image_size=(640, 640)):
+    def plot_bbox_heatmap(self, bbox_positions, image_sizes, bbox_counts, image_size=(640, 640)):
         """
         Plots a heatmap representing the coverage of bounding boxes across images.
         """
+        # Flatten image_sizes to match bbox_positions
+        flattened_image_sizes = []
+        for i, (img_w, img_h) in enumerate(image_sizes):
+            count = bbox_counts[i]  # bbox_counts[i] gives the count of bboxes for image i
+            flattened_image_sizes.extend([(img_w, img_h)] * count)
+
+        bbox_img_pairs = list(zip(bbox_positions, flattened_image_sizes))
+
         num_cores = cpu_count()
-        bbox_chunks = np.array_split(list(zip(bbox_positions, image_sizes)), num_cores)
+        bbox_chunks = chunk_data(bbox_img_pairs, num_cores)
 
         with Pool(num_cores) as pool:
-            heatmaps = pool.starmap(update_heatmap_chunk, [(chunk, image_size, image_size) for chunk in bbox_chunks])
+            heatmaps = pool.starmap(update_heatmap_chunk, [(chunk, image_size) for chunk in bbox_chunks])
 
         combined_heatmap = np.sum(heatmaps, axis=0)
 
