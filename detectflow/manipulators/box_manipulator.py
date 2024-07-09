@@ -808,13 +808,14 @@ class BoxManipulator:
         # Calculate Intersection over Union (IoU)
         return inter_area / union_area if union_area > 0 else 0
 
+
     @staticmethod
-    def get_boxes_distribution_index(bboxes, img_size, grid_size=(320, 320)):
+    def get_boxes_distribution_index(bboxes, img_size, grid_size=(3, 3)):
         """
         Analyze the distribution of bounding boxes across an image using a grid.
 
         Parameters:
-        - bboxes (DetectionBoxes, np.ndarray): Array of bounding boxes in xyxy format.
+        - bboxes (np.ndarray): Array of bounding boxes in xyxy format.
         - img_size (tuple): Size of the image as (width, height).
         - grid_size (tuple): Dimensions of the grid (number of columns, number of rows).
 
@@ -827,10 +828,10 @@ class BoxManipulator:
         # Mark grid cells that have any overlap with any bbox
         for bbox in bboxes:
             # Calculate the range of grid cells the bbox might overlap
-            start_col = int(bbox[0] / grid_width)
-            end_col = int(np.ceil(bbox[2] / grid_width)) - 1
-            start_row = int(bbox[1] / grid_height)
-            end_row = int(np.ceil(bbox[3] / grid_height)) - 1
+            start_col = max(int(bbox[0] / grid_width), 0)
+            end_col = min(int(np.ceil(bbox[2] / grid_width)), grid_size[0]) - 1
+            start_row = max(int(bbox[1] / grid_height), 0)
+            end_row = min(int(np.ceil(bbox[3] / grid_height)), grid_size[1]) - 1
 
             occupancy_grid[start_row:end_row + 1, start_col:end_col + 1] = True
 
