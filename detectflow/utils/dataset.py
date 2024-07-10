@@ -89,7 +89,7 @@ class Dataset(dict):
         dataset = cls()
 
         # Root folder
-        dataset.dataset_name = os.path.dirname(folder_path)
+        dataset.dataset_name = os.path.basename(os.path.dirname(folder_path))
 
         for root, _, files in os.walk(folder_path):
 
@@ -493,7 +493,7 @@ class Dataset(dict):
 
         data_files = {'train': [], 'val': [], 'test': []}
 
-        dataset_root = os.path.abspath(os.path.join(destination, os.pardir))
+        dataset_root = os.path.abspath(destination)
 
         for file_info in self.values():
             if file_info['dataset'] in data_files:
@@ -509,9 +509,9 @@ class Dataset(dict):
 
         if generate_yaml:
             yaml_content = {
-                'path': os.path.relpath(dataset_root, destination) if not absolute_paths else dataset_root,
-                'train': os.path.relpath(txt_files['train'], destination) if not absolute_paths else txt_files['train'],
-                'val': os.path.relpath(txt_files['val'], destination) if not absolute_paths else txt_files['val'],
+                'path': dataset_root,
+                'train': os.path.relpath(txt_files['train'], destination),
+                'val': os.path.relpath(txt_files['val'], destination),
                 'test': os.path.relpath(txt_files['test'], destination) if data_files['test'] else None,
                 'names': classes
             }
