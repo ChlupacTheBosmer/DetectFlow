@@ -352,7 +352,8 @@ def main(args):
     if args.workdir is None:
 
         # Get current directory (from where the script is being run) - this should be the homedir
-        current_directory = "/storage/brno2/home/USER/"
+        user = os.getenv('USER')
+        current_directory = f"/storage/brno2/home/{user}/"
 
     else:
 
@@ -447,8 +448,7 @@ def main(args):
                                   cos_lr=args.cos_lr,
                                   optimizer=args.optimizer,
                                   single_cls=single_cls,
-                                  save_dir=save_dir
-                                  )
+                                  save_dir=save_dir)
             task.close()
         except:
             raise
@@ -495,7 +495,7 @@ if __name__ == "__main__":
 
 
     '''
-    This script will run a YOLO8 training and use the arguments passed to it. Ready for use in Metacentrum Batch script.
+    This script will run a YOLO8 training and use the arguments passed to it. Ready for use in metacentrum batch script.
     '''
 
     parser = argparse.ArgumentParser(description='This script will train a YOLOv8 model.')
@@ -513,7 +513,7 @@ if __name__ == "__main__":
     parser.add_argument('--model', type=str, default="yolov8n.pt", help='Name or path to a pretrained model')
     parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train the model for')
     parser.add_argument('--batch_size', type=int, default=0, help='Manual override of batch_size, -1 for YOLO AutoBatch')
-    parser.add_argument('--autobatch_method', type=int, default=0,
+    parser.add_argument('--autobatch_method', type=int, default=1,
                         help='Method to use for gpu memory detection: 0 - dynamic with torch, 1 - passive from dictionary')
     parser.add_argument('--workers', type=int, default=None, help='Manual override of number of workers')
     parser.add_argument('--lr0', type=float, default=0.001, help='Initial learning rate')
