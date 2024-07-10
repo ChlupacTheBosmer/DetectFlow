@@ -1,0 +1,114 @@
+Bootstrap: localimage
+From: /cvmfs/singularity.metacentrum.cz/NGC/PyTorch:24.04-py3.SIF
+
+%environment
+    export TZ=Europe/Prague
+
+%post
+    # Set timezone
+    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+    # Remove existing OpenCV
+    pip uninstall -y opencv
+    rm -rf /usr/local/lib/python3.10/dist-packages/cv2
+
+    # Update and install necessary packages
+    DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -q -y \
+        libgl1-mesa-glx \
+        libxcb1 \
+        libx11-6 \
+        python3-openslide \
+        ca-certificates \
+        python3-dev \
+        git \
+        wget \
+        sudo \
+        ninja-build
+
+    # Install ultralytics and ray[tune]
+    pip3 install ultralytics "ray[tune]"
+
+    # Install clearml
+    pip3 install clearml
+
+    # Install additional Python packages
+    pip3 install \
+        boto3==1.34.103 \
+        decord==0.6.0 \
+        hachoir==3.3.0 \
+        imageio==2.34.1 \
+        imageio-ffmpeg==0.4.9 \
+        matplotlib==3.8.4 \
+        opencv_contrib_python==4.9.0.80 \
+        pandas>2.0.0 \
+        Pillow>=9.0.0 \
+        scikit_learn>=1.4.0 \
+        scipy \
+        setuptools \
+        python-dateutil \
+        paramiko \
+        pytz \
+        jinja2 \
+        numpy>=1.22.2,<1.27 \
+        opencv_python==4.8.0.76
+
+%labels
+    Author Petr Chlup
+    Version 1.0
+
+%help
+    This container is based on /cvmfs/singularity.metacentrum.cz/NGC/PyTorch:24.04-py3.SIF.
+    Info here: https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/rel-24-04.html
+    It includes various Python packages for machine learning, image processing, and data analysis.
+    The following custom Python packages are installed and updated on every run:
+      - sahi: https://github.com/ChlupacTheBosmer/sahi.git
+      - DetectFlow: https://github.com/ChlupacTheBosmer/DetectFlow.git
+    To run the container, use:
+      singularity run my_new_image.sif
+    You can also pass additional commands or scripts to the container.
+    For example:
+      singularity run my_new_image.sif python your_script.py
+
+%test
+    # Test script to verify the installation of all necessary packages
+    echo "Running test script to verify installations..."
+
+    python3 -c "import boto3
+import decord
+import hachoir
+import imageio
+import imageio_ffmpeg
+import matplotlib
+import cv2
+import pandas
+import PIL
+import sklearn
+import scipy
+import setuptools
+import ultralytics
+import ray
+import clearml
+import dateutil
+import paramiko
+import pytz
+import jinja2
+import numpy
+import sahi
+
+print('All packages imported successfully.')
+"
+    echo "Test script completed successfully."
+
+%runscript
+    echo "Updating DetectFlow..."
+
+    # Ensure the custom Python packages from GitHub are always up-to-date
+    pip3 install --upgrade git+https://github.com/ChlupacTheBosmer/sahi.git@main#egg=sahi
+    pip3 install --upgrade git+https://github.com/ChlupacTheBosmer/DetectFlow.git@main#egg=DetectFlow
+
+    # Start your main application or enter the shell
+    if [ "$#" -eq 0 ]; then
+        exec /bin/bash
+    else
+        exec "$@"
+    fi
