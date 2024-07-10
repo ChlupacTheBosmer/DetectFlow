@@ -5,9 +5,6 @@ import traceback
 import sys
 import json
 from typing import Optional, Dict, Any
-from setup_env import setup_environment
-
-#setup_environment()
 
 # Now import detectflow package
 from detectflow.process.scheduler import Scheduler

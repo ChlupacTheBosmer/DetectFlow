@@ -4,10 +4,7 @@ import os
 import sys
 import traceback
 from typing import Optional, Dict, Any
-from setup_env import setup_environment
 import multiprocessing
-
-setup_environment()
 
 # Now import detectflow package
 from detectflow.utils.config import load_config, merge_configs
