@@ -28,7 +28,7 @@ def get_gpu_memory_cuda():
     else:
         raise RuntimeError("No GPU found. Make sure to run this on a machine with a GPU.")
 
-def calculate_batch_size(memory_gb, divisor=0.2):
+def calculate_batch_size(memory_gb, divisor=0.4):
     """
     Calculates the batch size for training based on the GPU memory.
 
@@ -401,9 +401,15 @@ def main(args):
     if args.batch_size == 0:
         batch_size = assign_batch_size(args.autobatch_method, args.hostname)
         if batch_size == 0:
-            batch_size = 64
+            batch_size = 32
     else:
         batch_size = args.batch_size
+
+    # Clear cuda cache
+    try:
+        torch.cuda.empty_cache()
+    except Exception as e:
+        print(f"Unable to clear CUDA cache: {e}")
 
     if args.resume == 0:
 
