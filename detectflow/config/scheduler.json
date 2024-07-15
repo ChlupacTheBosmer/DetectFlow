@@ -13,7 +13,7 @@
     "memory": 32,
     "scratch_size": 2,
     "user_email": "EMAIL",
-    "username": "USER",
-    "remote_host": "HOST",
-    "ssh_password": "PASSWORD"
+    "username": "",
+    "remote_host": "",
+    "ssh_password": ""
 }
