@@ -924,3 +924,130 @@ class DatasetDiagnoser:
         else:
             print("No class imbalance detected.")
 
+
+# import os
+# import shutil
+# import re
+# from collections import defaultdict
+# from typing import Dict, Optional
+
+class DatasetSlicer:
+    def __init__(self, source: Optional[str] = None, file_dict: Optional[Dict[str, Dict[str, str]]] = None):
+        self.source = source
+        self.file_dict = file_dict
+        self.pattern = r'^[^_]+_[^_]+_[^_]+_[^_]+_[^_]+_[^_]+_[^_]+\.(png)$'
+
+    def is_valid_filename(self, filename):
+        return re.match(self.pattern, filename)
+
+    def extract_confidence(self, folder_name):
+        try:
+            return float(folder_name)
+        except ValueError:
+            return -1
+
+    def find_all_frames(self):
+        image_files = defaultdict(list)
+        for root, _, files in os.walk(self.source):
+            for file in files:
+                if self.is_valid_filename(file):
+                    recording_id = '_'.join(file.split('_')[:3])
+                    confidence = self.extract_confidence(os.path.basename(root))
+                    full_path = os.path.join(root, file)
+                    label_full_path = full_path.replace('.png', '.txt')
+                    label_full_path = label_full_path if os.path.exists(label_full_path) else None
+                    image_files[recording_id].append((confidence, full_path, label_full_path))
+        return image_files
+
+    def find_frames_from_dict(self):
+        image_files = defaultdict(list)
+        for filename, paths in self.file_dict.items():
+            if self.is_valid_filename(filename + '.png'):
+                recording_id = '_'.join(filename.split('_')[:3])
+                confidence = self.extract_confidence(os.path.basename(os.path.dirname(paths['full_path'])))
+                image_files[recording_id].append((confidence, paths['full_path'], paths['label_full_path']))
+        return image_files
+
+    def slice(self):
+        if self.source:
+            image_files = self.find_all_frames()
+        elif self.file_dict:
+            image_files = self.find_frames_from_dict()
+        else:
+            raise ValueError("Either source folder or file_dict must be provided")
+
+        max_slices = max(len(frames) for frames in image_files.values())
+        logging.info(f"Found {max_slices} slices in the dataset")
+
+        slices = []
+        for i in range(max_slices):
+            slice_dict = Dataset()
+            for recording_id, frames in image_files.items():
+                if frames:
+                    # If all confidence scores are -1, simply take the first frame
+                    best_frame = max(frames, key=lambda x: x[0]) if frames[0][0] != -1 else frames[0]
+                    file_name = os.path.basename(best_frame[1]).replace('.png', '')
+                    slice_dict[file_name] = {
+                        'name': file_name,
+                        'dataset': f'slice_{i+1}',  # 'slice_1', 'slice_2', ...
+                        'full_path': best_frame[1],
+                        'relative_path': None,
+                        'detection': best_frame[2] is not None,
+                        'label_full_path': best_frame[2],
+                        'label_relative_path': None,
+                        'parent_folder': None
+                    }
+                    frames.remove(best_frame)
+            slices.append(slice_dict)
+
+        return slices
+
+    def save_slices(self, output_folder):
+        slices = self.slice()
+        updated_slices = []
+        for idx, slice_dict in enumerate(slices):
+            logging.info(f"Saving slice {idx+1}...")
+            slice_folder = os.path.join(output_folder, f'slice_{idx+1}')
+            os.makedirs(slice_folder, exist_ok=True)
+            for filename, paths in slice_dict.items():
+                try:
+                    # Determine folder
+                    slice_subfolder = os.path.join(slice_folder, 'empty' if paths['label_full_path'] is None else 'object')
+
+                    # Create subfolder for empty and object images
+                    os.makedirs(slice_subfolder, exist_ok=True)
+
+                    # Copy the file
+                    shutil.copy(paths['full_path'], os.path.join(slice_subfolder, filename + '.png'))
+
+                    # Move the label file if it exists
+                    if paths['label_full_path']:
+                        shutil.copy(paths['label_full_path'], os.path.join(slice_subfolder, filename + '.txt'))
+
+                    # Update slice Dataset object
+                    new_full_path = os.path.join(slice_subfolder, filename + '.png')
+                    new_label_full_path = os.path.join(slice_subfolder, filename + '.txt') if paths[
+                        'label_full_path'] else None
+                    slice_dict[filename]['parent_folder'] = os.path.basename(slice_subfolder)
+                    slice_dict[filename]['full_path'] = new_full_path
+                    slice_dict[filename]['relative_path'] = os.path.relpath(new_full_path, slice_folder)
+                    slice_dict[filename]['label_full_path'] = new_label_full_path
+                    slice_dict[filename]['label_relative_path'] = os.path.relpath(new_label_full_path,
+                                                                                  slice_folder) if new_label_full_path else None
+                except Exception as e:
+                    logging.error(f"Error processing file {filename}: {e}")
+
+            updated_slices.append(slice_dict)
+
+        return updated_slices
+
+
+# if __name__ == '__main__':
+    # dataset = Dataset.from_folder(r"D:\Dílna\Kutění\Python\Frames to label\labeled")
+    # slicer = DatasetSlicer(file_dict=dataset)
+    # slices = slicer.save_slices(r"D:\Dílna\Kutění\Python\Frames to label\slices")
+    # print(slices)
+
+    # slicer = DatasetSlicer(source=r"D:\Dílna\Kutění\Python\Frames to label\labeled")
+    # slices = slicer.save_slices(r"D:\Dílna\Kutění\Python\Frames to label\slices")
+    # print(slices)
