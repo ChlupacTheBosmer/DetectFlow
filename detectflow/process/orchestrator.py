@@ -284,6 +284,11 @@ class Orchestrator(ConfigHandler):
             return checkpoint_data
 
         try:
+            os.makedirs(self.checkpoint_dir, exist_ok=True)
+        except Exception as e:
+            logging.error(f"Checkpoint directory does not exist. Failed to create checkpoint directory: {e}")
+
+        try:
             # Try loading the specified file
             self.checkpoint_data = try_checkpoint_file(self.checkpoint_file)
         except (FileNotFoundError, ValueError, json.JSONDecodeError) as e:
@@ -392,21 +397,23 @@ class Orchestrator(ConfigHandler):
                 json.dump(self.checkpoint_data, file, indent=4)
         except Exception as e:
             logging.error(f"Failed to write checkpoint file: {e}")
-            self._write_fallback_checkpoint()
 
-    def _write_fallback_checkpoint(self):
-        # Attempt to save to fallback dirs
-        for directory in self.fallback_directories:
-            fallback_file = os.path.join(directory, f"{self.task_name}.json")
-            try:
-                with open(fallback_file, 'w') as file:
-                    json.dump(self.checkpoint_data, file, indent=4)
-                    logging.info(f"Checkpoint successfully written to fallback location: {fallback_file}")
-                    return
-            except Exception as e:
-                logging.error(f"Failed to write checkpoint to fallback location {directory}: {e}")
+            # Attempt to save to fallback dirs
+            for directory in self.fallback_directories:
+                fallback_file = os.path.join(directory, f"{self.task_name}.json")
+                try:
+                    with open(fallback_file, 'w') as file:
+                        json.dump(self.checkpoint_data, file, indent=4)
+                        logging.info(f"Checkpoint successfully written to fallback location: {fallback_file}")
 
-        logging.critical("All attempts to write checkpoint failed. Progress may be lost.")
+                        # Update the checkpoint file and directory attributes
+                        self.checkpoint_file = fallback_file
+                        self.checkpoint_dir = directory
+                        return
+                except Exception as e:
+                    logging.error(f"Failed to write checkpoint to fallback location {directory}: {e}")
+
+            logging.critical("All attempts to write checkpoint failed. Progress may be lost.")
 
     def run(self):
         # Start the workers
