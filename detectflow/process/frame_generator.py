@@ -468,7 +468,7 @@ class FrameGenerator:
             # Decide whether to retry, log and continue, or stop
 
     def consumer_task(self, name, queue, **kwargs):
-        logging.debug(f"(D) - Consumer {name} created.")
+        logging.debug(f"(C) - Consumer {name} created.")
         while True:
             try:
                 # Get task from the queue
@@ -476,7 +476,7 @@ class FrameGenerator:
 
                 # Terminate thread if item is none sentinel value
                 if task.frames_array is None and task.metadata is None:
-                    print(f"(D) - Consumer {name} finished.")
+                    print(f"(C) - Consumer {name} finished.")
                     break
 
                 # Unpack data from the task
@@ -486,7 +486,7 @@ class FrameGenerator:
                 video_filename = task.get_meta('video_name')
                 visit_numbers = task.get_meta('visit_numbers')
 
-                print(f"(D) - Consumer {name} got element <{frame_numbers[0]} - {frame_numbers[-1:][0]}>")
+                print(f"(C) - Consumer {name} got element <{frame_numbers[0]} - {frame_numbers[-1:][0]}>")
 
                 # Call the processing callback if it's set
                 if self.processing_callback:

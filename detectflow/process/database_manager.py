@@ -124,7 +124,8 @@ class DatabaseManager:
                  control_queue: Optional[multiprocessing.Queue] = None,
                  data_queue: Optional[multiprocessing.Queue] = None,
                  dataloader: Optional[Dataloader] = None,
-                 database_structure: Optional[Dict[str, Any]] = None):
+                 database_structure: Optional[Dict[str, Any]] = None,
+                 **kwargs):
         """
         Initialize the DatabaseManager instance.
 
@@ -145,6 +146,7 @@ class DatabaseManager:
         self.control_queue = control_queue if control_queue is not None else multiprocessing.Queue()
         self.queue = data_queue if data_queue is not None else multiprocessing.Queue()
         self.dataloader = dataloader
+        self.kwargs = kwargs
 
     def _init_database_manipulator(self, db_file):
         """
