@@ -569,7 +569,7 @@ class Orchestrator(ConfigHandler):
                 task = task_queue.get()
                 logging.info(f"{name} - Processing task: {task}")
                 if task is None:
-                    task_queue.put(None)
+                    #task_queue.put(None)
                     break
 
                 # Call the processing callback if it's set
