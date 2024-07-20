@@ -32,7 +32,13 @@ def setup_logging(log_file: Optional[str] = None):
 
 
 def main(config_path: str, config_format: str, log_file: Optional[str], **kwargs):
+
+    # Set the start method to spawn. Absolute must with torch and on linux systems.
     multiprocessing.set_start_method('spawn')
+
+    # Load config and merge with kwargs
+    file_config = load_config(config_path, config_format)
+    merged_config = merge_configs(file_config, kwargs)
 
     if kwargs.get('verbose') == 'false':
         os.environ['YOLO_VERBOSE'] = 'false'
@@ -40,19 +46,17 @@ def main(config_path: str, config_format: str, log_file: Optional[str], **kwargs
     if not kwargs.get('scratch_path', None):
         try:
             kwargs['scratch_path'] = os.getenv('SCRATCHDIR')
+            if not kwargs['scratch_path']:
+                raise Exception("SCRATCHDIR environment variable not set.")
         except Exception as e:
             kwargs['scratch_path'] = os.getcwd()
 
-    if not kwargs.get('log_file', None):
-        try:
-            log_file = os.path.join(kwargs.get('scratch_path'), 'orchestrator.log')
-        except Exception as e:
-            log_file = 'orchestrator.log'
-
-    #setup_logging(log_file)
-
-    file_config = load_config(config_path, config_format)
-    merged_config = merge_configs(file_config, kwargs)
+    # if not kwargs.get('log_file', None):
+    #     try:
+    #         log_file = os.path.join(kwargs.get('scratch_path'), 'orchestrator.log')
+    #     except Exception as e:
+    #         log_file = 'orchestrator.log'
+    # setup_logging(log_file)
 
     # Install s3 config if the parameters were passed
     try:
@@ -89,6 +93,20 @@ def main(config_path: str, config_format: str, log_file: Optional[str], **kwargs
     database_manager_kwargs = {key.replace('db_', ''): value for key, value in merged_config.items() if key in database_manager_kwargs_keys}
     other_kwargs = {key: value for key, value in merged_config.items() if key not in orchestrator_kwargs_keys}
 
+    # If debug is set, initialize Resource Monitor
+    resource_monitor = None
+    resource_monitor_queue = None
+    if kwargs.get('debug'):
+        logging.info("Initializing Resource Monitor...")
+        try:
+            from detectflow.utils.profiling import ResourceMonitor
+            resource_monitor = ResourceMonitor(interval=1, plot_interval=60, show=False, output_dir=merged_config.get('scratch_path'))
+            resource_monitor.start()
+            resource_monitor_queue = resource_monitor.event_queue
+        except Exception as e:
+            logging.error(f"An error occurred when initializing Resource Monitor: {e}")
+
+    # Initialize Database Manager
     logging.info("Initializing Database Manager...")
     try:
         db_man_info = start_db_manager(**database_manager_kwargs)
@@ -96,6 +114,7 @@ def main(config_path: str, config_format: str, log_file: Optional[str], **kwargs
         logging.error(f"An error occurred when initializing Database Manager: {e}")
         sys.exit(1)
 
+    # Initialize Dataloader
     logging.info("Initializing Dataloader...")
     try:
         dataloader = Dataloader(S3_CONFIG)
@@ -103,27 +122,46 @@ def main(config_path: str, config_format: str, log_file: Optional[str], **kwargs
         logging.error(f"An error occurred when initializing Dataloader: {e}")
         sys.exit(1)
 
+    # Initialize Orchestrator
     logging.info("Packing Orchestrator Config...")
     try:
         callback_kwargs = {
             "db_manager_control_queue": db_man_info.get("control_queue", None),
             "db_manager_data_queue": db_man_info.get("data_queue", None),
+            "resource_monitor_queue": resource_monitor_queue,
             **other_kwargs
         }
     except Exception as e:
         logging.error(f"An error occurred when packing Orchestrator Config: {e}")
         sys.exit(1)
-
     logging.info("Initializing Orchestrator...")
     try:
         orchestrator = Orchestrator(config_path=config_path, config_format=config_format, dataloader=dataloader, **orchestrator_kwargs, **callback_kwargs)
         orchestrator.run()
         logging.info("Orchestrator run completed successfully.")
+        status = 0
     except Exception as e:
         logging.error(f"An error occurred: {e}")
         traceback.print_exc()
+        status = 1
+
+    # Stop the Database Manager
+    try:
         stop_db_manager(db_man_info["control_queue"], db_man_info["process"])
-        sys.exit(1)
+        logging.info("Database Manager stopped.")
+    except Exception as e:
+        logging.error(f"An error occurred when stopping Database Manager: {e}")
+        status = 1
+
+    # Stop the Resource Monitor
+    try:
+        if resource_monitor:
+            resource_monitor.stop()
+            logging.info("Resource Monitor stopped.")
+    except Exception as e:
+        logging.error(f"An error occurred when stopping Resource Monitor: {e}")
+        status = 1
+    sys.exit(status)
 
 
 if __name__ == "__main__":
@@ -147,7 +185,9 @@ if __name__ == "__main__":
     parser.add_argument('--db_batch_size', type=int, help="Size of batch of data to process.")
     parser.add_argument('--db_backup_interval', type=int, help="Interval for backing up the database.")
 
+    # Debug and verbose
     parser.add_argument('--verbose', type=str, default='false', help="Prediction progress verbose settings. Logging unaffected.")
+    parser.add_argument('--debug', type=bool, default=True, help="Sets logging level and resource monitoring.")
 
     args = parser.parse_args()
 

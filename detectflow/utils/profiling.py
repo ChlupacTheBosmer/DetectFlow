@@ -1,6 +1,13 @@
+import os.path
+
 import logging
 import functools
 import time
+import threading
+import matplotlib.pyplot as plt
+from datetime import datetime
+from multiprocessing import Queue, Process, Event
+from queue import Empty
 try:
     from memory_profiler import memory_usage
     import psutil
@@ -73,3 +80,122 @@ def profile_cpu(logger):
                 return func(*args, **kwargs)
         return wrapper
     return decorator
+
+
+class ResourceMonitor:
+    def __init__(self, interval=1, plot_interval=600, show=False, output_dir=None):
+        self.interval = interval
+        self.plot_interval = plot_interval
+        self.show = show
+        self.memory_usage = []
+        self.cpu_usage = []
+        self.timestamps = []
+        self.events = []
+        self.event_queue = Queue()
+        self.stop_event = Event()
+        self.total_memory_gb = psutil.virtual_memory().total / (1024 ** 3)  # Total memory in GB
+        self.cpu_count = psutil.cpu_count()  # Total number of CPU cores
+        self.output_dir = output_dir or "."
+
+    def log_usage(self):
+        error_count = 0
+        while not self.stop_event.is_set():
+            try:
+                memory_info = psutil.virtual_memory()
+                cpu_info = psutil.cpu_percent(interval=None)
+                timestamp = datetime.now()
+            except Exception as e:
+                logging.error(f"Resource Monitor: An error occurred when logging resource usage: {e}")
+
+                memory_info = None
+                cpu_info = None
+                timestamp = None
+
+                error_count += 1
+                if error_count > 5:
+                    logging.error("Resource Monitor: Too many errors occurred, stopping monitoring.")
+                    self.stop_event.set()
+
+            if all([x is not None for x in [memory_info, cpu_info, timestamp]]):
+                self.memory_usage.append(memory_info.percent)
+                self.cpu_usage.append(cpu_info)
+                self.timestamps.append(timestamp)
+
+            # Check for events
+            try:
+                while True:
+                    event, color = self.event_queue.get_nowait()
+                    self.events.append((timestamp, event, color))
+            except Empty:
+                pass
+
+            time.sleep(self.interval)
+
+    def generate_plots(self):
+        error_count = 0
+        while not self.stop_event.is_set():
+            time.sleep(self.plot_interval)
+            try:
+                self.plot_usage()
+            except Exception as e:
+                logging.error(f"Resource Monitor: An error occurred when generating plots: {e}")
+                error_count += 1
+                if error_count > 5:
+                    logging.error("Resource Monitor: Too many errors occurred, stopping monitoring.")
+                    self.stop_event.set()
+
+    def plot_usage(self):
+        if not self.timestamps:
+            return
+
+        plt.figure(figsize=(12, 8))  # Increase figure size
+
+        # Plot Memory Usage
+        ax1 = plt.subplot(2, 1, 1)
+        ax1.plot(self.timestamps, self.memory_usage, label=f'Memory Usage (%) - Total: {self.total_memory_gb:.2f} GB')
+        ax1.set_xlabel('Time')
+        ax1.set_ylabel('Memory Usage (%)')
+        ax1.set_title('Memory Usage Over Time')
+        ax1.legend()
+
+        # Plot CPU Usage
+        ax2 = plt.subplot(2, 1, 2)
+        ax2.plot(self.timestamps, self.cpu_usage, label=f'CPU Usage (%) - Total: {self.cpu_count} Cores', color='orange')
+        ax2.set_xlabel('Time')
+        ax2.set_ylabel('CPU Usage (%)')
+        ax2.set_title('CPU Usage Over Time')
+        ax2.legend()
+
+        # Plot events as vertical lines and labels
+        for timestamp, event, color in self.events:
+            ax1.axvline(x=timestamp, color=color, linestyle='--', lw=0.5)
+            ax1.text(timestamp, max(self.memory_usage) * 0.95, event, rotation=90, verticalalignment='center', color=color)
+            ax2.axvline(x=timestamp, color=color, linestyle='--', lw=0.5)
+            ax2.text(timestamp, max(self.cpu_usage) * 0.95, event, rotation=90, verticalalignment='center', color=color)
+
+        # Format x-axis for better readability
+        plt.gcf().autofmt_xdate()
+
+        plt.tight_layout(rect=[0, 0, 1, 0.95])  # Adjust layout to fit labels
+        plot_filename = f'resource_usage_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
+        plot_filepath = os.path.join(self.output_dir, plot_filename)
+        plt.savefig(plot_filepath)
+        if self.show:
+            plt.show()
+        plt.close()
+        print(f"Plot saved as {plot_filename}")
+
+    def start(self):
+        self.monitor_thread = threading.Thread(target=self.log_usage)
+        self.plot_thread = threading.Thread(target=self.generate_plots)
+        self.monitor_thread.start()
+        self.plot_thread.start()
+
+    def stop(self):
+        self.stop_event.set()
+        self.monitor_thread.join()
+        self.plot_thread.join()
+
+    def log_event(self, event_message, color='red'):
+        self.event_queue.put((event_message, color))
+

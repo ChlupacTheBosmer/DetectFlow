@@ -49,6 +49,8 @@ def frame_generator_predict(**kwargs):
     video_filename = kwargs.get('video_filename', 'Unknown')
     visit_numbers = kwargs.get('visit_numbers', [])
     task = kwargs.get('task', None)
+    name = kwargs.get('worker_name', 'Unknown Worker')
+    color = kwargs.get('color', 'black')
     generator = kwargs.get('generator', None)
 
     # Model parameters
@@ -61,6 +63,7 @@ def frame_generator_predict(**kwargs):
 
     # Optional orchestrator implementation
     db_manager_data_queue = kwargs.get('db_manager_data_queue', None)
+    resource_monitor_queue = kwargs.get('resource_monitor_queue', None)
     orchestrator_control_queue = kwargs.get('orchestrator_control_queue', None)
     update_info = kwargs.get('update_info', None)
     scratch_path = kwargs.get('scratch_path', None)
@@ -69,8 +72,15 @@ def frame_generator_predict(**kwargs):
     inspect = kwargs.get('inspect', False)
     skip_empty_frames = kwargs.get('skip_empty_frames', False)
 
-    # Example processing code (replace the following lines with actual processing logic)
     logging.info(f"Running predictions on video: <{video_filename}>")
+
+    # Debug message
+    try:
+        if resource_monitor_queue:
+            event_message = f"{name} got frames"
+            resource_monitor_queue.put((event_message, color))
+    except Exception as e:
+        pass
 
     if frame_numbers:
         logging.info(f"Frame number range: {frame_numbers[0]} to {frame_numbers[-1]}")
@@ -161,6 +171,14 @@ def frame_generator_predict(**kwargs):
             # Call the update method of the orchestrator_control_queue
             if orchestrator_control_queue:
                 orchestrator_control_queue.put(('update_task', (update_info,)))
+
+    # Debug message
+    try:
+        if resource_monitor_queue:
+            event_message = f"{name} done frames"
+            resource_monitor_queue.put((event_message, color))
+    except Exception as e:
+        pass
 
 
 # if crop_imgs and len(det_results) > 0:

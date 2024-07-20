@@ -84,6 +84,7 @@ def diagnose_video_callback(**kwargs):
     finally:
         del dataloader
 
+COL_CODES = ['blue', 'green', 'red', 'purple', 'orange', 'brown', 'pink', 'gray', 'olive', 'cyan']
 
 def process_video_callback(task: Task,
                            name: str,
@@ -92,6 +93,7 @@ def process_video_callback(task: Task,
     CONFIG_MAP = {"scratch_path": str,
                   "db_manager_control_queue": object,
                   "db_manager_data_queue": object,
+                  "resource_monitor_queue": object,
                   "frame_batch_size": int,
                   "frame_skip": int,
                   "max_producers": int,
@@ -103,6 +105,13 @@ def process_video_callback(task: Task,
                   "inspect": bool}
 
     logging.info(f"Processing video task: {task}: kwargs: {kwargs}")
+
+    if name:
+        worker_number = extract_worker_number(name)
+        color = COL_CODES[worker_number % len(COL_CODES)]
+    else:
+        name = "Unknown Worker"
+        color = 'black'
 
     # Unpack Task
     if task:
@@ -124,6 +133,7 @@ def process_video_callback(task: Task,
     scratch = kwargs.get('scratch_path', None)
     db_manager_control_queue = kwargs.get('db_manager_control_queue', None)
     db_manager_data_queue = kwargs.get('db_manager_data_queue', None)
+    resource_monitor_queue = kwargs.get('resource_monitor_queue', None)
     dataloader = kwargs.get('dataloader', None)
 
     # Frame Generator config
@@ -145,6 +155,14 @@ def process_video_callback(task: Task,
     inspect = kwargs.get('inspect', False)
     skip_empty_videos = kwargs.get('skip_empty_videos', False)
     skip_empty_frames = kwargs.get('skip_empty_frames', False)
+
+    # Debug message
+    try:
+        if resource_monitor_queue:
+            event_message = f"{name} start"
+            resource_monitor_queue.put((event_message, color))
+    except Exception as e:
+        pass
 
     # Initial validation and debug logging
     if scratch is None:
@@ -239,8 +257,19 @@ def process_video_callback(task: Task,
             except Exception as e:
                 logging.error(f"{name} - Error when checking reference boxes: {e}")
 
+            # Debug message
+            try:
+                if resource_monitor_queue:
+                    event_message = f"{name} FG start"
+                    resource_monitor_queue.put((event_message, color))
+            except Exception as e:
+                pass
+
             callback_config = {
                 'db_manager_data_queue': db_manager_data_queue,
+                'resource_monitor_queue': resource_monitor_queue,
+                'worker_name': name,
+                'color': color,
                 'update_info': update_info,
                 'orchestrator_control_queue': orchestrator_control_queue,
                 'inspect': inspect,
@@ -275,6 +304,21 @@ def process_video_callback(task: Task,
         logging.error(f"{task.name if hasattr(task, 'name') else 'Unknown task'} - Error when deleting files: {e}")
     finally:
         del dataloader
+
+
+def extract_worker_number(worker_name):
+    import re
+
+    # Extract the number using regex
+    try:
+        match = re.search(r'#(\d+)', worker_name)
+        if match:
+            number = int(match.group(1))
+            return number
+        else:
+            raise ValueError("No number found in the worker string")
+    except Exception as e:
+        return 0
 
 
 def get_flowering_minutes_db(recording_id: str, folder_path: str, bucket_name: str, prefix: str, dataloader: Type[Dataloader]):
