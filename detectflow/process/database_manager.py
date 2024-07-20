@@ -3,7 +3,7 @@ import os
 import threading
 import csv
 from typing import Dict, List, Optional, Type, Any
-from detectflow.utils.profile import profile_function_call
+from detectflow.utils.profiling import profile_function_call
 from detectflow.manipulators.dataloader import Dataloader
 from detectflow.config import S3_CONFIG
 import logging
@@ -302,7 +302,7 @@ class DatabaseManager:
 
         # Upload the file to S3
         try:
-            self.dataloader.backup_file_s3(bucket_name, directory_name, local_file_path)
+            self.dataloader.backup_file_s3(bucket_name, directory_name, local_file_path, validate_upload=validate_upload)
         except Exception as e:
             logging.error(f"Failed to backup database for recording ID {recording_id} to S3: {e}")
             return

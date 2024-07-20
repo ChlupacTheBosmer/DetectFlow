@@ -35,7 +35,7 @@ from .utils.inspector import Inspector
 from .utils.log_file import LogFile
 from .utils.pbs_job_report import PBSJobReport
 from .utils.pdf_creator import PDFCreator
-from .utils.profile import log_function_call, profile_function_call, profile_memory, profile_cpu
+from .utils.profiling import log_function_call, profile_function_call, profile_memory, profile_cpu
 from .utils.sampler import Sampler
 from .utils.threads import calculate_optimal_threads, profile_threads, manage_threads
 from .validators.object_detect_validator import ObjectDetectValidator
@@ -55,7 +55,7 @@ from .video.vision_AI import get_grouped_rois_from_frame, get_unique_rois_from_f
 # Package metadata
 __version__ = '0.1.0'
 __author__ = 'Petr Chlup'
-__email__ = 'USER@natur.cuni.cz'
+__email__ = 'chlupp@natur.cuni.cz'
 
 
 # Defining the public API of the package
