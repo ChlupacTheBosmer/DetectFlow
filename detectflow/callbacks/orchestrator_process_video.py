@@ -1,5 +1,5 @@
 from detectflow.process.orchestrator import Task
-from detectflow.process.database_manager import add_database_to_db_manager
+from detectflow.process.database_manager import add_database_to_db_manager, backup_file_db_manager, flush_one_db_manager
 from detectflow.process.frame_generator import FrameGenerator
 from detectflow.manipulators.dataloader import Dataloader
 from detectflow.validators.validator import Validator
@@ -191,6 +191,8 @@ def process_video_callback(task: Task,
         # Retrieve the s3 path
         s3_path = next((f for f in files if os.path.basename(f) == os.path.basename(video_path)), None)
 
+        recording_id = None
+        video_id = None
         try:
             # Get video_id
             try:
@@ -292,6 +294,14 @@ def process_video_callback(task: Task,
             generator.run(producers=max_producers, consumers=max_consumers, frame_batch_size=frame_batch_size)
         except Exception as e:
             logging.error(f"{name} - Error when processing video: {video_path} - {e}")
+
+        # Make sure to flush batches and backup the database
+        if db_manager_control_queue:
+            try:
+                flush_one_db_manager(db_manager_control_queue, recording_id)
+                backup_file_db_manager(db_manager_control_queue, recording_id)
+            except Exception as e:
+                logging.error(f"{name} - Error when backing up database: {e}")
 
     # After processing, delete the files
     try:
