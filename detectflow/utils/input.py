@@ -1,9 +1,8 @@
 import os
-
 from typing import List, Dict, Tuple, Union
 from datetime import timedelta
 import re
-
+import ast
 from detectflow import Manipulator
 
 
@@ -168,3 +167,11 @@ def process_multiple_inputs(input_data, s3_manipulator):
         directories.extend(processed_item)
         flags = tuple(any(pair) for pair in zip(flags, item_flags))
     return directories, flags
+
+
+def string_to_list(string):
+    try:
+        return ast.literal_eval(string)
+    except (ValueError, SyntaxError):
+        # Handle cases where the string is not a valid Python literal
+        return []
