@@ -4,7 +4,7 @@ try:
     import bitsandbytes, flash_attn
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
     ai_available = True
-except ImportError:
+except Exception:
     ai_available = False
 
 from typing import Dict, Any
