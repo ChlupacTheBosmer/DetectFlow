@@ -685,77 +685,51 @@ def get_dataset_database_from_dataset(dataset: Dataset, db_path: str):
     logging.info(f"Database populated with metadata from the dataset")
 
 
-def process_image_file(image_path: str):
-    """
-    Processes a single image file to extract its dimensions and associated bounding box data.
-    """
-    from detectflow.utils.file import yolo_label_load, open_image
-
-    base_name, extension = os.path.splitext(image_path)
-    annotation_path = f'{base_name}.txt'
-
-    try:
-        image_array = open_image(image_path)
-
-        with Image.fromarray(image_array) as img:
-            img_width, img_height = img.size
-
-        bbox_data = []
-        if os.path.exists(annotation_path):
-            bboxes = yolo_label_load(annotation_path)
-            bbox_count = len(bboxes)
-            for bbox in bboxes:
-                _, x_center, y_center, width, height = bbox
-                bbox_data.append((x_center, y_center, width, height))
-        else:
-            bbox_count = 0
-    except Exception as e:
-        logging.error(f"Error processing image {image_path}: {e}")
-        img_width, img_height = None, None
-        bbox_count = 0
-        bbox_data = []
-
-    return (img_width, img_height), bbox_count, bbox_data
-
-
-def chunk_data(data, num_chunks):
-    """
-    Splits data into chunks.
-    """
-    avg = len(data) / float(num_chunks)
-    chunks = []
-    last = 0.0
-
-    while last < len(data):
-        chunks.append(data[int(last):int(last + avg)])
-        last += avg
-
-    return chunks
-
-
-def update_heatmap_chunk(bbox_chunk, heatmap_size):
-    """
-    Updates a heatmap chunk with the given bounding box data.
-    """
-    heatmap = np.zeros(heatmap_size)
-    for (x_center, y_center, width, height), (img_width, img_height) in bbox_chunk:
-        x_center_pixel = int(x_center * img_width)
-        y_center_pixel = int(y_center * img_height)
-        width_pixel = int(width * img_width)
-        height_pixel = int(height * img_height)
-
-        x_min = max(0, x_center_pixel - width_pixel // 2)
-        y_min = max(0, y_center_pixel - height_pixel // 2)
-        x_max = min(heatmap_size[1], x_center_pixel + width_pixel // 2)
-        y_max = min(heatmap_size[0], y_center_pixel + height_pixel // 2)
-
-        heatmap[y_min:y_max, x_min:x_max] += 1
-    return heatmap
-
-
 class DatasetDiagnoser:
     def __init__(self, dataset):
         self.dataset = dataset
+        self._image_sizes = None
+        self._bbox_counts = None
+        self._bbox_positions = None
+        self._class_counts = None
+        self._bbox_sizes = None
+        self._image_brightness = None
+
+    @property
+    def image_sizes(self):
+        if self._image_sizes is None:
+            self._image_sizes, self._bbox_counts, self._bbox_positions, self._class_counts, self._bbox_sizes, self._image_brightness = self.collect_data()
+        return self._image_sizes
+
+    @property
+    def bbox_counts(self):
+        if self._bbox_counts is None:
+            self._image_sizes, self._bbox_counts, self._bbox_positions, self._class_counts, self._bbox_sizes, self._image_brightness = self.collect_data()
+        return self._bbox_counts
+
+    @property
+    def bbox_positions(self):
+        if self._bbox_positions is None:
+            self._image_sizes, self._bbox_counts, self._bbox_positions, self._class_counts, self._bbox_sizes, self._image_brightness = self.collect_data()
+        return self._bbox_positions
+
+    @property
+    def class_counts(self):
+        if self._class_counts is None:
+            self._image_sizes, self._bbox_counts, self._bbox_positions, self._class_counts, self._bbox_sizes, self._image_brightness = self.collect_data()
+        return self._class_counts
+
+    @property
+    def bbox_sizes(self):
+        if self._bbox_sizes is None:
+            self._image_sizes, self._bbox_counts, self._bbox_positions, self._class_counts, self._bbox_sizes, self._image_brightness = self.collect_data()
+        return self._bbox_sizes
+
+    @property
+    def image_brightness(self):
+        if self._image_brightness is None:
+            self._image_sizes, self._bbox_counts, self._bbox_positions, self._class_counts, self._bbox_sizes, self._image_brightness = self.collect_data()
+        return self._image_brightness
 
     def collect_data(self):
         """
@@ -769,7 +743,7 @@ class DatasetDiagnoser:
         image_brightness = []
 
         with ThreadPoolExecutor() as executor:
-            futures = [executor.submit(self.process_image_file, file_info['full_path'])
+            futures = [executor.submit(self._process_image_file, file_info['full_path'])
                        for file_info in self.dataset.values()]
 
             for future in tqdm(futures, desc="Processing images"):
@@ -784,7 +758,7 @@ class DatasetDiagnoser:
 
         return image_sizes, bbox_counts, bbox_positions, class_counts, bbox_sizes, image_brightness
 
-    def process_image_file(self, image_path: str):
+    def _process_image_file(self, image_path: str):
         """
         Processes a single image file to extract its dimensions and associated bounding box data.
         """
@@ -821,55 +795,119 @@ class DatasetDiagnoser:
 
         return (img_width, img_height), bbox_count, bbox_data, classes, brightness
 
-    def plot_image_size_distribution(self, image_sizes):
+    def plot_image_size_distribution(self, image_sizes=None, save=False, show=True, output_dir='plots'):
         """
         Plots the distribution of image sizes in a scatter plot.
         """
+        image_sizes = image_sizes or self.image_sizes
         widths, heights = zip(*image_sizes)
         plt.scatter(widths, heights)
         plt.xlabel('Width')
         plt.ylabel('Height')
         plt.title('Image Size Distribution')
-        plt.show()
 
-    def plot_bbox_count_histogram(self, bbox_counts):
+        if save:
+            os.makedirs(output_dir, exist_ok=True)
+            plt.savefig(os.path.join(output_dir, 'image_size_distribution.png'))
+
+        if show:
+            plt.show()
+        else:
+            plt.close()
+
+    def plot_bbox_count(self, bbox_counts=None, save=False, show=True, output_dir='plots'):
         """
         Plots a histogram of the distribution of bounding box counts per image.
         """
+        bbox_counts = bbox_counts or self.bbox_counts
         plt.hist(bbox_counts, bins=range(max(bbox_counts)+1))
         plt.xlabel('Number of Bounding Boxes')
         plt.ylabel('Frequency')
         plt.title('Histogram of Bounding Box Counts per Image')
-        plt.show()
 
-    def plot_bbox_heatmap(self, bbox_positions, image_sizes, bbox_counts, image_size=(640, 640)):
+        if save:
+            os.makedirs(output_dir, exist_ok=True)
+            plt.savefig(os.path.join(output_dir, 'bbox_count_histogram.png'))
+
+        if show:
+            plt.show()
+        else:
+            plt.close()
+
+    def _chunk_data(self, data, num_chunks):
+        """
+        Splits data into chunks.
+        """
+        avg = len(data) / float(num_chunks)
+        chunks = []
+        last = 0.0
+
+        while last < len(data):
+            chunks.append(data[int(last):int(last + avg)])
+            last += avg
+
+        return chunks
+
+    def _update_heatmap_chunk(self, bbox_chunk, heatmap_size):
+        """
+        Updates a heatmap chunk with the given bounding box data.
+        """
+        heatmap = np.zeros(heatmap_size)
+        for (x_center, y_center, width, height), (img_width, img_height) in bbox_chunk:
+            x_center_pixel = int(x_center * img_width)
+            y_center_pixel = int(y_center * img_height)
+            width_pixel = int(width * img_width)
+            height_pixel = int(height * img_height)
+
+            x_min = max(0, x_center_pixel - width_pixel // 2)
+            y_min = max(0, y_center_pixel - height_pixel // 2)
+            x_max = min(heatmap_size[1], x_center_pixel + width_pixel // 2)
+            y_max = min(heatmap_size[0], y_center_pixel + height_pixel // 2)
+
+            heatmap[y_min:y_max, x_min:x_max] += 1
+        return heatmap
+
+    def plot_bbox_heatmap(self, bbox_positions=None, image_sizes=None, bbox_counts=None, image_size=(640, 640),
+                          save=False, show=True, output_dir='plots'):
         """
         Plots a heatmap representing the coverage of bounding boxes across images.
         """
-        # Flatten image_sizes to match bbox_positions
+        bbox_positions = bbox_positions or self.bbox_positions
+        image_sizes = image_sizes or self.image_sizes
+        bbox_counts = bbox_counts or self.bbox_counts
+
         flattened_image_sizes = []
         for i, (img_w, img_h) in enumerate(image_sizes):
-            count = bbox_counts[i]  # bbox_counts[i] gives the count of bboxes for image i
+            count = bbox_counts[i]
             flattened_image_sizes.extend([(img_w, img_h)] * count)
 
         bbox_img_pairs = list(zip(bbox_positions, flattened_image_sizes))
-
         num_cores = cpu_count()
-        bbox_chunks = chunk_data(bbox_img_pairs, num_cores)
+        bbox_chunks = self._chunk_data(bbox_img_pairs, num_cores)
 
         with Pool(num_cores) as pool:
-            heatmaps = pool.starmap(update_heatmap_chunk, [(chunk, image_size) for chunk in bbox_chunks])
+            heatmaps = pool.starmap(self._update_heatmap_chunk, [(chunk, image_size) for chunk in bbox_chunks])
 
         combined_heatmap = np.sum(heatmaps, axis=0)
-
         plt.imshow(combined_heatmap, cmap='hot', interpolation='nearest')
         plt.title('Heatmap of Bounding Box Coverage')
-        plt.show()
 
-    def plot_class_distribution(self, class_counts, class_names):
+        if save:
+            os.makedirs(output_dir, exist_ok=True)
+            plt.savefig(os.path.join(output_dir, 'bbox_heatmap.png'))
+
+        if show:
+            plt.show()
+        else:
+            plt.close()
+
+    def plot_class_distribution(self, class_counts=None, class_names=None, save=False, show=True, output_dir='plots'):
         """
         Plots the distribution of classes in the dataset.
         """
+        class_counts = class_counts or self.class_counts
+        class_names = class_names or {i: str(i) for i in range(len(list(class_counts.keys())) + 1)}
+
         labels, counts = zip(*sorted(class_counts.items(), key=lambda x: x[0]))
         labels = [class_names[label] for label in labels]
         plt.bar(labels, counts)
@@ -877,46 +915,86 @@ class DatasetDiagnoser:
         plt.ylabel('Count')
         plt.title('Class Distribution')
         plt.xticks(rotation=90)
-        plt.show()
 
-    def plot_bbox_size_distribution(self, bbox_sizes):
+        if save:
+            os.makedirs(output_dir, exist_ok=True)
+            plt.savefig(os.path.join(output_dir, 'class_distribution.png'))
+
+        if show:
+            plt.show()
+        else:
+            plt.close()
+
+    def plot_bbox_size_distribution(self, bbox_sizes=None, save=False, show=True, output_dir='plots'):
         """
         Plots the distribution of bounding box sizes.
         """
+        bbox_sizes = bbox_sizes or self.bbox_sizes
+        bbox_sizes = [(w, h) for w, h in bbox_sizes if w > 0 and h > 0]
         widths, heights = zip(*bbox_sizes)
         plt.scatter(widths, heights)
         plt.xlabel('Width')
         plt.ylabel('Height')
         plt.title('Bounding Box Size Distribution')
-        plt.show()
 
-    def plot_aspect_ratio_distribution(self, bbox_sizes):
+        if save:
+            os.makedirs(output_dir, exist_ok=True)
+            plt.savefig(os.path.join(output_dir, 'bbox_size_distribution.png'))
+
+        if show:
+            plt.show()
+        else:
+            plt.close()
+
+    def plot_aspect_ratio_distribution(self, bbox_sizes=None, save=False, show=True, output_dir='plots'):
         """
         Plots the distribution of aspect ratios of bounding boxes.
         """
+        bbox_sizes = bbox_sizes or self.bbox_sizes
+        bbox_sizes = [(w, h) for w, h in bbox_sizes if w > 0 and h > 0]
         aspect_ratios = [w / h for w, h in bbox_sizes]
         plt.hist(aspect_ratios, bins=50)
         plt.xlabel('Aspect Ratio')
         plt.ylabel('Frequency')
         plt.title('Aspect Ratio Distribution of Bounding Boxes')
-        plt.show()
 
-    def plot_image_brightness_distribution(self, image_brightness):
+        if save:
+            os.makedirs(output_dir, exist_ok=True)
+            plt.savefig(os.path.join(output_dir, 'aspect_ratio_distribution.png'))
+
+        if show:
+            plt.show()
+        else:
+            plt.close()
+
+    def plot_image_brightness_distribution(self, image_brightness=None, save=False, show=True, output_dir='plots'):
         """
         Plots the distribution of average image brightness.
         """
+        image_brightness = image_brightness or self.image_brightness
+        image_brightness = [b for b in image_brightness if b is not None]
         plt.hist(image_brightness, bins=50)
         plt.xlabel('Brightness')
         plt.ylabel('Frequency')
         plt.title('Image Brightness Distribution')
-        plt.show()
 
-    def detect_class_imbalance(self, class_counts, threshold=0.1):
+        if save:
+            os.makedirs(output_dir, exist_ok=True)
+            plt.savefig(os.path.join(output_dir, 'image_brightness_distribution.png'))
+
+        if show:
+            plt.show()
+        else:
+            plt.close()
+
+    def detect_class_imbalance(self, class_counts=None, threshold=0.1):
         """
         Detects class imbalance in the dataset.
         """
+        class_counts = class_counts or self.class_counts
         total = sum(class_counts.values())
-        imbalance_classes = {class_id: count / total for class_id, count in class_counts.items() if count / total < threshold}
+        imbalance_classes = {class_id: count / total for class_id, count in class_counts.items() if
+                             count / total < threshold}
         if imbalance_classes:
             print("Classes with imbalance (less than {:.0%} of total):".format(threshold))
             for class_id, ratio in imbalance_classes.items():
@@ -925,54 +1003,48 @@ class DatasetDiagnoser:
             print("No class imbalance detected.")
 
 
-# import os
-# import shutil
-# import re
-# from collections import defaultdict
-# from typing import Dict, Optional
-
 class DatasetSlicer:
-    def __init__(self, source: Optional[str] = None, file_dict: Optional[Dict[str, Dict[str, str]]] = None):
+    def __init__(self, source: Optional[str] = None, file_dict: Optional[Dict[str, Dict[str, str]]] = None, pattern: Optional[str] = None):
         self.source = source
         self.file_dict = file_dict
-        self.pattern = r'^[^_]+_[^_]+_[^_]+_[^_]+_[^_]+_[^_]+_[^_]+\.(png)$'
+        self.pattern = pattern or r'^[^_]+_[^_]+_[^_]+_[^_]+_[^_]+_[^_]+_[^_]+\.(png)$'
 
-    def is_valid_filename(self, filename):
+    def _is_valid_filename(self, filename):
         return re.match(self.pattern, filename)
 
-    def extract_confidence(self, folder_name):
+    def _extract_confidence(self, folder_name):
         try:
             return float(folder_name)
         except ValueError:
             return -1
 
-    def find_all_frames(self):
+    def _find_all_frames(self):
         image_files = defaultdict(list)
         for root, _, files in os.walk(self.source):
             for file in files:
-                if self.is_valid_filename(file):
+                if self._is_valid_filename(file):
                     recording_id = '_'.join(file.split('_')[:3])
-                    confidence = self.extract_confidence(os.path.basename(root))
+                    confidence = self._extract_confidence(os.path.basename(root))
                     full_path = os.path.join(root, file)
                     label_full_path = full_path.replace('.png', '.txt')
                     label_full_path = label_full_path if os.path.exists(label_full_path) else None
                     image_files[recording_id].append((confidence, full_path, label_full_path))
         return image_files
 
-    def find_frames_from_dict(self):
+    def _find_frames_from_dict(self):
         image_files = defaultdict(list)
         for filename, paths in self.file_dict.items():
-            if self.is_valid_filename(filename + '.png'):
+            if self._is_valid_filename(filename + '.png'):
                 recording_id = '_'.join(filename.split('_')[:3])
-                confidence = self.extract_confidence(os.path.basename(os.path.dirname(paths['full_path'])))
+                confidence = self._extract_confidence(os.path.basename(os.path.dirname(paths['full_path'])))
                 image_files[recording_id].append((confidence, paths['full_path'], paths['label_full_path']))
         return image_files
 
     def slice(self):
         if self.source:
-            image_files = self.find_all_frames()
+            image_files = self._find_all_frames()
         elif self.file_dict:
-            image_files = self.find_frames_from_dict()
+            image_files = self._find_frames_from_dict()
         else:
             raise ValueError("Either source folder or file_dict must be provided")
 
@@ -1041,13 +1113,3 @@ class DatasetSlicer:
 
         return updated_slices
 
-
-# if __name__ == '__main__':
-    # dataset = Dataset.from_folder(r"D:\Dílna\Kutění\Python\Frames to label\labeled")
-    # slicer = DatasetSlicer(file_dict=dataset)
-    # slices = slicer.save_slices(r"D:\Dílna\Kutění\Python\Frames to label\slices")
-    # print(slices)
-
-    # slicer = DatasetSlicer(source=r"D:\Dílna\Kutění\Python\Frames to label\labeled")
-    # slices = slicer.save_slices(r"D:\Dílna\Kutění\Python\Frames to label\slices")
-    # print(slices)
