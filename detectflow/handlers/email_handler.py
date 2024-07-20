@@ -2,8 +2,10 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
+from email.mime.image import MIMEImage
 from email import encoders
 import re
+import os
 
 
 class EmailHandler:
@@ -77,6 +79,36 @@ class EmailHandler:
 
         return html_table
 
+    def format_email_with_image(self, short_text, image_path):
+        if not os.path.isfile(image_path):
+            raise ValueError("The provided image path does not exist.")
+
+        # Create the HTML body with the table and image
+        body = f"""
+        <html>
+            <body>
+                <table style="border: 1px solid black; border-collapse: collapse;">
+                    <tr>
+                        <td style="padding: 10px;">{short_text}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px;">
+                            <img src="cid:image1" style="max-width: 100%; height: auto;" />
+                        </td>
+                    </tr>
+                </table>
+            </body>
+        </html>
+        """
+
+        # Prepare the image attachment
+        with open(image_path, 'rb') as img:
+            mime = MIMEImage(img.read())
+            mime.add_header('Content-ID', '<image1>')
+            mime.add_header('Content-Disposition', 'inline', filename=os.path.basename(image_path))
+
+        return body, mime
+
     def process_email_text(self, email_text):
         '''
         Method that will process string and remove a subject line and any placeholders to cleanup an automatically generaed email string.
@@ -115,39 +147,6 @@ class EmailHandler:
         new_text = re.sub(r'\[[^\]]*\]', '', new_text)
 
         return subject, new_text
-
-    #     def send_email(self, receiver_email, subject, body):
-    #         """
-    #         Send an email using the initialized credentials and server details.
-
-    #         Args:
-    #         receiver_email (str): Email address of the receiver.
-    #         subject (str): Subject of the email.
-    #         body (str): Plain text message body of the email.
-    #         """
-    #         # Create a multipart message and set headers
-    #         message = MIMEMultipart()
-    #         message["From"] = "DetectFlow"
-    #         message["To"] = receiver_email
-    #         message["Subject"] = subject
-
-    #         # Add body to email
-    #         message.attach(MIMEText(body, "plain"))
-
-    #         signature = MIMEText(self.signature, 'html')
-    #         message.attach(signature)
-
-    #         try:
-    #             # Connect to Gmail SMTP server
-    #             with smtplib.SMTP(self.smtp_server, self.port) as server:
-    #                 server.ehlo()  # Can be omitted
-    #                 server.starttls()  # Secure the connection
-    #                 server.ehlo()  # Can be omitted
-    #                 server.login(self.sender_email, self.app_password)
-    #                 server.sendmail(self.sender_email, receiver_email, message.as_string())
-    #             print("Email sent successfully!")
-    #         except Exception as e:
-    #             print(f"An error occurred: {e}")
 
     @staticmethod
     def is_html(s):
@@ -190,6 +189,9 @@ class EmailHandler:
         # Attach files if provided
         if attachments:
             for filename, filepath in attachments.items():
+                if isinstance(filepath, MIMEImage):
+                    message.attach(filepath)
+                    continue
                 # Open file in binary mode
                 if Validator.is_valid_file_path(filepath):
                     with open(filepath, "rb") as attachment:

@@ -96,11 +96,25 @@ def main(config_path: str, config_format: str, log_file: Optional[str], **kwargs
     # If debug is set, initialize Resource Monitor
     resource_monitor = None
     resource_monitor_queue = None
-    if kwargs.get('debug'):
+    print(merged_config.get('debug'))
+    if merged_config.get('debug'):
         logging.info("Initializing Resource Monitor...")
         try:
+
+            if merged_config.get('email_debug', False) and merged_config.get('email_auth', None):
+                from detectflow.handlers.email_handler import EmailHandler
+                email_handler = EmailHandler("detectflow@gmail.com", merged_config.get('email_auth'))
+            else:
+                email_handler = None
+
             from detectflow.utils.profiling import ResourceMonitor
-            resource_monitor = ResourceMonitor(interval=1, plot_interval=60, show=False, output_dir=merged_config.get('scratch_path'))
+            resource_monitor = ResourceMonitor(interval=1,
+                                               plot_interval=merged_config.get('plot_interval', 300),
+                                               show=False,
+                                               output_dir=merged_config.get('scratch_path'),
+                                               email_handler=email_handler,
+                                               email_address=merged_config.get('email_address'),
+                                               email_interval=merged_config.get('email_interval', 2))
             resource_monitor.start()
             resource_monitor_queue = resource_monitor.event_queue
         except Exception as e:
@@ -187,7 +201,12 @@ if __name__ == "__main__":
 
     # Debug and verbose
     parser.add_argument('--verbose', type=str, default='false', help="Prediction progress verbose settings. Logging unaffected.")
-    parser.add_argument('--debug', type=bool, default=True, help="Sets logging level and resource monitoring.")
+    parser.add_argument('--debug', type=bool, help="Sets logging level and resource monitoring.")
+    parser.add_argument('--email_debug', type=bool, help="Sets receiving of monitoring emails.")
+    parser.add_argument('--email_auth', type=str, help="Email service account authentication key.")
+    parser.add_argument('--email_address', type=str, help="Email address fro receiving debug messages.")
+    parser.add_argument('--plot_interval', type=int, help="Interval of plot generation in seconds.")
+    parser.add_argument('--email_interval', type=int, help="How many plot intervals will pass before sending email.")
 
     args = parser.parse_args()
 

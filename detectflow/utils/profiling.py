@@ -83,7 +83,7 @@ def profile_cpu(logger):
 
 
 class ResourceMonitor:
-    def __init__(self, interval=1, plot_interval=600, show=False, output_dir=None):
+    def __init__(self, interval=1, plot_interval=600, show=False, output_dir=None, email_handler=None, email_address=None, email_interval=10):
         self.interval = interval
         self.plot_interval = plot_interval
         self.show = show
@@ -96,6 +96,9 @@ class ResourceMonitor:
         self.total_memory_gb = psutil.virtual_memory().total / (1024 ** 3)  # Total memory in GB
         self.cpu_count = psutil.cpu_count()  # Total number of CPU cores
         self.output_dir = output_dir or "."
+        self.email_handler = email_handler
+        self.email_address = email_address
+        self.email_interval = email_interval
 
     def log_usage(self):
         error_count = 0
@@ -133,10 +136,21 @@ class ResourceMonitor:
 
     def generate_plots(self):
         error_count = 0
+        email_count = 0
         while not self.stop_event.is_set():
             time.sleep(self.plot_interval)
             try:
-                self.plot_usage()
+                plot_path = self.plot_usage()
+                email_count += 1
+
+                if self.email_handler and plot_path and email_count % self.email_interval == 0:
+                    try:
+                        body, image_attachment = self.email_handler.format_email_with_image("", plot_path)
+                        subject = os.getenv('PBS_JOBID') or "Resource Monitoring Plot"
+                        self.email_handler.send_email(self.email_address, subject, body, attachments={"plot.jpg": image_attachment})
+                    except Exception as e:
+                        logging.error(f"Resource Monitor: An error occurred when sending email: {e}")
+
             except Exception as e:
                 logging.error(f"Resource Monitor: An error occurred when generating plots: {e}")
                 error_count += 1
@@ -184,6 +198,7 @@ class ResourceMonitor:
             plt.show()
         plt.close()
         print(f"Plot saved as {plot_filename}")
+        return plot_filepath
 
     def start(self):
         self.monitor_thread = threading.Thread(target=self.log_usage)
