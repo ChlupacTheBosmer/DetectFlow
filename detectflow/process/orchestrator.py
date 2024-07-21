@@ -422,30 +422,35 @@ class Orchestrator(ConfigHandler):
         # Begin managing tasks
         self._manage_tasks()
 
-        # Control loop to check for signals and process tasks
-        while (not self.task_queue.empty()) or not (any(u.is_alive() for u in self.concurrent_units)):
+        # Control loop to check for signals and process tasks # TODO: Fix not updating progress for last videos
+        stop_executed = False
+        while any(u.is_alive() for u in self.concurrent_units):
             try:
                 control_signal, args = self.control_queue.get_nowait()
                 if control_signal == "stop":
                     logging.info("Received stop signal")
-                    break
-                if control_signal == "update_task":
+                    if not stop_executed:
+                        self._stop_workers()
+                elif control_signal == "update_task":
                     self._handle_worker_update(*args)
+                elif self.task_queue.empty():
+                    if not stop_executed:
+                        self._stop_workers()
             except self._queue_empty_exception:
                 pass
 
             time.sleep(0.1)  # Prevent busy-waiting
 
-        # Signal workers to stop after all tasks are queued
-        self.task_queue.join()
-        for _ in range(self.max_workers):
-            logging.info("Signaling workers to stop")
-            self.task_queue.put(None)
-
+        # # Signal workers to stop after all tasks are queued
+        # self.task_queue.join()
+        # for _ in range(self.max_workers):
+        #     logging.info("Signaling workers to stop")
+        #     self.task_queue.put(None)
+        print("joining")
         # Wait for all tasks to be completed
         for unit in self.concurrent_units:
             unit.join()
-
+        print("joined")
         # Profile running concurrent_units
         profile_threads() if self.parallelism == "thread" else None
 
@@ -460,13 +465,13 @@ class Orchestrator(ConfigHandler):
                 if not directory or not isinstance(status, dict):
                     raise ValueError("Invalid task data")
 
-                if all(value == -1 for value in status.values()):
+                if all(value < 0 for value in status.values()):
                     continue  # Skip if all files in the directory are processed
 
                 batch = []
                 batch_status = {}
                 for file, progress in status.items():
-                    if progress != -1:  # Not completed
+                    if progress > -1:  # Not completed
                         batch.append(file)
                         batch_status[file] = progress
                         if len(batch) >= self.batch_size:
@@ -505,7 +510,7 @@ class Orchestrator(ConfigHandler):
             self.checkpoint_data['progress'][file] = last_processed_frame
 
             # Check if all files in the directory are completed
-            if all(status == -1 for status in task['status'].values()):
+            if all(status < 0 for status in task['status'].values()):
                 for f in task['status']:
                     task['status'][f] = -1
 
@@ -547,6 +552,7 @@ class Orchestrator(ConfigHandler):
                 callback_kwargs = {
                     "orchestrator_control_queue": self.control_queue,
                     "scratch_path": self.scratch_path,
+                    "max_workers": self.max_workers,
                     **self.callback_config
                 }
                 worker_unit = self._concurrent_unit(target=self._worker, args=(worker_name,
@@ -560,6 +566,11 @@ class Orchestrator(ConfigHandler):
 
         # Profile running concurrent_units
         manage_threads(r'Worker #\d+', 'status') if self.parallelism == "thread" else None
+
+    def _stop_workers(self):
+        for _ in range(self.max_workers):
+            logging.info("Signaling workers to stop")
+            self.task_queue.put(None)
 
     @staticmethod
     def _worker(name, task_queue, process_task_callback, callback_kwargs):
