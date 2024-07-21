@@ -59,7 +59,7 @@ setup(
         'Source': 'https://github.com/ChlupacTheBosmer/DetectFlow',
     },
     author='Petr Chlup',
-    author_email='USER@natur.cuni.cz',
+    author_email='chlupp@natur.cuni.cz',
     packages=find_packages(exclude=['tests', 'notebooks']),
     package_data={
         '': ['*.yaml', '*.jpg', '*.json', '*.csv', '*.txt', '*.pt', '*.sh', '*.css', '*.svg', '*.png'],  # Add other data file types if needed
