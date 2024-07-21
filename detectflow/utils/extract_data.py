@@ -83,7 +83,7 @@ def extract_data_from_video(video_path: Optional[str] = None, video_file: Option
 
     vid_results = {}
     if video:
-        attrs = ["video_id", "recording_id", "s3_bucket", "s3_directory", "extension", "start_time", "end_time", "duration", "total_frames", "fps", "focus", "blur", "contrast", "brightness"]
+        attrs = ["video_id", "recording_id", "s3_bucket", "s3_directory", "extension", "start_time", "end_time", "duration", "total_frames", "fps", "focus", "blur", "contrast", "brightness", "frame_width", "frame_height"]
         for a in attrs:
             try:
                 vid_results[a] = getattr(video, a)
@@ -168,7 +168,9 @@ def extract_data_from_video(video_path: Optional[str] = None, video_file: Option
         'reference_boxes': diag_results.get("reference_boxes"),
         'start_time': vid_results.get("start_time"),
         'end_time': vid_results.get("end_time"),
-        'fps': vid_results.get("fps")
+        'fps': vid_results.get("fps"),
+        'frame_width': vid_results.get("frame_width"),
+        'frame_height': vid_results.get("frame_height")
     }
 
     if return_raw_data:
@@ -214,7 +216,7 @@ def extract_data_from_result(result: DetectionResults) -> Dict[str, Any]:
     reference_bboxes = safe_json(results.get('reference_boxes'))
     visitor_bboxes = safe_json(results.get('boxes'))
     filtered_visitor_bboxes = safe_json(results.get('filtered_boxes'))
-    visit_ids = safe_json(results.get('boxes').id if hasattr(results.get('boxes'), 'id') else [-1 for _ in results.get('boxes')])
+    visit_ids = safe_json(results.get('boxes').id if hasattr(results.get('boxes'), 'id') and results.get('boxes').id is not None and len(results.get('boxes').id) > 0 else [-1 for _ in results.get('boxes')])
     on_flower = safe_json(results.get('on_flowers'))
 
     flags = ""  # Placeholder for future use
