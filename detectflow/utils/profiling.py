@@ -162,7 +162,7 @@ class ResourceMonitor:
         if not self.timestamps:
             return
 
-        plt.figure(figsize=(12, 8))  # Increase figure size
+        plt.figure(figsize=(16, 12))  # Increase figure size
 
         # Plot Memory Usage
         ax1 = plt.subplot(2, 1, 1)
@@ -191,7 +191,7 @@ class ResourceMonitor:
         plt.gcf().autofmt_xdate()
 
         plt.tight_layout(rect=[0, 0, 1, 0.95])  # Adjust layout to fit labels
-        plot_filename = f'resource_usage_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
+        plot_filename = f'resource_usage.png'
         plot_filepath = os.path.join(self.output_dir, plot_filename)
         plt.savefig(plot_filepath)
         if self.show:
@@ -213,4 +213,108 @@ class ResourceMonitor:
 
     def log_event(self, event_message, color='red'):
         self.event_queue.put((event_message, color))
+
+
+class ResourceMonitorPID(ResourceMonitor):
+    def __init__(self, main_pid, interval=1, plot_interval=600, show=False, output_dir=None, email_handler=None, email_address=None, email_interval=10):
+
+        # Call the parent class constructor
+        super().__init__(interval=interval,
+                         plot_interval=plot_interval,
+                         show=show,
+                         output_dir=output_dir,
+                         email_handler=email_handler,
+                         email_address=email_address,
+                         email_interval=email_interval)
+
+        self.main_pid = main_pid
+
+    def log_usage(self):
+        error_count = 0
+        while not self.stop_event.is_set():
+            try:
+                main_process = psutil.Process(self.main_pid)
+                # Get memory and CPU usage for the main process and its children
+                memory_info = main_process.memory_info().rss
+                cpu_info = main_process.cpu_percent(interval=None)
+                for child in main_process.children(recursive=True):
+                    memory_info += child.memory_info().rss
+                    cpu_info += child.cpu_percent(interval=None)
+
+                # Convert memory usage to GB
+                memory_usage_gb = memory_info / (1024 ** 3)
+                timestamp = datetime.now()
+            except psutil.NoSuchProcess:
+                print(f"Main process with PID {self.main_pid} not found.")
+                break
+            except Exception as e:
+                logging.error(f"Resource Monitor: An error occurred when logging resource usage: {e}")
+
+                memory_usage_gb = None
+                cpu_info = None
+                timestamp = None
+
+                error_count += 1
+                if error_count > 5:
+                    logging.error("Resource Monitor: Too many errors occurred, stopping monitoring.")
+                    self.stop_event.set()
+
+            if all([x is not None for x in [memory_usage_gb, cpu_info, timestamp]]):
+                self.memory_usage.append(memory_usage_gb)
+                self.cpu_usage.append(cpu_info / self.cpu_count)
+                self.timestamps.append(timestamp)
+
+            # Check for events
+            try:
+                while True:
+                    event, color = self.event_queue.get_nowait()
+                    self.events.append((timestamp, event, color))
+            except Empty:
+                pass
+
+            time.sleep(self.interval)
+
+    def plot_usage(self):
+        if not self.timestamps:
+            return
+
+        plt.figure(figsize=(16, 12))
+
+        # Plot Memory Usage
+        ax1 = plt.subplot(2, 1, 1)
+        ax1.plot(self.timestamps, self.memory_usage, label=f'Memory Usage (GB) - Total: {self.total_memory_gb:.2f} GB')
+        ax1.set_xlabel('Time')
+        ax1.set_ylabel('Memory Usage (GB)')
+        ax1.set_title('Memory Usage Over Time')
+        ax1.legend()
+
+        # Plot CPU Usage
+        ax2 = plt.subplot(2, 1, 2)
+        ax2.plot(self.timestamps, self.cpu_usage, label=f'CPU Usage (%) - Total: {self.cpu_count} Cores',
+                 color='orange')
+        ax2.set_xlabel('Time')
+        ax2.set_ylabel('CPU Usage (%)')
+        ax2.set_title('CPU Usage Over Time')
+        ax2.legend()
+
+        # Plot events as vertical lines and labels
+        for timestamp, event, color in self.events:
+            ax1.axvline(x=timestamp, color=color, linestyle='--', lw=0.5)
+            ax1.text(timestamp, max(self.memory_usage) * 0.95, event, rotation=90, verticalalignment='center',
+                     color=color)
+            ax2.axvline(x=timestamp, color=color, linestyle='--', lw=0.5)
+            ax2.text(timestamp, max(self.cpu_usage) * 0.95, event, rotation=90, verticalalignment='center', color=color)
+
+        # Format x-axis for better readability
+        plt.gcf().autofmt_xdate()
+
+        plt.tight_layout(rect=[0, 0, 1, 0.95])  # Adjust layout to fit labels
+        plot_filename = f'resource_usage.png'
+        plot_filepath = os.path.join(self.output_dir, plot_filename)
+        plt.savefig(plot_filepath)
+        if self.show:
+            plt.show()
+        plt.close()
+        print(f"Plot saved as {plot_filename}")
+        return plot_filepath
 

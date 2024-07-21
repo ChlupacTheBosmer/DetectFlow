@@ -262,7 +262,7 @@ def process_video_callback(task: Task,
             # Debug message
             try:
                 if resource_monitor_queue:
-                    event_message = f"{name} FG start"
+                    event_message = f"{name} FG"
                     resource_monitor_queue.put((event_message, color))
             except Exception as e:
                 pass

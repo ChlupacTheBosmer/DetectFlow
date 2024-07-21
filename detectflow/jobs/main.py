@@ -107,14 +107,16 @@ def main(config_path: str, config_format: str, log_file: Optional[str], **kwargs
             else:
                 email_handler = None
 
-            from detectflow.utils.profiling import ResourceMonitor
-            resource_monitor = ResourceMonitor(interval=1,
-                                               plot_interval=merged_config.get('plot_interval', 300),
-                                               show=False,
-                                               output_dir=merged_config.get('scratch_path'),
-                                               email_handler=email_handler,
-                                               email_address=merged_config.get('email_address'),
-                                               email_interval=merged_config.get('email_interval', 2))
+            from detectflow.utils.profiling import ResourceMonitorPID
+            main_pid = os.getpid()
+            resource_monitor = ResourceMonitorPID(main_pid=main_pid,
+                                                  interval=1,
+                                                  plot_interval=merged_config.get('plot_interval', 300),
+                                                  show=False,
+                                                  output_dir=merged_config.get('scratch_path'),
+                                                  email_handler=email_handler,
+                                                  email_address=merged_config.get('email_address'),
+                                                  email_interval=merged_config.get('email_interval', 2))
             resource_monitor.start()
             resource_monitor_queue = resource_monitor.event_queue
         except Exception as e:
