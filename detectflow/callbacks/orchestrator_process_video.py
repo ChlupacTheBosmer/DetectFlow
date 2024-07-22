@@ -1,6 +1,6 @@
 from detectflow.process.orchestrator import Task
 from detectflow.process.database_manager import add_database_to_db_manager, backup_file_db_manager, flush_one_db_manager
-from detectflow.process.frame_generator import FrameGenerator
+from detectflow.process.frame_generator import FrameGenerator, get_frame_batch_size
 from detectflow.manipulators.dataloader import Dataloader
 from detectflow.validators.validator import Validator
 from detectflow.models import DEFAULT_MODEL_CONFIG as model_defaults
@@ -55,9 +55,9 @@ def diagnose_video_callback(**kwargs):
             # Get the status of the video processing
             status = task.get_status(file_name=os.path.basename(files[i]))
             print("Status: ", status)
-            first_frame_number = status if status and status != -1 else 0
+            first_frame_number = status if status and status > -1 else 0
             update_info = {"directory": directory, "file": files[i], "status": status}
-            if status == -1:
+            if status < 0:
                 continue
 
             # Initialize its database
@@ -95,9 +95,12 @@ def process_video_callback(task: Task,
                   "db_manager_data_queue": object,
                   "resource_monitor_queue": object,
                   "frame_batch_size": int,
+                  "max_batch_mem": int,
+                  "queue_size": int,
                   "frame_skip": int,
                   "max_producers": int,
                   "max_consumers": int,
+                  "max_workers": int,
                   "model_config": (dict, list),
                   "device": object,
                   "track_results": bool,
@@ -134,11 +137,14 @@ def process_video_callback(task: Task,
     db_manager_control_queue = kwargs.get('db_manager_control_queue', None)
     db_manager_data_queue = kwargs.get('db_manager_data_queue', None)
     resource_monitor_queue = kwargs.get('resource_monitor_queue', None)
+    max_workers = kwargs.get('max_workers', 1)
     dataloader = kwargs.get('dataloader', None)
 
     # Frame Generator config
     first_frame_number = 0
     frame_batch_size = kwargs.get('frame_batch_size', 50)
+    max_batch_mem = kwargs.get('max_batch_mem', 300000000)
+    queue_size = kwargs.get('queue_size', None)
     frame_skip = kwargs.get('frame_skip', 15)
 
     # Generator thread config
@@ -229,6 +235,7 @@ def process_video_callback(task: Task,
 
             # Decide whether to process the video,
             checked_flowering_minutes = False
+            skip = False
             try:
                 if video_raw_data:
                     flowering_minutes_db = get_flowering_minutes_db(recording_id=recording_id,
@@ -246,7 +253,7 @@ def process_video_callback(task: Task,
                         checked_flowering_minutes = True
                         if not process:
                             logging.info(f"{name} - Video {video_id} should not be processed.")
-                            continue
+                            skip = True
                         else:
                             first_frame_number = max(first_frame_number, flowers_frame_number if flowers_frame_number is not None else 0)
             except Exception as e:
@@ -255,9 +262,19 @@ def process_video_callback(task: Task,
             try:
                 if skip_empty_videos and not checked_flowering_minutes and not should_process_video_from_boxes(video_raw_data.get('reference_boxes')):
                     logging.info(f"{name} - No consistent flowers detected. Video {video_id} should not be processed.")
-                    continue
+                    skip = True
             except Exception as e:
                 logging.error(f"{name} - Error when checking reference boxes: {e}")
+
+            # If the video should be skipped set its status to -2
+            if update_info is not None and skip:
+
+                # Determine what the new status of the video is
+                update_info["status"] = -2
+
+                # Call the update method of the orchestrator_control_queue
+                if orchestrator_control_queue:
+                    orchestrator_control_queue.put(('update_task', (update_info,)))
 
             # Debug message
             try:
@@ -283,11 +300,30 @@ def process_video_callback(task: Task,
                 'skip_empty_frames': skip_empty_frames
             }
 
+            # Calculate batch size based on image size and max memory usage
+            if frame_batch_size == 0:
+                try:
+                    if video_raw_data:
+                        frame_width = video_raw_data.get('frame_width')
+                        frame_height = video_raw_data.get('frame_height')
+                    else:
+                        frame_width = 1920
+                        frame_height = 1080
+                    frame_batch_size = max(get_frame_batch_size(frame_height, frame_width, max_batch_mem), 1)
+                    logging.info(f"{name} - Automatically calculated frame batch size, using {frame_batch_size}")
+                except Exception as e:
+                    frame_batch_size = 50
+                    logging.warning(f"{name} - Error when calculating frame batch size, using {frame_batch_size}: {e}")
+
+            # Calculate queue size
+            queue_size = int(max(queue_size or max_consumers + 1, 1))
+
             # Generate frames and run detection
             generator = FrameGenerator(source=[video_path],
                                        output_folder=scratch,
                                        first_frame_number=first_frame_number,
                                        frame_skip=frame_skip,
+                                       queue_size=queue_size,
                                        processing_callback=frame_generator_predict,
                                        **callback_config)
 

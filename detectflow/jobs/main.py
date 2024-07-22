@@ -96,7 +96,6 @@ def main(config_path: str, config_format: str, log_file: Optional[str], **kwargs
     # If debug is set, initialize Resource Monitor
     resource_monitor = None
     resource_monitor_queue = None
-    print(merged_config.get('debug'))
     if merged_config.get('debug'):
         logging.info("Initializing Resource Monitor...")
         try:
