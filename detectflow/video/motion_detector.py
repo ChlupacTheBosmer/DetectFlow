@@ -115,12 +115,13 @@ class MotionDetector: # TODO: Could use a cleanup and better organization
             self.methods = ["TA"]
 
         #  Validate rois
+        self.rois = None
         try:
-            self.rois = rois.xyxy if isinstance(rois, DetectionBoxes) else ObjectDetectValidator.validate_rois_object(rois)
+            if rois is not None:
+                self.rois = rois.xyxy if isinstance(rois, DetectionBoxes) else ObjectDetectValidator.validate_rois_object(rois)
         except Exception as e:
             logging.error(f"ERROR: (Motion Detector): ROIs were passed in an incorrect format - {rois} - {e}")
             print(traceback.format_exc())
-            self.rois = None
 
     def analyze(self):
         """
