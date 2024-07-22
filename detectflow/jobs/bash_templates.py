@@ -13,7 +13,7 @@ HOMEDIR="{{ home_dir }}"
 JOBDIR="{{ task_folder }}"
 CONFIG="{{ config_path }}"
 SOURCE_FILE="{{ python_script_path }}"
-SING_IMAGE="/storage/brno2/home/hoidekr/Ultralytics/Ultralytics-8.0.199.sif"
+SING_IMAGE="/storage/projects/yolo_group/singularity/DetectFlow:24.04_03.sif"
 
 # Check if the CONFIG variable is set and not empty
 if [ -z "$CONFIG" ]; then
@@ -42,11 +42,8 @@ test -n "$SCRATCHDIR" || {
 ################################################################################
 # CALCULATIONS
 
-singularity exec -B $SCRATCHDIR:/mnt \
-$SING_IMAGE /bin/bash -c "python '$SOURCE_FILE' \
-                              --config_path '$CONFIG' --scratch_path '$SCRATCHDIR'"
+singularity run -B $SCRATCHDIR:/auto/brno2/home/$USER $SING_IMAGE python $SOURCE_FILE --config_path $CONFIG --scratch_path $SCRATCHDIR
 
-pwd > "$SCRATCHDIR"/test.txt
 ################################################################################
 
 # Copy everything from scratch directory to $JOBDIR
