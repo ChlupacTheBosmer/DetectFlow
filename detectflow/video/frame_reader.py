@@ -45,9 +45,10 @@ class FrameReader:
 
         # Maps method strings to readers and also sets order of preference
         self.READERS = {
-            "decord": self.read_frames_decord,
             "opencv": self.read_frames_opencv2,
-            "imageio": self.read_frames_imageio}
+            "imageio": self.read_frames_imageio,
+            "decord": self.read_frames_decord
+        }
 
     def get_reader(self):
 
@@ -118,7 +119,7 @@ class FrameReader:
     def read_frames_decord(self, frame_indices, enable_fallback: bool = True):
 
         # Open the video file using decord
-        vr = VideoReader(self.video_path, ctx=cpu(0), num_threads=4)  # can set to cpu or gpu .. ctx=gpu(0)
+        vr = VideoReader(self.video_path, ctx=cpu(0), num_threads=1)  # can set to cpu or gpu .. ctx=gpu(0)
         frame_number = None
         try:
             for frame_number in frame_indices:
