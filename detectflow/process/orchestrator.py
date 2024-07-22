@@ -425,7 +425,7 @@ class Orchestrator(ConfigHandler):
         for _ in range(self.max_workers):
             self.task_queue.put(None)
 
-        # Control loop to check for signals and process tasks # TODO: Fix not updating progress for last videos
+        # Control loop to check for signals and process tasks
         while any(u.is_alive() for u in self.concurrent_units):
             try:
                 control_signal, args = self.control_queue.get_nowait()
