@@ -70,6 +70,7 @@ class FrameGenerator:
                  first_frame_number: Optional[Union[int, Dict]] = None,  # TODO: Could be a dict
                  frames_per_visit: int = 20,
                  frame_skip: int = 15,
+                 queue_size: int = 2,
                  rois: ROIsArgumentType = None,
                  crop_size: int = 640,
                  offset_range: int = 100,
@@ -88,6 +89,7 @@ class FrameGenerator:
                 os.path.basename(video): 0 for video in self.video_paths}
             self.frames_per_visit = frames_per_visit
             self.frame_skip = frame_skip
+            self.queue_size = queue_size
             self.crop_size = crop_size
             self.offset_range = offset_range
             self.name_prefix = name_prefix
@@ -386,7 +388,7 @@ class FrameGenerator:
         video_files = tuple(Video(filepath) for filepath in self.video_paths)
 
         try:
-            queue = Queue()  # create shared queue
+            queue = Queue(maxsize=self.queue_size)  # create shared queue
             with ThreadPoolExecutor(max_workers=producers + consumers) as executor:  # create workers
                 # Chunk the passed video files to chunks with the size of nprod
                 chunks = iter(video_files)
