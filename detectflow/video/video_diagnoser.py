@@ -161,12 +161,12 @@ class VideoDiagnoser:
             validated_methods = self.validated_methods
 
             # Prioritize frame readers based on the validation results
-            if "decord" in validated_methods:
-                return "decord"
-            elif "opencv" in validated_methods:
+            if "opencv" in validated_methods:
                 return "opencv"
             elif "imageio" in validated_methods:
                 return "imageio"
+            elif "decord" in validated_methods:
+                return "decord"
             else:
                 # Fallback if none of the validated methods is available
                 logging.info("No validated method available. Falling back to default method.")
