@@ -36,7 +36,7 @@ class SimpleFrameReader:
             del self.reader
 
 
-class FrameReader: # TODO: Bitch be reading in wrong channels
+class FrameReader:
 
     def __init__(self, video_path: str, reader_method: Optional[str] = None):
         self.video_path = video_path
@@ -44,9 +44,10 @@ class FrameReader: # TODO: Bitch be reading in wrong channels
         self.reader_method = reader_method
 
         # Maps method strings to readers and also sets order of preference
-        self.READERS = {"decord": self.read_frames_decord,
-                        "opencv": self.read_frames_opencv2,
-                        "imageio": self.read_frames_imageio}
+        self.READERS = {
+            "opencv": self.read_frames_opencv2,
+            "decord": self.read_frames_decord,
+            "imageio": self.read_frames_imageio}
 
     def get_reader(self):
 
