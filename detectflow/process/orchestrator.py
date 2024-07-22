@@ -422,35 +422,27 @@ class Orchestrator(ConfigHandler):
         # Begin managing tasks
         self._manage_tasks()
 
+        for _ in range(self.max_workers):
+            self.task_queue.put(None)
+
         # Control loop to check for signals and process tasks # TODO: Fix not updating progress for last videos
-        stop_executed = False
         while any(u.is_alive() for u in self.concurrent_units):
             try:
                 control_signal, args = self.control_queue.get_nowait()
                 if control_signal == "stop":
                     logging.info("Received stop signal")
-                    if not stop_executed:
-                        self._stop_workers()
+                    break
                 elif control_signal == "update_task":
                     self._handle_worker_update(*args)
-                elif self.task_queue.empty():
-                    if not stop_executed:
-                        self._stop_workers()
             except self._queue_empty_exception:
                 pass
 
             time.sleep(0.1)  # Prevent busy-waiting
 
-        # # Signal workers to stop after all tasks are queued
-        # self.task_queue.join()
-        # for _ in range(self.max_workers):
-        #     logging.info("Signaling workers to stop")
-        #     self.task_queue.put(None)
-        print("joining")
         # Wait for all tasks to be completed
         for unit in self.concurrent_units:
             unit.join()
-        print("joined")
+
         # Profile running concurrent_units
         profile_threads() if self.parallelism == "thread" else None
 
@@ -566,11 +558,6 @@ class Orchestrator(ConfigHandler):
 
         # Profile running concurrent_units
         manage_threads(r'Worker #\d+', 'status') if self.parallelism == "thread" else None
-
-    def _stop_workers(self):
-        for _ in range(self.max_workers):
-            logging.info("Signaling workers to stop")
-            self.task_queue.put(None)
 
     @staticmethod
     def _worker(name, task_queue, process_task_callback, callback_kwargs):
