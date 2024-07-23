@@ -1,4 +1,5 @@
 import json
+import logging
 import configparser
 from abc import ABC, abstractmethod
 from detectflow.utils.config import load_json_config, load_ini_config
@@ -36,6 +37,7 @@ class ConfigHandler(ABC):
             else:
                 raise ValueError("Unsupported format. Use 'json' or 'ini'.")
         else:
+            logging.warning(f"Configuration file not found at path: {self.config_path}")
             config_data = {}
 
         # Merge with defaults before validation
