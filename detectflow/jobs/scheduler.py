@@ -65,7 +65,6 @@ def main(config_path: str, **kwargs):
     ]
     monitor_keys = [
         'user_email',
-        's3_cfg_file',
         'llm_handler',
         'username',
         'remote_host',
@@ -126,7 +125,6 @@ if __name__ == "__main__":
     # Monitor mode arguments
     parser.add_argument('--user_email', type=str, help="User email for monitoring jobs.")
     parser.add_argument('--email_auth', type=str, help="Email service account authentication key.")
-    parser.add_argument('--s3_cfg_file', type=str, help="Path to the S3 configuration file.")
     parser.add_argument('--llm_handler', help="Handler for the LLM.")
 
     # Shared arguments
