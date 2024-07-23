@@ -219,3 +219,15 @@ class Dataloader(S3Manipulator, Manipulator):
             metadata_dict = {'file': file_path, 'date': None, 'size': None}
 
         return metadata_dict
+
+    def locate_folder_local(self, pattern: str, folder_path: str, selection_criteria: str = 'name'):
+        try:
+            local_folders = self.find_folders(pattern, folder_path)
+            if len(local_folders) > 1:
+                local_folders = self.sort_folders(local_folders, sort_by=selection_criteria, ascending=True)
+            local_folder = local_folders[0] if len(local_folders) > 0 else None
+            return local_folder
+        except Exception as e:
+            logging.error(f"Error while searching folder {pattern} from local directory: {e}")
+            return None
+
