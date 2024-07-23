@@ -352,8 +352,9 @@ class Scheduler(ConfigHandler):
         self.use_gpu = use_gpu if isinstance(use_gpu, bool) else False
         self.resources = resources if resources else {}
         self.config_path = job_config_path
+        print("job_config: ", job_config)
         self.config = self.load_config() if not job_config else job_config
-        print(self.config)
+        print("config: ", self.config)
         self.username = username
         self.remote_host = remote_host
 
