@@ -353,6 +353,7 @@ class Scheduler(ConfigHandler):
         self.resources = resources if resources else {}
         self.config_path = job_config_path
         self.config = self.load_config() if not job_config else job_config
+        print(self.config)
         self.username = username
         self.remote_host = remote_host
 
