@@ -131,6 +131,8 @@ class Orchestrator(ConfigHandler):
         try:
             merged_config = {**self.config, **kwargs}
 
+            print(merged_config)
+
             # Start by initializing dataloader, it should be injected
             self.dataloader = merged_config.get('dataloader', Dataloader())
             self.input_data = merged_config.get('input_data')
