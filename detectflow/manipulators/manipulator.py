@@ -219,6 +219,30 @@ class Manipulator(Validator):
             return []
 
     @staticmethod
+    def move_folder(source_path: str, dest_path: str, overwrite: bool = False, copy: bool = False):
+        try:
+            if copy:
+                if os.path.exists(dest_path):
+                    if overwrite:
+                        shutil.rmtree(dest_path)
+                    else:
+                        logging.warning(f"Destination '{dest_path}' already exists. Skipping.")
+                        return
+                shutil.copytree(source_path, dest_path)
+                logging.info(f"Copied '{source_path}' to '{dest_path}'")
+            else:
+                if os.path.exists(dest_path):
+                    if overwrite:
+                        shutil.rmtree(dest_path)
+                    else:
+                        logging.warning(f"Destination '{dest_path}' already exists. Skipping.")
+                        return
+                shutil.move(source_path, dest_path)
+                logging.info(f"Moved '{source_path}' to '{dest_path}'")
+        except Exception as e:
+            logging.error(f"Error moving/copying folder: {e}")
+
+    @staticmethod
     def sort_files(file_paths: List[str], sort_by: str = 'modification', ascending: bool = True) -> List[str]:
         """
         Sort a list of file paths based on a specific criterion.
@@ -251,3 +275,27 @@ class Manipulator(Validator):
         except Exception as e:
             logging.error(f"Unexpected error while sorting files: {e}")
             return []
+
+    @staticmethod
+    def find_folders(pattern: str, folder_path: str):
+        regex = re.compile(pattern)
+        matched_folders = []
+        for root, dirs, _ in os.walk(folder_path):
+            for dir_name in dirs:
+                if regex.match(dir_name):
+                    matched_folders.append(os.path.join(root, dir_name))
+        return matched_folders
+
+    @staticmethod
+    def sort_folders(folders: list, sort_by: str = 'name', ascending: bool = True):
+        if sort_by == 'name':
+            folders.sort(reverse=not ascending)
+        elif sort_by == 'modification':
+            folders.sort(key=lambda f: os.path.getmtime(f), reverse=not ascending)
+        elif sort_by == 'creation':
+            folders.sort(key=lambda f: os.path.getctime(f), reverse=not ascending)
+        elif sort_by == 'size':
+            folders.sort(key=lambda f: sum(os.path.getsize(os.path.join(f, file)) for file in os.listdir(f)), reverse=not ascending)
+        else:
+            logging.error(f"Unknown sort criteria '{sort_by}'")
+        return folders
