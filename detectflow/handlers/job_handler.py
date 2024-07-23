@@ -91,7 +91,7 @@ class JobHandler:
 
         # Find a checkpoint file and rename it so it gets ignored when job is rerun but is retained for manual control
         try:
-            chp_pattern = rf".*{re.escape(job_name)}.*"
+            chp_pattern = rf"^(?!.*config).*{re.escape(job_name)}.*$"  # Match job name, but not the config file
             chp_files = self.dataloader.list_files(self.output_directory, regex=chp_pattern, extensions=('.json', '.ini'),
                                                return_full_path=True)
             if len(chp_files) == 1:
