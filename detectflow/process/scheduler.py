@@ -45,7 +45,7 @@ class Scheduler(ConfigHandler):
         self.jobs_dir = Manipulator.create_folders(["jobs"], local_work_dir)[0]
         self.database_path = database_path
         self.database_manipulator = None
-        self._is_remote = True if WINDOWS or MACOS else False if LINUX and remote_work_dir else True
+        self._is_remote = True if remote_work_dir else False
 
         # Assign attributes
         self.bucket_name = None
