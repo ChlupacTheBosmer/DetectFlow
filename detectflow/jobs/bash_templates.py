@@ -55,6 +55,7 @@ singularity run -B /auto/brno11-elixir/home/$USER:/auto/brno11-elixir/home/$USER
                 -B /auto/pruhonice1-ibot/home/$USER:/auto/pruhonice1-ibot/home/$USER \
                 -B /auto/vestec1-elixir/home/$USER:/auto/vestec1-elixir/home/$USER \
                 -B /storage/projects/yolo_group:/storage/projects/yolo_group/ \
+                -B $SCRATCHDIR:$SCRATCHDIR \
                 $SING_IMAGE python $SOURCE_FILE --config_path $CONFIG --scratch_path $SCRATCHDIR
 
 ################################################################################
