@@ -216,7 +216,11 @@ def extract_data_from_result(result: DetectionResults) -> Dict[str, Any]:
     reference_bboxes = safe_json(results.get('reference_boxes'))
     visitor_bboxes = safe_json(results.get('boxes'))
     filtered_visitor_bboxes = safe_json(results.get('filtered_boxes'))
-    visit_ids = safe_json(results.get('boxes').id if hasattr(results.get('boxes'), 'id') and results.get('boxes').id is not None and len(results.get('boxes').id) > 0 else [-1.0 for _ in results.get('boxes')])
+    visit_ids_conditions = [
+        hasattr(results.get('boxes'), 'id'),
+        results.get('boxes').id is not None and len(results.get('boxes').id) > 0
+    ]
+    visit_ids = safe_json(results.get('boxes').id if all(visit_ids_conditions) else [-1.0 for _ in results.get('boxes')] if results.get('boxes') is not None else [])
     on_flower = safe_json(results.get('on_flowers'))
 
     flags = ""  # Placeholder for future use
