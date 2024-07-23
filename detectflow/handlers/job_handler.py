@@ -68,7 +68,7 @@ class JobHandler:
                    "training_data": False
                    }
 
-        # Backup database with results
+        # Backup database with results - Will not backup, but only summarise the data - backup done interanlly in job
         try:
             data_stats = self.handle_db_file(job_name)
             results["result_database"] = True
@@ -79,15 +79,15 @@ class JobHandler:
                 "number_of_frames": 0
             }
 
-        # Check for folders with images and .txt files and back it up
-        try:
-            image_folder_path = self.find_image_folder(self.output_directory)
-            if image_folder_path:
-                # shutil.copy(image_folder_path, "/path/to/task_named_folder/")
-                self.upload_folder_to_s3(image_folder_path, 'training-data', job_name)
-                results["training_data"] = True
-        except Exception as e:
-            logging.error(f"Error when backing up the generated training data, perform manual backup: {e}")
+        # # Check for folders with images and .txt files and back it up
+        # try:
+        #     image_folder_path = self.find_image_folder(self.output_directory)
+        #     if image_folder_path:
+        #         # shutil.copy(image_folder_path, "/path/to/task_named_folder/")
+        #         self.upload_folder_to_s3(image_folder_path, 'training-data', job_name)
+        #         results["training_data"] = True
+        # except Exception as e:
+        #     logging.error(f"Error when backing up the generated training data, perform manual backup: {e}")
 
         # Find a checkpoint file and rename it so it gets ignored when job is rerun but is retained for manual control
         try:
@@ -256,7 +256,7 @@ class JobHandler:
         # Find the appropriate database file
         db_path = self.find_db_file(job_name)
         if db_path:
-            self.upload_db_to_s3(db_path, job_name)
+            #self.upload_db_to_s3(db_path, job_name)
 
             # Get data stats from db
             data_stats = self.get_data_stats_from_db(db_path)  # no. of visits and frames analyzed
