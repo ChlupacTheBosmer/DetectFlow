@@ -11,6 +11,11 @@ from detectflow.utils.pbs_job_report import PBSJobReport
 from detectflow.config import S3_CONFIG
 import traceback
 from typing import List
+try:
+    from detectflow.config.secret import EMAIL_ADDRESS, EMAIL_PASSWORD
+except Exception:
+    EMAIL_ADDRESS = None
+    EMAIL_PASSWORD = None
 
 
 class JobHandler:
@@ -18,15 +23,26 @@ class JobHandler:
                  output_directory: str,
                  user_email: str,
                  s3_cfg_file: str = S3_CONFIG,
-                 sender_email: str = "detectflow@gmail.com",
-                 email_password: str = "AUTH_INFO", # TODO: Change to a secure method
+                 sender_email: str = EMAIL_ADDRESS,
+                 email_password: str = EMAIL_PASSWORD,
                  email_handler=None,
                  llm_handler=None):
 
         self.output_directory = output_directory
         self.dataloader = Dataloader(s3_cfg_file)
-        self.email_sender = EmailHandler(sender_email, email_password) if email_handler is None else email_handler
+        self.email_sender = None
         self.llm_handler = llm_handler
+
+        if email_handler is None:
+            try:
+                if sender_email and email_password:
+                    self.email_sender = EmailHandler(sender_email, email_password)
+                else:
+                    logging.info("Email address and password must be provided. Email notifications disabled.")
+            except Exception as e:
+                logging.error(f"Error initializing email handler: {e}")
+        else:
+            self.email_sender = email_handler
 
         # Validate email address
         if is_valid_email(user_email):
@@ -131,6 +147,10 @@ class JobHandler:
 
     def send_email_notification(self, job_info, data_stats, results):
 
+        if self.email_sender is None:
+            logging.info("Email handler not available. Email notification skipped.")
+            return
+
         # Extract error log data
         error_logs = self.parse_log_files(job_info)
 
@@ -179,12 +199,16 @@ class JobHandler:
             body = PBSJobReport(job_info, error_logs).generate_report(format='text')
 
             # Format appended data
-            appendix = self.email_sender.format_data_for_email({
-                "PBS Job Information": job_info,
-                "Detection Results": data_stats,
-                "Output Logs": error_logs,
-                "Results Backed-up": results
-            })
+            if self.email_sender is not None:
+                appendix = self.email_sender.format_data_for_email({
+                    "PBS Job Information": job_info,
+                    "Detection Results": data_stats,
+                    "Output Logs": error_logs,
+                    "Results Backed-up": results
+                })
+            else:
+                appendix = ""
+
             # Print the gathered data
             print("Job Status Report:")
             print("")

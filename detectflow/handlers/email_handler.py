@@ -6,10 +6,19 @@ from email.mime.image import MIMEImage
 from email import encoders
 import re
 import os
+try:
+    from detectflow.config.secret import EMAIL_ADDRESS, EMAIL_PASSWORD
+except Exception:
+    EMAIL_ADDRESS = None
+    EMAIL_PASSWORD = None
 
 
 class EmailHandler:
-    def __init__(self, sender_email, app_password: str = "AUTH_INFO"):
+    def __init__(self, sender_email: str = EMAIL_ADDRESS, app_password: str = EMAIL_PASSWORD):
+
+        if sender_email is None or app_password is None:
+            raise ValueError("Email address and password must be provided.")
+
         self.sender_email = sender_email
         self.app_password = app_password
         self.smtp_server = "smtp.gmail.com"

@@ -407,7 +407,9 @@ class Scheduler(ConfigHandler):
                      username: Optional[str] = None,
                      remote_host: Optional[str] = None,
                      ssh_password: str = None,
-                     ignore_ssh_auth: bool = False):
+                     ignore_ssh_auth: bool = False,
+                     sender_email: str = None,
+                     email_auth: str = None):
         """Monitor the status of submitted jobs, updating the database accordingly."""
 
         self.username = username
@@ -470,7 +472,9 @@ class Scheduler(ConfigHandler):
                                                      user_email=user_email,
                                                      s3_cfg_file=s3_cfg_file,
                                                      email_handler=None,
-                                                     llm_handler=llm_handler)
+                                                     llm_handler=llm_handler,
+                                                     sender_email=sender_email,
+                                                     email_password=email_auth)
                             # Handle job status change
                             job_handler.handle_finished_job(info)
                             result = "DONE OK" if exit_status == 0 else "ERROR OK"

@@ -70,7 +70,8 @@ def main(config_path: str, **kwargs):
         'username',
         'remote_host',
         'ssh_password',
-        'ignore_ssh_auth'
+        'ignore_ssh_auth',
+        'email_auth'
     ]
 
     # Sort kwargs into scheduler, submit, and monitor dictionaries
@@ -91,7 +92,7 @@ def main(config_path: str, **kwargs):
 
     if mode in ['monitor', 'both']:
         try:
-            scheduler.monitor_jobs(**monitor_kwargs)
+            scheduler.monitor_jobs(**monitor_kwargs, sender_email='detectflow@gmail.com')
         except Exception as e:
             logging.error(f"Error monitoring jobs: {e}")
             traceback.print_exc()
@@ -116,11 +117,6 @@ if __name__ == "__main__":
     parser.add_argument('--job_config_path', help="Path to a configuration file to use for the scheduled jobs.")
     parser.add_argument('--python_script_path', help="Path to a python script to use for the scheduled jobs.")
 
-    parser.add_argument('--walltime', type=int, default=1, help="Walltime for the scheduled jobs (HH).")
-    parser.add_argument('--ncpus', type=int, default=5, help="Number of CPUs to request for the scheduled jobs.")
-    parser.add_argument('--use_gpu', type=bool, default=False, help="Whether to request GPU for the scheduled jobs.")
-    parser.add_argument('--memory', type=int, default=32, help="Memory to request for the scheduled jobs (GB).")
-    parser.add_argument('--scratch_size', type=int, default=2, help="Scratch size to request for the scheduled jobs (GB).")
     parser.add_argument('--walltime', type=int, help="Walltime for the scheduled jobs (HH).")
     parser.add_argument('--ncpus', type=int, help="Number of CPUs to request for the scheduled jobs.")
     parser.add_argument('--use_gpu', type=bool, help="Whether to request GPU for the scheduled jobs.")
@@ -129,6 +125,7 @@ if __name__ == "__main__":
 
     # Monitor mode arguments
     parser.add_argument('--user_email', type=str, help="User email for monitoring jobs.")
+    parser.add_argument('--email_auth', type=str, help="Email service account authentication key.")
     parser.add_argument('--s3_cfg_file', type=str, help="Path to the S3 configuration file.")
     parser.add_argument('--llm_handler', help="Handler for the LLM.")
 
