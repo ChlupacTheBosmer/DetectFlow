@@ -7,14 +7,26 @@ import json
 from typing import Optional, Dict, Any
 
 # Now import detectflow package
+from detectflow.utils import install_s3_config
 from detectflow.process.scheduler import Scheduler
-from detectflow.utils.config import load_json_config, load_ini_config, load_config, merge_configs
+from detectflow.utils.config import load_config, merge_configs
 
 def main(config_path: str, config_format: str, **kwargs):
 
     # Load configuration and merge with kwargs
     file_config = load_config(config_path, config_format)
     merged_config = merge_configs(file_config, kwargs)
+
+    # Install s3 config if the parameters were passed
+    try:
+        if all([key in merged_config for key in ['host_base', 'use_https', 'access_key', 'secret_key', 'host_bucket']]):
+            install_s3_config(merged_config.get('host_base'),
+                              merged_config.get('use_https'),
+                              merged_config.get('access_key'),
+                              merged_config.get('secret_key'),
+                              merged_config.get('host_bucket'))
+    except Exception as e:
+        logging.error(f"An error occurred when installing S3 config: {e}")
 
     # Sort out some kwargs
     merged_config['local_work_dir'] = merged_config.get('local_work_dir', os.getcwd())
