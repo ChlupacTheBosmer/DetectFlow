@@ -13,7 +13,7 @@ HOMEDIR="{{ home_dir }}"
 JOBDIR="{{ task_folder }}"
 CONFIG="{{ config_path }}"
 SOURCE_FILE="{{ python_script_path }}"
-SING_IMAGE="/storage/projects/yolo_group/singularity/DetectFlow:24.04_03.sif"
+SING_IMAGE="/storage/projects/yolo_group/singularity/DetectFlow:24.04_04.sif"
 
 # Redirect TMP directory into scratch
 export TMPDIR=$SCRATCHDIR
@@ -45,7 +45,17 @@ test -n "$SCRATCHDIR" || {
 ################################################################################
 # CALCULATIONS
 
-singularity run -B $SCRATCHDIR:/auto/brno2/home/$USER $SING_IMAGE python $SOURCE_FILE --config_path $CONFIG --scratch_path $SCRATCHDIR
+singularity run -B /auto/brno11-elixir/home/$USER:/auto/brno11-elixir/home/$USER \
+                -B /auto/brno12-cerit/home/$USER:/auto/brno12-cerit/home/$USER \
+                -B /auto/brno2/home/$USER:/auto/brno2/home/$USER \
+                -B /auto/budejovice1/home/$USER:/auto/budejovice1/home/$USER \
+                -B /auto/plzen1/home/$USER:/auto/plzen1/home/$USER \
+                -B /auto/praha2-natur/home/$USER:/auto/praha2-natur/home/$USER \
+                -B /auto/praha5-elixir/home/$USER:/auto/praha5-elixir/home/$USER \
+                -B /auto/pruhonice1-ibot/home/$USER:/auto/pruhonice1-ibot/home/$USER \
+                -B /auto/vestec1-elixir/home/$USER:/auto/vestec1-elixir/home/$USER \
+                -B /storage/projects/yolo_group:/storage/projects/yolo_group/ \
+                $SING_IMAGE python $SOURCE_FILE --config_path $CONFIG --scratch_path $SCRATCHDIR
 
 ################################################################################
 
@@ -65,3 +75,4 @@ fi
 
 clean_scratch
 """
+
