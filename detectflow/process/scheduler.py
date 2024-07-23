@@ -131,12 +131,14 @@ class Scheduler(ConfigHandler):
         input_data = directory  # Input data - full path to single directory
         checkpoint_dir = self.local_work_dir if not self._is_remote else self.remote_work_dir
         task_name = f"{self.bucket_name}_{directory.rstrip('/').split('/')[-1]}"
+        username = self.username
 
         # Configuration updates
         return {
             "input_data": input_data,
             "checkpoint_dir": checkpoint_dir,
-            "task_name": task_name
+            "task_name": task_name,
+            "username": username
         }
 
     def _generate_config_file(self, config_file_name, config_updates):
@@ -148,8 +150,7 @@ class Scheduler(ConfigHandler):
         # Update config with values specific for this job
         if isinstance(config_updates, dict):
             for key, value in config_updates.items():
-                if key in task_config:
-                    task_config[key] = value
+                task_config[key] = value
 
         # Save task specific cfg file
         try:
