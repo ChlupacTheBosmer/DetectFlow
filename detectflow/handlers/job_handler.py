@@ -256,8 +256,6 @@ class JobHandler:
         # Find the appropriate database file
         db_path = self.find_db_file(job_name)
         if db_path:
-            #self.upload_db_to_s3(db_path, job_name)
-
             # Get data stats from db
             data_stats = self.get_data_stats_from_db(db_path)  # no. of visits and frames analyzed
 
@@ -280,53 +278,6 @@ class JobHandler:
 
         # Return the file with the latest modification time
         return max(db_files, key=os.path.getmtime)
-
-    def find_image_folder(self, base_path, keywords: List = []):
-        # List of keywords to check in directory names
-        keywords = keywords + ["frame", "train", "image", "data", "samples"]
-
-        for root, dirs, files in os.walk(base_path):
-            # Check if any keyword is in the current root directory's name
-            if any(keyword in root for keyword in keywords):
-                # Check for the presence of specific file types
-                if any(f.endswith('.txt') for f in files) and any(f.endswith(('.png', '.jpg', '.jpeg')) for f in files):
-                    return root
-        return None
-
-    def upload_db_to_s3(self, local_file_path, job_name):
-        from detectflow.manipulators.input_manipulator import InputManipulator
-
-        if self.dataloader is None:
-            logging.warning("No S3 manipulator provided. Skipping database S3 backup.")
-            return
-
-        # Specify the bucket and directory names
-        bucket_name, recording_id = job_name.split('_', 1)
-        directory_name = f"{InputManipulator.zero_pad_id(recording_id)}/"
-
-        # Upload database to s3
-        try:
-            self.dataloader.backup_file_s3(bucket_name, directory_name, local_file_path)
-        except Exception as e:
-            logging.error(f"Failed to backup database for recording ID {recording_id} to S3: {e}")
-            return
-
-    def upload_folder_to_s3(self, local_directory, bucket_name, job_name): # TODO: Test and move to dataloader, make more robust
-        try:
-            # Specify the bucket and directory names
-            _, directory_name = job_name.split('_', 1)
-
-            # Ensure the bucket exists
-            self.dataloader.create_bucket_s3(bucket_name)
-
-            # Check if the directory exists within the bucket
-            self.dataloader.create_directory_s3(bucket_name, directory_name)
-
-            # Upload the directory to S3
-            logging.info(f"Uploading directory '{local_directory}' to 's3://{bucket_name}/{directory_name}'")
-            self.dataloader.upload_directory_s3(local_directory, bucket_name, directory_name)
-        except Exception as e:
-            print(f"Failed to upload {local_directory} to S3: {e}")
 
     def get_data_stats_from_db(self, db_path):
         """
@@ -366,6 +317,55 @@ class JobHandler:
             return {"number_of_visits": 0,
                     "number_of_frames": 0
                     }  # Return zero or appropriate error handling
+
+    # def find_image_folder(self, base_path, keywords: List = []):
+    #     # List of keywords to check in directory names
+    #     keywords = keywords + ["frame", "train", "image", "data", "samples"]
+    #
+    #     for root, dirs, files in os.walk(base_path):
+    #         # Check if any keyword is in the current root directory's name
+    #         if any(keyword in root for keyword in keywords):
+    #             # Check for the presence of specific file types
+    #             if any(f.endswith('.txt') for f in files) and any(
+    #                     f.endswith(('.png', '.jpg', '.jpeg')) for f in files):
+    #                 return root
+    #     return None
+    #
+    # def upload_db_to_s3(self, local_file_path, job_name):
+    #     from detectflow.manipulators.input_manipulator import InputManipulator
+    #
+    #     if self.dataloader is None:
+    #         logging.warning("No S3 manipulator provided. Skipping database S3 backup.")
+    #         return
+    #
+    #     # Specify the bucket and directory names
+    #     bucket_name, recording_id = job_name.split('_', 1)
+    #     directory_name = f"{InputManipulator.zero_pad_id(recording_id)}/"
+    #
+    #     # Upload database to s3
+    #     try:
+    #         self.dataloader.backup_file_s3(bucket_name, directory_name, local_file_path)
+    #     except Exception as e:
+    #         logging.error(f"Failed to backup database for recording ID {recording_id} to S3: {e}")
+    #         return
+    #
+    # def upload_folder_to_s3(self, local_directory, bucket_name,
+    #                         job_name):  # TODO: Test and move to dataloader, make more robust
+    #     try:
+    #         # Specify the bucket and directory names
+    #         _, directory_name = job_name.split('_', 1)
+    #
+    #         # Ensure the bucket exists
+    #         self.dataloader.create_bucket_s3(bucket_name)
+    #
+    #         # Check if the directory exists within the bucket
+    #         self.dataloader.create_directory_s3(bucket_name, directory_name)
+    #
+    #         # Upload the directory to S3
+    #         logging.info(f"Uploading directory '{local_directory}' to 's3://{bucket_name}/{directory_name}'")
+    #         self.dataloader.upload_directory_s3(local_directory, bucket_name, directory_name)
+    #     except Exception as e:
+    #         print(f"Failed to upload {local_directory} to S3: {e}")
 
 def is_valid_email(email):
     """Validate an email address using a regular expression."""
