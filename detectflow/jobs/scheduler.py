@@ -11,9 +11,10 @@ from detectflow.utils import install_s3_config
 from detectflow.process.scheduler import Scheduler
 from detectflow.utils.config import load_config, merge_configs
 
-def main(config_path: str, config_format: str, **kwargs):
+def main(config_path: str, **kwargs):
 
     # Load configuration and merge with kwargs
+    config_format = kwargs.get('config_format', 'json')
     file_config = load_config(config_path, config_format)
     merged_config = merge_configs(file_config, kwargs)
 
@@ -35,11 +36,11 @@ def main(config_path: str, config_format: str, **kwargs):
     merged_config['ssh_password'] = os.getenv('SSH_PASSWORD', None) if merged_config.get('ssh_password') is None else merged_config.get('ssh_password')
     merged_config['ignore_ssh_auth'] = merged_config.get('ignore_ssh_auth', True)
     merged_config['resources'] = {
-        'walltime': merged_config.get('walltime', 1),
-        'cpus': merged_config.get('ncpus', 5),
+        'walltime': merged_config.get('walltime', 5),
+        'cpus': merged_config.get('ncpus', 10),
         'use_gpu': merged_config.get('use_gpu', False),
         'mem': merged_config.get('memory', 32),
-        'scratch': merged_config.get('scratch_size', 2)
+        'scratch': merged_config.get('scratch_size', 6)
     }
 
     # Keys for each method
@@ -102,10 +103,10 @@ if __name__ == "__main__":
     parser.add_argument('--remote_work_dir', type=str, help="Path to the remote working directory.")
     parser.add_argument('--database_path', type=str, help="Path to the database for logging jobs.")
     parser.add_argument('--config_path', type=str, help="Path to the configuration file for scheduler.")
-    parser.add_argument('--config_format', type=str, choices=['json', 'ini'], default='json', help="Configuration file format.")
+    parser.add_argument('--config_format', type=str, choices=['json', 'ini'], help="Configuration file format.")
 
     # Mode of operation
-    parser.add_argument('--mode', type=str, choices=['submit', 'monitor', 'both'], default='submit', help="Operation to perform.")
+    parser.add_argument('--mode', type=str, choices=['submit', 'monitor', 'both'], help="Operation to perform.")
 
     # Submit mode arguments
     parser.add_argument('--bucket_name', type=str, help="Name of the bucket to schedule jobs for.")
@@ -120,6 +121,11 @@ if __name__ == "__main__":
     parser.add_argument('--use_gpu', type=bool, default=False, help="Whether to request GPU for the scheduled jobs.")
     parser.add_argument('--memory', type=int, default=32, help="Memory to request for the scheduled jobs (GB).")
     parser.add_argument('--scratch_size', type=int, default=2, help="Scratch size to request for the scheduled jobs (GB).")
+    parser.add_argument('--walltime', type=int, help="Walltime for the scheduled jobs (HH).")
+    parser.add_argument('--ncpus', type=int, help="Number of CPUs to request for the scheduled jobs.")
+    parser.add_argument('--use_gpu', type=bool, help="Whether to request GPU for the scheduled jobs.")
+    parser.add_argument('--memory', type=int, help="Memory to request for the scheduled jobs (GB).")
+    parser.add_argument('--scratch_size', type=int, help="Scratch size to request for the scheduled jobs (GB).")
 
     # Monitor mode arguments
     parser.add_argument('--user_email', type=str, help="User email for monitoring jobs.")
