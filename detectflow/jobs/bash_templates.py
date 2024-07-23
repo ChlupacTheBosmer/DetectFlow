@@ -15,6 +15,9 @@ CONFIG="{{ config_path }}"
 SOURCE_FILE="{{ python_script_path }}"
 SING_IMAGE="/storage/projects/yolo_group/singularity/DetectFlow:24.04_03.sif"
 
+# Redirect TMP directory into scratch
+export TMPDIR=$SCRATCHDIR
+
 # Check if the CONFIG variable is set and not empty
 if [ -z "$CONFIG" ]; then
     echo "Variable CONFIG is not set!" >&2
