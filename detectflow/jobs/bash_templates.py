@@ -13,7 +13,7 @@ HOMEDIR="{{ home_dir }}"
 JOBDIR="{{ task_folder }}"
 CONFIG="{{ config_path }}"
 SOURCE_FILE="{{ python_script_path }}"
-SING_IMAGE="/storage/projects/yolo_group/singularity/DetectFlow:24.04_04.sif"
+SING_IMAGE="/storage/projects/yolo_group/singularity/DetectFlow:24.04_05.sif"
 
 # Redirect TMP directory into scratch
 export TMPDIR=$SCRATCHDIR
@@ -56,6 +56,7 @@ singularity run -B /auto/brno11-elixir/home/$USER:/auto/brno11-elixir/home/$USER
                 -B /auto/vestec1-elixir/home/$USER:/auto/vestec1-elixir/home/$USER \
                 -B /storage/projects/yolo_group:/storage/projects/yolo_group \
                 -B $SCRATCHDIR:$SCRATCHDIR \
+                --env SCRATCH_DIR=$SCRATCHDIR \
                 $SING_IMAGE python $SOURCE_FILE --config_path $CONFIG --scratch_path $SCRATCHDIR
 
 ################################################################################
