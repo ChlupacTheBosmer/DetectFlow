@@ -11,6 +11,7 @@ import logging
 from datetime import datetime
 import os
 from typing import Any, Type, Union, Optional, List
+import traceback
 
 
 def diagnose_video_callback(**kwargs):
@@ -106,6 +107,9 @@ def process_video_callback(task: Task,
                   "device": object,
                   "track_results": bool,
                   "tracker_type": (str, type(None)),
+                  "skip_empty_videos": bool,
+                  "detect_empty_videos": bool,
+                  "skip_empty_frames": bool,
                   "inspect": bool}
 
     logging.info(f"Processing video task: {task}: kwargs: {kwargs}")
@@ -162,7 +166,8 @@ def process_video_callback(task: Task,
     # Functionality flags
     inspect = kwargs.get('inspect', False)
     skip_empty_videos = kwargs.get('skip_empty_videos', False)
-    skip_empty_frames = kwargs.get('skip_empty_frames', False)
+    detect_empty_videos = kwargs.get('detect_empty_videos', False)
+    skip_empty_frames = kwargs.get('skip_empty_frames', True)
 
     # Debug message
     try:
@@ -235,7 +240,7 @@ def process_video_callback(task: Task,
             else:
                 raise TypeError("Database task queue not defined")
 
-            # Decide whether to process the video,
+            # Decide whether to process the video based on the flowering minutes database
             checked_flowering_minutes = False
             skip = False
             try:
@@ -254,7 +259,7 @@ def process_video_callback(task: Task,
                                                                                      fps=video_raw_data.get('fps'))
                         checked_flowering_minutes = True
                         if not process:
-                            logging.info(f"{name} - Video {video_id} should not be processed.")
+                            logging.info(f"{name} - No flowers in video based on DB. Video {video_id} should not be processed.")
                             skip = True
                         else:
                             first_frame_number = max(first_frame_number, flowers_frame_number if flowers_frame_number is not None else 0)
@@ -262,11 +267,13 @@ def process_video_callback(task: Task,
                 logging.error(f"{name} - Error when checking flowering minutes: {e}")
 
             try:
-                if skip_empty_videos and not checked_flowering_minutes and not should_process_video_from_boxes(video_raw_data.get('reference_boxes')):
-                    logging.info(f"{name} - No consistent flowers detected. Video {video_id} should not be processed.")
-                    skip = True
+                if detect_empty_videos and not checked_flowering_minutes and video_raw_data:
+                    process = should_process_video_from_boxes(video_raw_data.get('reference_boxes'))
+                    logging.info(f"{name} - {'C' if process else 'No c'}onsistent flowers detected. Video {video_id} should{' ' if process else ' not'} be processed.")
+                    skip = True if skip_empty_videos and not process else False
             except Exception as e:
-                logging.error(f"{name} - Error when checking reference boxes: {e}")
+                logging.error(f"{name} - Error when detecting empty videos: {e}")
+                traceback.print_exc()
 
             # If the video should be skipped set its status to -2
             if update_info is not None and skip:
@@ -277,6 +284,10 @@ def process_video_callback(task: Task,
                 # Call the update method of the orchestrator_control_queue
                 if orchestrator_control_queue:
                     orchestrator_control_queue.put(('update_task', (update_info,)))
+
+            # If the video should be skipped, continue to the next video
+            if skip:
+                continue
 
             # Debug message
             try:
