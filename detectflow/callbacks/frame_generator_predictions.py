@@ -114,9 +114,6 @@ def frame_generator_predict(**kwargs):
     # video_start_time = video.start_time if hasattr(video, 'start_time') and video.start_time else None
     video_total_frames = video.total_frames if hasattr(video, 'total_frames') and video.total_frames else None
 
-    # # Subslice for testing purposes
-    # frames = frames  # [:1]
-
     # Pack metadata
     metadata = {
         'frame_number': frame_numbers,
@@ -127,9 +124,6 @@ def frame_generator_predict(**kwargs):
 
     # Define Predictor
     visitor_predictor = Predictor(tracker=tracker_type)
-
-    # # Define Tracker
-    # tracker = Tracker()
 
     # Get the position of visitors. Return DetectionResults
     for i, result in enumerate(visitor_predictor.detect(frame_numpy_array=frames,
@@ -180,23 +174,3 @@ def frame_generator_predict(**kwargs):
     except Exception as e:
         pass
 
-
-# if crop_imgs and len(det_results) > 0:
-    #
-    #     # Check if the boxes can fit in a reasonably sized square crop
-    #     for result in [r for r in det_results if all([r is not None, hasattr(r, "boxes"), r.boxes is not None])]:
-    #         smc = SmartCrop.from_detection_results(result,
-    #                                                crop_size=(640, 640),
-    #                                                handle_overflow="expand",
-    #                                                max_expansion_limit=(1000, 1000),
-    #                                                margin=50,
-    #                                                exhaustive_search=True,
-    #                                                permutation_limit=8,
-    #                                                multiple_rois=True)
-    #
-    #         smart_result = smc.smart_crop(partial_overlap=True,
-    #                                       iou_threshold=0.3,
-    #                                       allow_slicing=True,
-    #                                       evenness_threshold=0.66,
-    #                                       force_slice_empty=False,
-    #                                       inspect=inspect)
