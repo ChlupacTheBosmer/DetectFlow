@@ -19,6 +19,7 @@ from detectflow.utils.pdf_creator import PDFCreator, DiagPDFCreator
 from detectflow.video.video_data import Video
 from detectflow.config import DETECTFLOW_DIR
 from PIL import Image as PILImage
+from detectflow.models import DEFAULT_MODEL_CONFIG
 
 
 class VideoDiagnoser:
@@ -33,7 +34,7 @@ class VideoDiagnoser:
     def __init__(self,
                  video_path: Optional[str] = None,
                  video_file: Optional[Video] = None,
-                 flowers_model_path: str = os.path.join(DETECTFLOW_DIR, 'models', 'flowers.pt'),
+                 flowers_model_path: str = DEFAULT_MODEL_CONFIG[0]['path'],
                  flowers_model_conf: float = 0.3,
                  motion_methods: Optional[Union[str, int, List, Tuple]] = "SOM",
                  frame_skip: int = 1,
