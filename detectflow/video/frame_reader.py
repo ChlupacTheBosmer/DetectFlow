@@ -125,7 +125,7 @@ class FrameReader:
             for frame_number in frame_indices:
                 frame = vr[frame_number]  # read an image from the capture
                 frame = np.ndarray(frame)
-                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                #frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
                 yield {"frame_number": frame_number, "frame": frame}
         except Exception as e:
             # If reading fails continue using the fallback opencv reader
