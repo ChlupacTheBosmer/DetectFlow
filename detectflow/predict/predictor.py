@@ -223,6 +223,7 @@ class Predictor:
                               slice_width=640,
                               overlap_height_ratio=0.2,
                               overlap_width_ratio=0.2,
+                              novisual=True,
                               # TODO: Move to kwargs dictionary passed to the function when confirmed that it works
                               verbose=0,
                               **sahi_merged_config
