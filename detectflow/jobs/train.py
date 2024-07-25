@@ -77,7 +77,7 @@ def initialize_cuda_settings():
 
         Sets specific environment variables related to CUDA operations.
     """
-    # Specify some CUDA setttings
+    # Specify some CUDA settings
     os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
     os.environ['TORCH_USE_CUDA_DSA'] = "1"
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:1024"
@@ -508,7 +508,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='This script will train a YOLOv8 model.')
 
     # Argument to config file containing the rest of the training arguments
-    parser.add_argument('--config', type=str, required=True, help='Path to the config.json file')
+    parser.add_argument('--config_path', type=str, required=True, help='Path to the config.json file')
 
     # Arguments defining training
     parser.add_argument('--dataset', type=str, default=None, help='Dataset folder name')
@@ -536,7 +536,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Load arguments from JSON config file
-    config_args = load_config(args.config)
+    config_args = load_config(args.config_path)
 
     # Combine with command-line arguments, giving precedence to config file arguments
     for key, value in config_args.items():
