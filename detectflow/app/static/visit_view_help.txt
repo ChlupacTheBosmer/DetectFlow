@@ -1,0 +1,22 @@
+## Introduction
+<p>Welcome. Here you can find basic tutorial on how to use this database view.</p>
+<p>The model generates predictions on a per frame basis. Working with this data can be cumbersome and overwhelming.
+For that reason we can process this data into coherent visits. Since the predictions ca nbe noisy and inconsistent
+across frames, this process included quite a bit of alchemy. The aim of this app is to help you process the raw results
+into these visits data and if possible filter out at least some of the false positives and other noise.</p>
+
+## 1. Generating Visits
+<p>When you open the app, you will see a table with the visits data. This data is generated from the raw predictions.
+You can see the start and end time of the visit, the video_id and the visit_id. The visit_id is a unique identifier of the visit.</p>
+
+## 2. Filtering Visits
+<p>There are several ways to filter the visits. You can filter by the video_id, the start time, the end time, the visit_id or any combination of these.
+You can also sort the visits by any of these columns. You can also filter the visits by the video_id.</p>
+
+## 3. Editing Visits
+<p>You can edit the visits by clicking on the cell you want to edit. You can edit the start time, the end time, the video_id or the visit_id.
+You can also add new visits by clicking on the last row of the table. You can also delete visits by clicking on the row you want to delete.</p>
+
+## 4. Saving Visits
+<p>When you are done editing the visits, you can save the visits by clicking on the save button. This will save the visits to the database.</p>
+
