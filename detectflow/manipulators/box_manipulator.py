@@ -306,7 +306,7 @@ class BoxManipulator:
                         multiple_rois: bool = False,
                         ignore_empty: bool = True,
                         partial_overlap: bool = False,
-                        iou_threshold: float = 0.5):
+                        overlap_threshold: float = 0.5):
         '''
         Note that img_dims format is (width, height)
         '''
@@ -407,7 +407,7 @@ class BoxManipulator:
                 for box in np.array([bbox for bbox in remaining_boxes if bbox not in np.array(done_boxes)]):
                     # Check if more than threshold fraction of the bbox is within the roi
                     if box is not None:
-                        if BoxManipulator.is_overlap(box, best_roi, overlap_threshold=iou_threshold):
+                        if BoxManipulator.is_overlap(box, best_roi, overlap_threshold=overlap_threshold):
                             logging.debug(f"A partial overlap detected with a box: {box}")
                             done_boxes = done_boxes + [box]
 
@@ -784,7 +784,13 @@ class BoxManipulator:
 
     @staticmethod
     def get_iou(box1, box2):
-        """ Calculate Intersection over Union (IoU) of two bounding boxes. """
+        """
+        Calculate Intersection over Union (IoU) of two bounding boxes.
+
+        Args:
+        - box1 (np.ndarray): First bounding box in xyxy format.
+        - box2 (np.ndarray): Second bounding box in xyxy format.
+        """
 
         x_min1, y_min1, x_max1, y_max1 = box1[:4]
         x_min2, y_min2, x_max2, y_max2 = box2[:4]
@@ -808,6 +814,29 @@ class BoxManipulator:
         # Calculate Intersection over Union (IoU)
         return inter_area / union_area if union_area > 0 else 0
 
+    @staticmethod
+    def get_overlap(box1, box2):
+        """
+        Calculate the overlap of two bounding boxes. The overlap is defined as the ratio of the intersection area to the
+         area of the first box.
+
+        Args:
+        - box1 (np.ndarray): First bounding box in xyxy format.
+        - box2 (np.ndarray): Second bounding box in xyxy format.
+        """
+        x1, y1, x2, y2 = box1[:4]
+        x3, y3, x4, y4 = box2[:4]
+
+        # Calculate the intersection rectangle
+        xi1 = max(x1, x3)
+        yi1 = max(y1, y3)
+        xi2 = min(x2, x4)
+        yi2 = min(y2, y4)
+        inter_area = max(0, xi2 - xi1) * max(0, yi2 - yi1)
+
+        # Calculate the area of the first bounding box
+        box1_area = (x2 - x1) * (y2 - y1)
+        return inter_area / box1_area if box1_area != 0 else 0
 
     @staticmethod
     def get_boxes_distribution_index(bboxes, img_size, grid_size=(3, 3)):
@@ -896,7 +925,7 @@ class BoxManipulator:
         return color_filtered_boxes
 
     @staticmethod
-    def is_overlap(box1, box2, overlap_threshold: Union[float, int] = 0):
+    def is_similar(box1, box2, iou_threshold: Union[float, int] = 0):
         """
         Check if two boxes overlap with an option to specify an overlap threshold.
         If no threshold is passed, any overlap is detected.
@@ -906,6 +935,21 @@ class BoxManipulator:
 
         # Calculate Intersection over Union (IoU)
         iou = BoxManipulator.get_iou(box1, box2)
+
+        # Check if IoU exceeds the overlap_threshold
+        return iou > iou_threshold
+
+    @staticmethod
+    def is_overlap(box1, box2, overlap_threshold: Union[float, int] = 0):
+        """
+        Check if a box overlaps with another with an option to specify an overlap threshold.
+        If no threshold is passed, any overlap is detected.
+        A threshold of 1.0 checks whether the entire first box overlaps with the second.
+        Accepts boxes in the format "xyxy".
+        """
+
+        # Calculate overlap, how much of the first box is overlapping with the second
+        iou = BoxManipulator.get_overlap(box1, box2)
 
         # Check if IoU exceeds the overlap_threshold
         return iou > overlap_threshold

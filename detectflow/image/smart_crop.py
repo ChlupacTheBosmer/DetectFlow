@@ -70,9 +70,18 @@ class SmartCrop:
         self.crop_aspect_ratio = crop_size[0] / crop_size[1]
 
         # Calculate the roi(s) for cropping
-        rois = BoxManipulator.get_optimal_roi(self.annotations, self.image_size, crop_size, handle_overflow,
-                                              max_expansion_limit, margin, exhaustive_search, permutation_limit,
-                                              multiple_rois, ignore_empty, partial_overlap, iou_threshold)
+        rois = BoxManipulator.get_optimal_roi(self.annotations,
+                                              self.image_size,
+                                              crop_size,
+                                              handle_overflow,
+                                              max_expansion_limit,
+                                              margin,
+                                              exhaustive_search,
+                                              permutation_limit,
+                                              multiple_rois,
+                                              ignore_empty,
+                                              partial_overlap,
+                                              iou_threshold)
 
         crops = []
         annotations = []

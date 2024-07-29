@@ -332,18 +332,11 @@ class TestBoxManipulator(unittest.TestCase):
                         _ = BoxManipulator.get_optimal_roi(detection_boxes=boxes, img_dims=img_dims)
                     continue
 
-                rois = BoxManipulator.get_optimal_roi(detection_boxes=boxes,
-                                                      img_dims=img_dims,
-                                                      crop_size=crop_size,
+                rois = BoxManipulator.get_optimal_roi(detection_boxes=boxes, img_dims=img_dims, crop_size=crop_size,
                                                       handle_overflow=c['overflow'],
-                                                      max_expansion_limit=max_expansion_limit,
-                                                      margin=margin,
-                                                      exhaustive_search=True,
-                                                      permutation_limit=9,
-                                                      multiple_rois=False,
-                                                      ignore_empty=False,
-                                                      partial_overlap=False,
-                                                      iou_threshold=0.5)
+                                                      max_expansion_limit=max_expansion_limit, margin=margin,
+                                                      exhaustive_search=True, permutation_limit=9, multiple_rois=False,
+                                                      ignore_empty=False, partial_overlap=False, overlap_threshold=0.5)
 
                 self.assertIsInstance(rois, list)
                 self.assertIsInstance(rois[0], tuple)
