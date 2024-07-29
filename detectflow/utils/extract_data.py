@@ -9,6 +9,16 @@ from detectflow.predict.results import DetectionResults
 from functools import lru_cache
 
 
+def safe_timedelta(value):
+    if value is None:
+        return str(None)
+
+    td_str = str(value)
+    if " days" in td_str:
+        td_str = td_str.replace("0 days ", "")
+    return td_str
+
+
 def safe_str(value):
     return str(value) if value is not None else str(None)
 
