@@ -14,30 +14,9 @@ from detectflow.handlers.checkpoint_handler import CheckpointHandler
 from detectflow.manipulators.database_manipulator import DatabaseManipulator
 from detectflow.process.database_manager import VISITS_COLS, VISITS_CONSTR
 from detectflow.utils.input import string_to_list
+from detectflow.utils.data_processor import load_dataframe, str_to_bool_list, filter_int_by_bool
 import logging
 import ast
-
-
-def load_dataframe(db_path: str, table_name: str):
-    conn = sqlite3.connect(db_path)
-    try:
-        df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
-        return df
-    except Exception as e:
-        raise RuntimeError(f'Error loading dataframe from {db_path}. Manual intervention required: {e}') from e
-    finally:
-        conn.close()
-
-
-def str_to_bool_list(s: str):
-    # Replace 'true' and 'false' with 'True' and 'False'
-    s = s.replace('true', 'True').replace('false', 'False')
-    # Use ast.literal_eval to safely evaluate the string as a list
-    return ast.literal_eval(s)
-
-
-def filter_int_by_bool(int_list: list, bool_list: list):
-    return [int_item for int_item, bool_item in zip(int_list, bool_list) if bool_item]
 
 
 def fill_reciprocal(df: pd.DataFrame, col1: str, col2: str):
