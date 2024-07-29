@@ -34,28 +34,7 @@ import pyqtgraph as pg
 from pyqtgraph import PlotWidget
 from PyQt6.QtCore import QRunnable, pyqtSignal, QObject, QThread
 import ast
-
-
-class CustomItemDelegate(QStyledItemDelegate):
-    def __init__(self, model, colored_visitor_ids):
-        super().__init__()
-        self.model = model
-        self.colored_visitor_ids = colored_visitor_ids
-
-    def paint(self, painter, option, index):
-        visitor_id = self.model._filtered_df.loc[self.model._filtered_df.index[index.row()], 'visitor_id']
-        if visitor_id in self.colored_visitor_ids:
-            option.backgroundBrush = QBrush(self.get_background_color(visitor_id))
-        super().paint(painter, option, index)
-
-    def get_background_color(self, visitor_id):
-        color_map = {
-            1: QColor(Qt.GlobalColor.yellow),
-            2: QColor(Qt.GlobalColor.green),
-            3: QColor(Qt.GlobalColor.red),
-            # Add more mappings as needed
-        }
-        return color_map.get(visitor_id, QColor(Qt.GlobalColor.white))
+import shutil
 
 
 class CustomTableView(QTableView):
@@ -74,7 +53,8 @@ class CustomTableView(QTableView):
                 else:
                     parent = self.parent()
 
-                parent.seek_video_signal.emit(start_frame)
+                if parent and hasattr(parent, 'seek_video_signal') and hasattr(parent, 'current_video_id'):
+                    parent.seek_video_signal.emit(parent.current_video_id, start_frame)
         super().mousePressEvent(event)
 
 
@@ -261,10 +241,11 @@ class PeriodDictionaryWorker(QThread):
 
     def run(self):
         self.shared_data.visitor_data = {}
+        self.shared_data.flower_data = {}
         for _, visit_row in self.filtered_df.iterrows():
             if visit_row['visitor_id'] not in self.shared_data.visitor_data:
                 self.shared_data.visitor_data[visit_row['visitor_id']] = process_row(visit_row)
-                self.shared_data.flower_data[visit_row['start_frame']] = visit_row['flower_bboxes']
+            self.shared_data.flower_data[visit_row['start_frame']] = visit_row['flower_bboxes']
 
         self.result.emit()
 
@@ -519,10 +500,18 @@ class PandasTableModel(QAbstractTableModel):
             # Find unique visitor_id
             unique_visitor_id = self._df['visitor_id'].max() + 1 if not self._df['visitor_id'].empty else 1
 
+            # Determine start_frame for the new row
+            if position < self._filtered_df.shape[0]:
+                print("Position:", position)
+                print("Adding to", self._filtered_df.iloc[position]['start_frame'])
+                new_start_frame = self._filtered_df.iloc[position]['start_frame'] + 1
+            else:
+                new_start_frame = self._df['start_frame'].max() + 1 if not self._df['start_frame'].empty else 0
+
             # Define default values for the new row
             default_values = {
                 'video_id': self._current_video_id,
-                'start_frame': 0,
+                'start_frame': new_start_frame,
                 'end_frame': 0,
                 'visit_duration': 0.0,
                 'visitor_species': '',
@@ -535,12 +524,13 @@ class PandasTableModel(QAbstractTableModel):
                 'end_time': pd.to_timedelta(0, unit='s'),
                 'start_real_life_time': pd.Timestamp(0),  # Assuming these columns are present and timestamp type
                 'end_real_life_time': pd.Timestamp(0),
-                'flags': ""
+                'flags': []
             }
 
             empty_row = pd.Series(default_values, index=self._df.columns)
             self._df = pd.concat(
                 [self._df.iloc[:position], pd.DataFrame([empty_row]), self._df.iloc[position:]]).reset_index(drop=True)
+        self.sort_dataframe_by_start_frame()
         self.setVideoIDFilter(self._current_video_id)  # Reapply filter
         self.endInsertRows()
         self.update_visits_entry(position)  # Update the dictionary
@@ -558,11 +548,28 @@ class PandasTableModel(QAbstractTableModel):
         self.update_visits_signal.emit(self.shared_data.visitor_data)
         return True
 
+    def sort_dataframe_by_start_frame(self):
+        if self._current_video_id:
+            self._df.sort_values(by='start_frame', inplace=True)
+            self._filtered_df = self._df[self._df['video_id'] == self._current_video_id].copy()
+        else:
+            self._df.sort_values(by='start_frame', inplace=True)
+            self._filtered_df = self._df.copy()
+        self.layoutChanged.emit()
+
     def getDataFrame(self):
         return self._df
 
     def getDataFrameCopy(self):
         return self._df.copy()
+
+    def getRefinedDataFrameCopy(self):
+        try:
+            refined_df = refine_periods(self._df.copy())
+        except Exception as e:
+            print(f"Error: {e}")
+            refined_df = self._df.copy()
+        return refined_df
 
     def get_background_color(self, visitor_id):
         color_map = {
@@ -634,7 +641,7 @@ class ControlPanel(QWidget):
 import logging
 
 class CustomWidget(QWidget):
-    seek_video_signal = pyqtSignal(int)
+    seek_video_signal = pyqtSignal(str, int)
     seek_single_visit_signal = pyqtSignal(dict)
     update_visits_signal = pyqtSignal(dict)
     update_flowers_signal = pyqtSignal(dict)
@@ -646,6 +653,7 @@ class CustomWidget(QWidget):
         self.shared_data = shared_data
         self._default_message = ""
         self._default_icon = ALT_ICONS['info']
+        self.db_path = None
 
         self.buttons = {}
 
@@ -816,6 +824,14 @@ class CustomWidget(QWidget):
         button.setFixedSize(30, 30)  # Square button
         return button
 
+    def disable_navigation(self):
+        for key in ['seek', 'previous_video', 'next_video', 'select_video']:
+            self.buttons[key].setEnabled(False)
+
+    def enable_navigation(self):
+        for key in ['seek', 'previous_video', 'next_video', 'select_video']:
+            self.buttons[key].setEnabled(True)
+
     def update_button_states(self):
         selected_indexes = self.table_view.selectionModel().selectedRows()
         self.buttons['seek'].setEnabled(len(selected_indexes) == 1)
@@ -854,9 +870,29 @@ class CustomWidget(QWidget):
             self.set_status_message(str(e), icon=ALT_ICONS['alert-circle'], timeout=5000)
             return
 
+    def reload_state(self, db_path, model_data):
+        try:
+            self.db_path = db_path
+
+            # Initiate processor
+            self.init_processor(db_path)
+
+            self.set_status_message(f"Processor initiated successfully.", icon=ALT_ICONS['check-circle'], timeout=2000)
+        except Exception as e:
+            self.set_status_message(f"Error loading state: {str(e)}", icon=ALT_ICONS['alert-circle'], timeout=5000)
+
+        try:
+            periods_df = refine_periods(model_data)
+            self.set_tableview_model(periods_df, self.processor.videos_df, self.processor.visits_df)
+            self.set_status_message(f"Progress loaded successfully.", icon=ALT_ICONS['check-circle'], timeout=2000)
+        except Exception as e:
+            self.set_status_message(f"Error loading state: {str(e)}", icon=ALT_ICONS['alert-circle'], timeout=5000)
+
     def open_database(self):
         db_path, _ = QFileDialog.getOpenFileName(self, "Open Database", "", "SQLite Database Files (*.db)")
         if db_path:
+
+            self.db_path = db_path
 
             # Initiate processor
             self.init_processor(db_path)
@@ -882,6 +918,9 @@ class CustomWidget(QWidget):
             self.buttons.get('regenerate_visits').setEnabled(True)
 
     def set_tableview_model(self, periods_df: pd.DataFrame, videos_df: pd.DataFrame, visits_df: pd.DataFrame = None):
+        # Sort periods_df by start_frame
+        periods_df = periods_df.sort_values(by='start_frame')
+
         # Filter video_df to only those video_ids that are present in visits_df
         videos_df = videos_df[videos_df['video_id'].isin(periods_df['video_id'])]
         self._videos_df = videos_df
@@ -894,11 +933,8 @@ class CustomWidget(QWidget):
                                       update_flowers_signal=self.update_flowers_signal)
         self.table_view.setModel(self.model)
 
-        self.delegate = CustomItemDelegate(self.model, self.model.colored_visitor_ids)
-        self.table_view.setItemDelegate(self.delegate)
-
         if not self._videos_df.empty:
-            self.current_video_id = self._videos_df.iloc[0]['video_id']
+            self.current_video_id = self.current_video_id or self._videos_df.iloc[0]['video_id']
             self.model.setVideoIDFilter(self.current_video_id)
             self.update_video_id_status()
 
@@ -917,6 +953,15 @@ class CustomWidget(QWidget):
         if self.model:
             db_path, _ = QFileDialog.getSaveFileName(self, "Save Database", "", "SQLite Database Files (*.db)")
             if db_path:
+
+                if not os.path.isfile(db_path):
+                    try:
+                        shutil.copyfile(self.db_path, db_path)
+                        self.db_path = db_path
+                    except Exception as e:
+                        self.set_status_message(str(e), icon=ALT_ICONS['alert-circle'], timeout=5000)
+                        return
+
                 try:
                     self.processor = VisitsProcessor(db_path)
 
@@ -940,7 +985,7 @@ class CustomWidget(QWidget):
             original_index = self.model._filtered_df.index[row]  # Get the original index from the filtered DataFrame
             start_frame = self.model._df.loc[
                 original_index, 'start_frame']  # Use the original index to get the value from the original DataFrame
-            self.seek_video_signal.emit(start_frame)
+            self.seek_video_signal.emit(self.current_video_id, start_frame)
 
             # Emit the single visit dictionary entry
             visitor_id = self.model._df.loc[original_index, 'visitor_id']
@@ -950,6 +995,7 @@ class CustomWidget(QWidget):
     def add_entry(self):
         if self.model:
             current_index = self.table_view.currentIndex()
+            print(current_index.row(), current_index.column())
             row = current_index.row() if current_index.isValid() else self.model.rowCount()
             self.model.insertRows(row)
 

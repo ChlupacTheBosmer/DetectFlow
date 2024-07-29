@@ -1,5 +1,5 @@
 import time
-
+from detectflow.resources import IMGS
 import sys
 import PyQt6
 import os
@@ -58,6 +58,21 @@ class ColorMap:
 
 
 COLOR_MAP = ColorMap()
+
+from PyQt6.QtGui import QPixmap
+from PyQt6.QtCore import QByteArray, QBuffer
+
+
+def pixmap_to_bytes(pixmap):
+    # Create a QByteArray to hold the image data
+    byte_array = QByteArray()
+    # Create a QBuffer and open it in write-only mode
+    buffer = QBuffer(byte_array)
+    buffer.open(QBuffer.OpenModeFlag.WriteOnly)
+    # Save the pixmap to the buffer in PNG format
+    pixmap.save(buffer, "PNG")
+    # Get the raw bytes from the QByteArray
+    return byte_array.data()
 
 
 class VideoProgressSlider(QSlider):
@@ -181,7 +196,10 @@ class VideoProgressSlider(QSlider):
         """
         Converts a slider value to a pixel position.
         """
-        return int(value // (self.maximum() / self.width()))
+        if self.maximum() == 0 or self.width() == 0:
+            return 0
+        else:
+            return int(value // (self.maximum() / self.width()))
 
 class ZoomGraphicsView(QGraphicsView):
     def __init__(self, parent=None):
@@ -290,6 +308,18 @@ class VideoPlayer(QWidget):
 
     def set_status_message(self, message, icon=None, timeout=0):
         pass
+
+    def disable_navigation(self):
+        self.play_pause_button.setEnabled(False)
+        self.jump_backward_button.setEnabled(False)
+        self.jump_forward_button.setEnabled(False)
+        self.seek_slider.setEnabled(False)
+
+    def enable_navigation(self):
+        self.play_pause_button.setEnabled(True)
+        self.jump_backward_button.setEnabled(True)
+        self.jump_forward_button.setEnabled(True)
+        self.seek_slider.setEnabled(True)
 
     def setup_media_player(self):
         self.media_player = QMediaPlayer()
@@ -402,7 +432,9 @@ class VideoPlayer(QWidget):
         self.video_width = self.video.frame_width
         self.video_height = self.video.frame_height
         self.fps = self.video.fps
-        self.mspf = (1000 // self.fps) if self.fps > 0 else 40
+        print(self.fps)
+        self.fps = self.fps if self.fps != 29 else 30
+        self.mspf = int(1000 / self.fps) if self.fps > 0 else 40
         self.total_frames = self.video.total_frames
 
     def jump_forward(self):
@@ -924,9 +956,8 @@ class InteractiveVideoPlayer(VideoPlayer, ScreenshotMixin):
         self.show_bboxes = True
         self.show_reference_bboxes = True
         self.show_highlights = True
-
-        VideoPlayer.__init__(self)
-        ScreenshotMixin.__init__(self)
+        self._periods = []
+        self._progress_lock = False
 
         # Ensure app_data directory exists
         self.app_data_dir = "app_data"
@@ -934,12 +965,16 @@ class InteractiveVideoPlayer(VideoPlayer, ScreenshotMixin):
 
         # Settings attributes
         self.video_files = []
-        self.download_videos = False
-        self.host_base = ""
-        self.use_https = False
-        self.access_key = ""
-        self.secret_key = ""
-        self.host_bucket = ""
+        self._download_videos = False
+        self._host_base = ""
+        self._use_https = False
+        self._access_key = ""
+        self._secret_key = ""
+        self._host_bucket = ""
+        self._config = None
+
+        VideoPlayer.__init__(self)
+        ScreenshotMixin.__init__(self)
 
     def setup_layout(self):
         layout = QVBoxLayout()
@@ -966,7 +1001,7 @@ class InteractiveVideoPlayer(VideoPlayer, ScreenshotMixin):
         self.duplicate_button = self.create_toolbar_button(ALT_ICONS['plus-square'])
         self.delete_button = self.create_toolbar_button(ALT_ICONS['minus-square'])
         self.add_screenshot_button = self.create_toolbar_button(ALT_ICONS['crop'])
-        self.toggle_bboxes_button = self.create_toolbar_button(ALT_ICONS['insect-box'])
+        self.toggle_bboxes_button = self.create_toolbar_button(IMGS['insect-box'])
         self.toggle_reference_bboxes_button = self.create_toolbar_button(ALT_ICONS['flower-box'])
         self.toggle_highlights_button = self.create_toolbar_button(ALT_ICONS['edit-3'])
         self.settings_button = self.create_toolbar_button(ALT_ICONS['settings'])
@@ -1028,8 +1063,9 @@ class InteractiveVideoPlayer(VideoPlayer, ScreenshotMixin):
         # Add a QWidget with horizontal layout to the toolbar
         status_widget = QWidget()
         status_layout = QHBoxLayout(status_widget)
-        status_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        status_layout.setAlignment(Qt.AlignmentFlag.AlignRight)
         status_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins
+        status_layout.setSpacing(0)  # Remove spacing
         status_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
         # Add spacer to push the status bar to the right
@@ -1040,12 +1076,14 @@ class InteractiveVideoPlayer(VideoPlayer, ScreenshotMixin):
 
         # Add in the setup_controls method
         self.stack_widget = QStackedWidget()
-        status_layout.setStretch(status_layout.indexOf(self.stack_widget), 1)
+        self.stack_widget.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        status_layout.setStretch(status_layout.indexOf(self.stack_widget), 0)
 
         # Add a QLabel with an icon
         self.icon_label = QLabel()
         self.icon_label.setPixmap(QPixmap(ALT_ICONS['info']).scaled(QSize(0, 0), Qt.AspectRatioMode.KeepAspectRatio,
                                                                     Qt.TransformationMode.SmoothTransformation))
+        self.icon_label.setContentsMargins(10,0,10,0)
         status_layout.addWidget(self.icon_label)
         status_layout.setStretch(status_layout.indexOf(self.icon_label), 0)
 
@@ -1053,15 +1091,24 @@ class InteractiveVideoPlayer(VideoPlayer, ScreenshotMixin):
         self.status_bar.setSizeGripEnabled(False)
         self.status_bar.setFixedWidth(300)
 
+        self.progress_bar_w = QWidget()
+        progress_layout = QHBoxLayout()
+        progress_layout.setContentsMargins(0, 0, 0, 0)
+        self.progress_bar_w.setLayout(progress_layout)
+        progress_layout.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.progress_bar = QProgressBar()
         self.progress_bar.setTextVisible(True)
         self.progress_bar.setFixedWidth(300)
+        self.progress_bar.setFixedHeight(20)
         self.progress_bar.setRange(0, 0)  # Indeterminate mode
+        self.progress_bar.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.progress_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self.stack_widget.addWidget(self.status_bar)
-        self.stack_widget.addWidget(self.progress_bar)
+        progress_layout.addWidget(self.progress_bar)
+        self.stack_widget.addWidget(self.progress_bar_w)
 
-        status_layout.addWidget(self.stack_widget)
+        status_layout.addWidget(self.stack_widget, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.toolbar.addWidget(status_widget)
 
 
@@ -1099,12 +1146,114 @@ class InteractiveVideoPlayer(VideoPlayer, ScreenshotMixin):
         self.clipboard.dataChanged.connect(self.update_clipboard_button_state)
         self.update_clipboard_button_state()
 
+        # Initiate the settings window
+        self.settings_window = SettingsWindow(self)
+
     def create_toolbar_button(self, icon):
         button = QPushButton()
         button.setIcon(QIcon(icon))
         button.setIconSize(QSize(17, 17))
         button.setFixedSize(30, 30)  # Square button
         return button
+
+    @property
+    def download_videos(self):
+        return self._download_videos
+
+    @download_videos.setter
+    def download_videos(self, value):
+        self._download_videos = value
+
+    @property
+    def host_base(self):
+        return self._host_base
+
+    @host_base.setter
+    def host_base(self, value):
+        self._host_base = value
+
+    @property
+    def use_https(self):
+        return self._use_https
+
+    @use_https.setter
+    def use_https(self, value):
+        self._use_https = value
+
+    @property
+    def access_key(self):
+        return self._access_key
+
+    @access_key.setter
+    def access_key(self, value):
+        self._access_key = value
+
+    @property
+    def secret_key(self):
+        return self._secret_key
+
+    @secret_key.setter
+    def secret_key(self, value):
+        self._secret_key = value
+
+    @property
+    def host_bucket(self):
+        return self._host_bucket
+
+    @host_bucket.setter
+    def host_bucket(self, value):
+        self._host_bucket = value
+
+    @property
+    def config(self):
+        try:
+            self._config = {
+                'download_videos': self.download_videos,
+                'host_base': self.host_base,
+                'use_https': self.use_https,
+                'access_key': self.access_key,
+                'secret_key': self.secret_key,
+                'host_bucket': self.host_bucket,
+                'app_data_dir': self.app_data_dir,
+                'video_files': self.video_files,
+                'current_video_index': self.current_video_index
+            }
+        except Exception as e:
+            self._config = {
+                'download_videos': False,
+                'host_base': "",
+                'use_https': False,
+                'access_key': "",
+                'secret_key': "",
+                'host_bucket': "",
+                'app_data_dir': "app_data",
+                'video_files': [],
+                'current_video_index': None
+            }
+        return self._config
+
+    @config.setter
+    def config(self, value):
+        for key in value:
+            if key in self.__dict__:
+                setattr(self, key, value[key])
+            setattr(self, key, value[key])
+
+    def disable_navigation(self):
+        super().disable_navigation()
+        self.open_video_button.setEnabled(False)
+        self.open_folder_button.setEnabled(False)
+        self.prev_video_button.setEnabled(False)
+        self.show_playlist_button.setEnabled(False)
+        self.next_video_button.setEnabled(False)
+
+    def enable_navigation(self):
+        super().enable_navigation()
+        self.open_video_button.setEnabled(True)
+        self.open_folder_button.setEnabled(True)
+        self.prev_video_button.setEnabled(True)
+        self.show_playlist_button.setEnabled(True)
+        self.next_video_button.setEnabled(True)
 
     def update_toolbar_buttons(self):
         selected_items = self.graphics_scene.selectedItems()
@@ -1116,7 +1265,8 @@ class InteractiveVideoPlayer(VideoPlayer, ScreenshotMixin):
         self.add_clipboard_image_button.setEnabled(mime_data.hasImage())
 
     def set_status_message(self, message, icon=None, timeout=0):
-        self.stack_widget.setCurrentWidget(self.status_bar)
+        if not self._progress_lock:
+            self.stack_widget.setCurrentWidget(self.status_bar)
         self.status_bar.showMessage(message, timeout)
         if icon:
             self.icon_label.setPixmap(QPixmap(icon).scaled(QSize(17, 17), Qt.AspectRatioMode.KeepAspectRatio,
@@ -1124,15 +1274,19 @@ class InteractiveVideoPlayer(VideoPlayer, ScreenshotMixin):
 
         QTimer.singleShot(timeout, self.reset_status_message)
 
-    def reset_status_message(self):
+    def reset_status_message(self, message=None, icon=None):
         # Reset the status bar message to the default message
-        self.status_bar.showMessage(self._default_message, 0)
+        if not self._progress_lock:
+            self.stack_widget.setCurrentWidget(self.status_bar)
+        self.status_bar.showMessage(self._default_message if not message else message, 0)
         self.icon_label.setPixmap(
-            QPixmap(self._default_icon).scaled(QSize(17, 17), Qt.AspectRatioMode.KeepAspectRatio,
+            QPixmap(self._default_icon if not icon else icon).scaled(QSize(17, 17), Qt.AspectRatioMode.KeepAspectRatio,
                                                Qt.TransformationMode.SmoothTransformation))
 
     def show_progress_bar(self):
-        self.stack_widget.setCurrentWidget(self.progress_bar)
+        print("Showing progress bar")
+        self._progress_lock = True
+        self.stack_widget.setCurrentWidget(self.progress_bar_w)
 
     def current_bar(self):
         return 'status' if self.stack_widget.currentWidget() == self.status_bar else 'progress'
@@ -1140,7 +1294,8 @@ class InteractiveVideoPlayer(VideoPlayer, ScreenshotMixin):
     def open_file(self, file_path):
         super().open_file(file_path)
         self._default_message = f"Video: {os.path.basename(file_path)}"
-        self.set_status_message(self._default_message, icon=ALT_ICONS['info'], timeout=0)
+        self._default_icon = ALT_ICONS['info']
+        self.reset_status_message()
         self.update_select_buttons_state()
 
     def open_file_dialog(self):
@@ -1324,9 +1479,14 @@ class InteractiveVideoPlayer(VideoPlayer, ScreenshotMixin):
                     del self.text_items[unique_id]
                     self.graphics_scene.removeItem(item)
 
-    def save_scene(self):
-        file_path, _ = QFileDialog.getSaveFileName(self, "Save Scene Configuration", "", "Binary Files (*.bin)")
+    def save_scene(self, file_path=None):
+        if not file_path:
+            file_path, _ = QFileDialog.getSaveFileName(self, "Save Scene Configuration", "", "Binary Files (*.bin)")
+
         if file_path:
+
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
             scene_data = {
                 'images': {},
                 'texts': {item_id: {'text': data['text'], 'coords': data['coords']} for item_id, data in
@@ -1334,9 +1494,18 @@ class InteractiveVideoPlayer(VideoPlayer, ScreenshotMixin):
             }
 
             for unique_hash, item_data in self.image_items.items():
-                with open(item_data['path'], 'rb') as img_file:
+                if 'path' in item_data.keys():
+                    with open(item_data['path'], 'rb') as img_file:
+                        scene_data['images'][unique_hash] = {
+                            'image': img_file.read(),
+                            'size': item_data['size'],
+                            'coords': item_data['coords']
+                        }
+                else:
+                    pixmap = self._current_items[unique_hash].graphic
+                    img_file = pixmap_to_bytes(pixmap)
                     scene_data['images'][unique_hash] = {
-                        'image': img_file.read(),
+                        'image': img_file,
                         'size': item_data['size'],
                         'coords': item_data['coords']
                     }
@@ -1344,8 +1513,9 @@ class InteractiveVideoPlayer(VideoPlayer, ScreenshotMixin):
             with open(file_path, 'wb') as bin_file:
                 pickle.dump(scene_data, bin_file)
 
-    def load_scene(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Load Scene Configuration", "", "Binary Files (*.bin)")
+    def load_scene(self, file_path=None):
+        if not file_path:
+            file_path, _ = QFileDialog.getOpenFileName(self, "Load Scene Configuration", "", "Binary Files (*.bin)")
         if file_path:
             with open(file_path, 'rb') as bin_file:
                 scene_data = pickle.load(bin_file)
@@ -1368,8 +1538,10 @@ class InteractiveVideoPlayer(VideoPlayer, ScreenshotMixin):
                     img_file.write(image_data)
 
                 pixmap = QPixmap(image_path)
+                print(item_data['size'])
                 item = ResizablePixmapItem(0, 0, pixmap, rect=QRectF(1, 1, item_data['size'][0], item_data['size'][1]),
                                            scene=self.graphics_scene)
+                resize_pixmap_item(item, change=QGraphicsItem.GraphicsItemChange.ItemPositionChange, value=QPointF(*item_data['size']))
                 item.set_tag(unique_hash)
                 item.setPos(*item_data['coords'])
                 item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
@@ -1390,12 +1562,11 @@ class InteractiveVideoPlayer(VideoPlayer, ScreenshotMixin):
             print(e)
 
     def open_settings_dialog(self):
-        self.settings_window = SettingsWindow(self)
         self.settings_window.show()
 
     def toggle_bboxes(self):
         self.show_bboxes = not self.show_bboxes
-        icon = ALT_ICONS['insect-box'] if self.show_bboxes else ALT_ICONS['minus']
+        icon = IMGS['insect-box'] if self.show_bboxes else ALT_ICONS['minus']
         self.toggle_bboxes_button.setIcon(QIcon(icon))
         if not self.show_bboxes:
             self.clear_current_bounding_boxes()
@@ -1413,8 +1584,14 @@ class InteractiveVideoPlayer(VideoPlayer, ScreenshotMixin):
         self.toggle_highlights_button.setIcon(QIcon(icon))
         if not self.show_highlights:
             self.clear_highlight_periods()
+        else:
+            self.set_highlight_periods(self._periods, override=True)
 
-    def set_highlight_periods(self, periods):
+    def set_highlight_periods(self, periods, override=False):
+        self._periods = periods
+        if len(periods) > 800 and self.show_highlights and not (override and len(periods) < 1200):
+            self.toggle_highlights()
+            self.set_status_message(f"{len(periods)} highlights temporarily disabled.", icon=ALT_ICONS['alert-circle'], timeout=3000)
         if self.show_highlights:
             super().set_highlight_periods(periods)
             self.set_status_message(f"Updated visit highlight", icon=ALT_ICONS['edit-3'], timeout=3000)
