@@ -194,10 +194,10 @@ class DatabaseManager:
     def _dump_to_csv(self, data_entry: Dict[str, Any]):
         """ Dump data to a CSV file as a fallback """
         from detectflow.manipulators.manipulator import Manipulator
-        from detectflow.utils.hash import get_numeric_hash
+        from detectflow.utils.hash import get_timestamp_hash
 
         destination_folder = Manipulator.create_folders(directories="dumps")[0]
-        filepath = os.path.join(destination_folder, f"emergency_dump_{data_entry.get('recording_id', 'unknown')}_{get_numeric_hash()}.csv")
+        filepath = os.path.join(destination_folder, f"emergency_dump_{data_entry.get('recording_id', 'unknown')}_{get_timestamp_hash()}.csv")
         with open(filepath, 'a', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(data_entry)

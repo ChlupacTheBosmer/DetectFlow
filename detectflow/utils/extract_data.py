@@ -1,4 +1,4 @@
-from detectflow.utils.hash import get_numeric_hash
+from detectflow.utils.hash import get_timestamp_hash
 from detectflow.validators.object_detect_validator import ObjectDetectValidator
 import json
 from typing import Dict, List, Optional, Type, Any
@@ -196,7 +196,7 @@ def extract_data_from_result(result: DetectionResults) -> Dict[str, Any]:
             results[a] = None
 
     # Extract and validate data
-    results['frame_number'] = ObjectDetectValidator.validate_frame_number(safe_int(results.get('frame_number'), default=get_numeric_hash()))
+    results['frame_number'] = ObjectDetectValidator.validate_frame_number(safe_int(results.get('frame_number'), default=get_timestamp_hash()))
 
     results['video_time'] = safe_str(ObjectDetectValidator.validate_video_time(timedelta(seconds=safe_int(results.get('video_time'))))).split('.')[0]
 

@@ -1,4 +1,5 @@
 import random
+import pandas as pd
 import multiprocessing
 import sqlite3
 from sqlite3 import Error
@@ -11,7 +12,7 @@ import traceback
 import time
 import logging
 from typing import List, Optional, Tuple, Union
-from detectflow.utils.hash import get_numeric_hash
+from detectflow.utils.hash import get_timestamp_hash
 from detectflow.manipulators.manipulator import Manipulator
 
 
@@ -166,7 +167,7 @@ class DatabaseManipulator:
         :param table_name:
         """
         destination_folder = Manipulator.create_folders(directories="dumps", parent_dir=os.path.dirname(self.db_file))[0]
-        filepath = os.path.join(destination_folder, f"db_{self._db_name}_t_{table_name}_id_{get_numeric_hash()}{random.randint(0,9)}.csv")
+        filepath = os.path.join(destination_folder, f"db_{self._db_name}_t_{table_name}_id_{get_timestamp_hash()}{random.randint(0, 9)}.csv")
         with open(filepath, 'a', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(data)
