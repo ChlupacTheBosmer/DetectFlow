@@ -30,7 +30,7 @@ from .process.scheduler import Scheduler
 from .process.video_downloader import VideoDownloader
 from .utils.extract_data import safe_int, safe_float, safe_str, safe_json, safe_first_element, safe_last_element, safe_datetime, extract_data_from_result, extract_data_from_video
 from .utils.file import compare_file_sizes
-from .utils.hash import get_numeric_hash
+from .utils.hash import get_timestamp_hash
 from .utils.inspector import Inspector
 from .utils.log_file import LogFile
 from .utils.pbs_job_report import PBSJobReport
@@ -102,7 +102,7 @@ __all__ = ['S3_CONFIG',
            'extract_data_from_result',
            'extract_data_from_video',
            'compare_file_sizes',
-           'get_numeric_hash',
+           'get_timestamp_hash',
            'Inspector',
            'LogFile',
            'PBSJobReport',
