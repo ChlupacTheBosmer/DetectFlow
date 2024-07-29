@@ -3,6 +3,37 @@ import logging
 import re
 
 
+def parse_video_id(video_id: str):
+
+    try:
+        if not is_valid_video_id(video_id):
+            raise ValueError(f'Invalid video ID: {video_id}')
+        locality, transect, plant_id, date, hour, minutes = video_id.split("_")
+    except Exception as e:
+        return {"recording_id": None,
+                "video_id": video_id,
+                "timestamp": None,
+                "locality": None,
+                "transect": None,
+                "plant_id": None,
+                "date": None,
+                "hour": None,
+                "minute": None}
+
+    recording_identifier = "_".join([locality, transect, plant_id])
+    timestamp = "_".join([date, hour, minutes])
+
+    return {"recording_id": recording_identifier,
+            "video_id": video_id,
+            "timestamp": timestamp,
+            "locality": locality,
+            "transect": transect,
+            "plant_id": plant_id,
+            "date": date,
+            "hour": hour,
+            "minute": minutes}
+
+
 def parse_recording_name(video_path: str):
 
     filename = os.path.basename(video_path)
