@@ -124,6 +124,22 @@ def make_hashable(input_dict: dict, filter_unhashable=False):
     return result_dict
 
 
+# Recursive function to convert nested lists to tuples
+def make_hash(value):
+    if isinstance(value, list):
+        return tuple(make_hash(v) for v in value)
+    return value
+
+# Function to convert a pandas Series to a hashable tuple, converting lists to tuples
+def series_to_tuple(series):
+    return tuple((k, make_hash(v)) for k, v in series.items())
+
+
+# Function to convert a pandas DataFrame to a hashable string
+def dataframe_to_string(df):
+    return df.to_csv()
+
+
 def validate_and_process_input(input_data, s3_manipulator):
 
     if isinstance(input_data, str):
