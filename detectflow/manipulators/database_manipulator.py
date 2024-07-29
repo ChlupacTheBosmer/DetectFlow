@@ -302,6 +302,41 @@ class DatabaseManipulator:
         query = f"DELETE FROM {table} WHERE {condition}"
         self.safe_execute(query, use_transaction=use_transaction)
 
+    def load_dataframe(self, table_name: str) -> pd.DataFrame:
+        """
+        Load data from a specified SQLite table into a Pandas DataFrame.
+
+        :param table_name: Name of the table to load data from.
+        :return: A Pandas DataFrame containing the data from the specified table.
+        :raises RuntimeError: If there is an issue with the SQL query or database connection.
+        """
+        try:
+            query = f"SELECT * FROM {table_name}"
+            with self.lock:
+                conn = sqlite3.connect(self.db_file)
+                df = pd.read_sql_query(query, conn)
+            return df
+        except Exception as e:
+            raise RuntimeError(f"Failed to load data from table {table_name}: {e}")
+
+    def save_dataframe(self, df: pd.DataFrame, table_name: str, if_exists: str = 'replace', index: bool = False):
+        """
+        Save a Pandas DataFrame to a specified SQLite table.
+
+        :param df: The Pandas DataFrame to save.
+        :param table_name: The name of the table to save the DataFrame to.
+        :param if_exists: What to do if the table already exists. Options: 'fail', 'replace', 'append'.
+        :param index: Whether to write DataFrame index as a column.
+        :raises RuntimeError: If there is an issue with saving the DataFrame to the database.
+        """
+        try:
+            with self.lock:
+                conn = sqlite3.connect(self.db_file)
+                df.to_sql(table_name, conn, if_exists=if_exists, index=index)
+            print(f"DataFrame saved to table {table_name} successfully.")
+        except Exception as e:
+            raise RuntimeError(f"Failed to save DataFrame to table {table_name}: {e}")
+
     def add_to_batch(self, table, data):
         """
         Adds a data dictionary to the current batch for later insertion into the specified database table.
