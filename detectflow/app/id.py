@@ -1,50 +1,35 @@
-import sys
 import PyQt6
 import os
+
+try:
+    from ctypes import windll  # Only exists on Windows.
+    myappid = 'insect-communities.detectflow.id'
+    windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+except ImportError:
+    pass
+
 pyqt = os.path.dirname(PyQt6.__file__)
 os.environ['QT_PLUGIN_PATH'] = os.path.join(pyqt, "Qt6/plugins")
-from PyQt6.QtWidgets import QApplication, QMainWindow, QSplitter, QWidget, QVBoxLayout
-from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QSplitter
 from detectflow.app.video_player import InteractiveVideoPlayer
 from detectflow.app.visits_view import CustomWidget
 from detectflow.app.species_view import EditableImageView
-import traceback
 import logging
 import sys
 import pickle
-import sqlite3
-import pandas as pd
 from PyQt6.QtMultimedia import QMediaPlayer
 from PyQt6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QTableView, QLineEdit, QFormLayout, QCheckBox, QToolBar, QPushButton, QFileDialog, QHeaderView, QLabel
+    QApplication
 )
-from PyQt6.QtCore import Qt, QAbstractTableModel, QModelIndex, QVariant, QSize
-from PyQt6.QtGui import QIcon
-from detectflow.resources import ALT_ICONS
-from PyQt6.QtWidgets import (
-    QWidget, QHBoxLayout, QFormLayout, QCheckBox, QGroupBox, QVBoxLayout, QDoubleSpinBox, QSpinBox
-)
-from PyQt6.QtWidgets import QMessageBox
-from detectflow.utils.data_processor import VisitsProcessor, refine_periods, refine_visits
+from PyQt6.QtCore import Qt
+from detectflow.resources import ALT_ICONS, IMGS
 import os
-from PyQt6.QtWidgets import QMainWindow, QListWidget, QTextEdit, QVBoxLayout, QWidget, QListWidgetItem, QSizePolicy
-from PyQt6.QtWidgets import QMessageBox, QMainWindow, QListWidget, QTextEdit, QVBoxLayout, QListWidgetItem
-from PyQt6.QtWidgets import QMessageBox, QMainWindow, QListWidget, QTextEdit, QVBoxLayout, QListWidgetItem, QToolBar
-from PyQt6.QtCore import QSize
-from PyQt6.QtGui import QIcon
-from PyQt6.QtWidgets import QMessageBox, QMainWindow, QListWidget, QTextEdit, QVBoxLayout, QListWidgetItem, QToolBar, QInputDialog
-from PyQt6.QtWidgets import QMessageBox, QMainWindow, QListWidget, QTextEdit, QVBoxLayout, QListWidgetItem, QToolBar, QInputDialog, QDialog, QVBoxLayout, QCheckBox, QPushButton
+from PyQt6.QtWidgets import QWidget
+from PyQt6.QtWidgets import QMessageBox, QMainWindow
 import ast
-from detectflow.app import VISIT_VIEW_HELP
-from PyQt6.QtWidgets import QStackedWidget
-from PyQt6.QtWidgets import QDialog, QVBoxLayout, QCheckBox, QPushButton
-from PyQt6.QtWidgets import QStatusBar
-from PyQt6.QtGui import QPixmap, QIcon
-from PyQt6.QtCore import QThreadPool
-from PyQt6.QtCore import pyqtSignal, pyqtSlot
-import pyqtgraph as pg
-from pyqtgraph import PlotWidget
-from PyQt6.QtCore import QRunnable, pyqtSignal, QObject, QThread, QTimer
+from PyQt6.QtWidgets import QVBoxLayout
+from PyQt6.QtGui import QIcon
+from PyQt6.QtCore import pyqtSignal, QThread, QTimer
 
 
 class MainWindow(QMainWindow):
@@ -525,6 +510,7 @@ class PeriodsUpdater(QThread):
 def main():
     app = QApplication(sys.argv)
     main_window = MainWindow()
+    app.setWindowIcon(QIcon(IMGS['icon']))
     main_window.show()
     sys.exit(app.exec())
 
