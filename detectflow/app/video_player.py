@@ -284,6 +284,7 @@ class VideoPlayer(QWidget):
         self.media_player = None
         self.color_map = COLOR_MAP
         self.highlight_periods = []
+        self.ground_truth_periods = []
         self.current_highlight_periods = []
 
         self.video_width = 0
@@ -941,6 +942,7 @@ class SettingsWindow(QWidget):
 class InteractiveVideoPlayer(VideoPlayer, ScreenshotMixin):
     def __init__(self):
 
+        self.show_ground_truth = None
         self.add_screenshot_button = None
         self.add_image_button = None
         self.load_button = None
@@ -957,6 +959,7 @@ class InteractiveVideoPlayer(VideoPlayer, ScreenshotMixin):
         self.show_reference_bboxes = True
         self.show_highlights = True
         self._periods = []
+        self._gt_periods = []
         self._progress_lock = False
 
         # Ensure app_data directory exists
@@ -1004,6 +1007,7 @@ class InteractiveVideoPlayer(VideoPlayer, ScreenshotMixin):
         self.toggle_bboxes_button = self.create_toolbar_button(IMGS['insect-box'])
         self.toggle_reference_bboxes_button = self.create_toolbar_button(ALT_ICONS['flower-box'])
         self.toggle_highlights_button = self.create_toolbar_button(ALT_ICONS['edit-3'])
+        self.toggle_ground_truth_button = self.create_toolbar_button(ALT_ICONS['square'])
         self.settings_button = self.create_toolbar_button(ALT_ICONS['settings'])
 
 
@@ -1032,6 +1036,7 @@ class InteractiveVideoPlayer(VideoPlayer, ScreenshotMixin):
         self.toolbar.addWidget(self.toggle_bboxes_button)
         self.toolbar.addWidget(self.toggle_reference_bboxes_button)
         self.toolbar.addWidget(self.toggle_highlights_button)
+        self.toolbar.addWidget(self.toggle_ground_truth_button)
 
         self.toolbar.addSeparator()
 
@@ -1058,6 +1063,7 @@ class InteractiveVideoPlayer(VideoPlayer, ScreenshotMixin):
         self.toggle_bboxes_button.clicked.connect(self.toggle_bboxes)
         self.toggle_reference_bboxes_button.clicked.connect(self.toggle_reference_bboxes)
         self.toggle_highlights_button.clicked.connect(self.toggle_highlights)
+        self.toggle_ground_truth_button.clicked.connect(self.toggle_ground_truth)
         self.settings_button.clicked.connect(self.open_settings_dialog)
 
         # Add a QWidget with horizontal layout to the toolbar
@@ -1598,14 +1604,29 @@ class InteractiveVideoPlayer(VideoPlayer, ScreenshotMixin):
         else:
             self.set_highlight_periods(self._periods, override=True)
 
-    def set_highlight_periods(self, periods, override=False):
-        self._periods = periods
-        if len(periods) > 800 and self.show_highlights and not (override and len(periods) < 1200):
-            self.toggle_highlights()
-            self.set_status_message(f"{len(periods)} highlights temporarily disabled.", icon=ALT_ICONS['alert-circle'], timeout=3000)
-        if self.show_highlights:
-            super().set_highlight_periods(periods)
-            self.set_status_message(f"Updated visit highlight", icon=ALT_ICONS['edit-3'], timeout=3000)
+    def toggle_ground_truth(self):
+        self.show_ground_truth = not self.show_ground_truth
+        icon = ALT_ICONS['check-square'] if self.show_ground_truth else ALT_ICONS['square']
+        self.toggle_ground_truth_button.setIcon(QIcon(icon))
+
+        if self.show_ground_truth:
+            self.set_highlight_periods(self._gt_periods, override=False, ground_truth=True)
+        else:
+            self.set_highlight_periods(self._periods, override=False)
+
+    def set_highlight_periods(self, periods, override=False, ground_truth=False):
+        if ground_truth:
+            self._gt_periods = periods
+        else:
+            self._periods = periods
+
+        if (ground_truth and self.show_ground_truth) or (not ground_truth and not self.show_ground_truth):
+            if len(periods) > 800 and self.show_highlights and not (override and len(periods) < 1200):
+                self.toggle_highlights()
+                self.set_status_message(f"{len(periods)} highlights temporarily disabled.", icon=ALT_ICONS['alert-circle'], timeout=3000)
+            if self.show_highlights:
+                super().set_highlight_periods(periods)
+                self.set_status_message(f"Updated visit highlight", icon=ALT_ICONS['edit-3'], timeout=3000)
 
     def set_bounding_boxes(self, bounding_boxes, persistence=0):
         super().set_bounding_boxes(bounding_boxes, persistence)
