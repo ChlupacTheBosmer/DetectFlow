@@ -441,9 +441,8 @@ class DetectionBenchmarker(CheckpointHandler):
         # conn.close()
         self.database_manipulator.close_connection()
 
-        # If processing is completed, remove the checkpoint file
-        if start_annotation_index >= len(annotation_df):
-            self.remove_checkpoint()
+        # remove the checkpoint file
+        self.remove_checkpoint()
 
     def _read_videos_table(self):
         conn = sqlite3.connect(self.db_path)
