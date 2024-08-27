@@ -325,6 +325,11 @@ class DetectionBenchmarker(CheckpointHandler):
 
     def _create_ground_truth_table(self):
         try:
+            self.database_manipulator.delete_table('ground_truth')
+        except sqlite3.Error as e:
+            logging.warning(f"Failed to delete ground_truth table: {e}")
+
+        try:
             self.database_manipulator.create_table('ground_truth', columns=VISITS_COLS, table_constraints=VISITS_CONSTR)
         except sqlite3.Error as e:
             raise RuntimeError(f"Failed to create ground_truth table: {e}") from e
