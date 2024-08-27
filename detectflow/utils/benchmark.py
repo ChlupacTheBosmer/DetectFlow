@@ -395,8 +395,8 @@ class DetectionBenchmarker(CheckpointHandler):
                             relevant_visitor_bboxes = []
                             visit_ids = []
 
-                        all_visitor_bboxes.append([idx + 1, idx + 1, idx + 1, idx + 1])
-                        relevant_visitor_bboxes.append([idx + 1, idx + 1, idx + 1, idx + 1])
+                        all_visitor_bboxes.append([idx + 1, idx + 1, idx + 2, idx + 2])
+                        relevant_visitor_bboxes.append([idx + 1, idx + 1, idx + 2, idx + 2])
                         visit_ids.append(idx + 1)
 
                         recording_id = visit.get('recording_id', '')
