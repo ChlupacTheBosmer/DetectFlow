@@ -12,8 +12,9 @@ pyqt = os.path.dirname(PyQt6.__file__)
 os.environ['QT_PLUGIN_PATH'] = os.path.join(pyqt, "Qt6/plugins")
 from PyQt6.QtWidgets import QSplitter
 from detectflow.app.video_player import InteractiveVideoPlayer
-from detectflow.app.visits_view import CustomWidget
+from detectflow.app.visits_view import VisitsView
 from detectflow.app.species_view import EditableImageView
+from detectflow.app.export_view import ExportView
 import logging
 import sys
 import pickle
@@ -24,12 +25,36 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from detectflow.resources import ALT_ICONS, IMGS
 import os
-from PyQt6.QtWidgets import QWidget
+from PyQt6.QtWidgets import QWidget, QStackedWidget
 from PyQt6.QtWidgets import QMessageBox, QMainWindow
 import ast
 from PyQt6.QtWidgets import QVBoxLayout
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QIcon, QAction
 from PyQt6.QtCore import pyqtSignal, QThread, QTimer
+
+
+class StackedExtraWidget(QStackedWidget):
+    def __init__(self, parent=None, app_data_dir=None):
+
+        # Define parent
+        self.parent = parent
+
+        # Initialize superclass
+        super().__init__(self.parent)
+
+        # Initialize widgets
+        self.editable_image_view = EditableImageView()
+        self.export_view = ExportView(parent=parent, app_data_dir=app_data_dir)
+
+        # Add widgets to stack
+        self.addWidget(self.editable_image_view)
+        self.addWidget(self.export_view)
+
+    def switch_widget(self):
+        # Get the current index and switch to the next widget
+        current_index = self.currentIndex()
+        next_index = (current_index + 1) % self.count()
+        self.setCurrentIndex(next_index)
 
 
 class MainWindow(QMainWindow):
@@ -63,12 +88,12 @@ class MainWindow(QMainWindow):
         top_splitter = QSplitter(Qt.Orientation.Horizontal)
 
         # Create CustomWidget and InteractiveVideoPlayer instances
-        self.custom_widget = CustomWidget(parent=self)
+        self.visits_view = VisitsView(parent=self)
         self.video_player = InteractiveVideoPlayer()
 
         # Add widgets to the top splitter
         top_splitter.addWidget(self.video_player)
-        top_splitter.addWidget(self.custom_widget)
+        top_splitter.addWidget(self.visits_view)
 
         # Set initial sizes for the top splitter
         top_splitter.setSizes([800, 400])
@@ -76,9 +101,19 @@ class MainWindow(QMainWindow):
         # Add the top splitter to the main splitter
         main_splitter.addWidget(top_splitter)
 
+        # Add a stack widget for the bottom part
+        self.stack_widget = StackedExtraWidget(self, app_data_dir=self.app_dir)
+
+        # Create an action for the shortcut
+        self.switch_action = QAction(self)
+        self.switch_action.setShortcut("Ctrl+X")
+        self.switch_action.triggered.connect(self.stack_widget.switch_widget)
+
+        # Add the action to the window
+        self.addAction(self.switch_action)
+
         # Add an empty widget for the bottom part
-        bottom_widget = EditableImageView()
-        main_splitter.addWidget(bottom_widget)
+        main_splitter.addWidget(self.stack_widget)
 
         # Set initial sizes for the main splitter
         main_splitter.setSizes([600, 200])
@@ -105,11 +140,18 @@ class MainWindow(QMainWindow):
             self.video_player.app_data_dir = value
 
     def connect_signals(self):
-        self.custom_widget.update_video_id_signal.connect(self.handle_video_id_update)
-        self.custom_widget.seek_video_signal.connect(self.handle_seek_video)
-        self.custom_widget.update_visits_signal.connect(self.update_visits)
-        self.custom_widget.update_flowers_signal.connect(self.update_flowers)
-        self.video_player.current_visits_changed.connect(self.custom_widget.update_current_visits)
+        self.visits_view.update_video_id_signal.connect(self.handle_video_id_update)
+        self.visits_view.seek_video_signal.connect(self.handle_seek_video)
+        self.visits_view.update_visits_signal.connect(self.update_visits)
+        self.visits_view.update_excel_visits_signal.connect(self.update_excel_visits)
+        self.visits_view.update_flowers_signal.connect(self.update_flowers)
+        self.visits_view.reset_state_signal.connect(self.video_player.reset_state)
+        self.video_player.current_visits_changed.connect(self.visits_view.update_current_visits)
+        self.visits_view.stacked_widget.stacked_table_widget.table_view1.data_transfer.connect(self.stack_widget.export_view.table_view.receive_data)
+        self.visits_view.stacked_widget.stacked_table_widget.table_view2.data_transfer.connect(self.stack_widget.export_view.table_view.receive_data)
+        self.visits_view.stacked_widget.stacked_table_widget.table_view1s.data_transfer.connect(self.stack_widget.export_view.table_view.receive_data)
+        self.visits_view.stacked_widget.stacked_table_widget.table_view2s.data_transfer.connect(self.stack_widget.export_view.table_view.receive_data)
+        self.visits_view.exported_data_signal.connect(self.show_export_view)
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -136,11 +178,14 @@ class MainWindow(QMainWindow):
     def save_state(self, path):
 
         db_path = None
+        excel_path = None
         model_data = None
-        if isinstance(self.custom_widget, CustomWidget):
+        if isinstance(self.visits_view, VisitsView):
             try:
-                db_path = self.custom_widget.db_path
-                model_data = self.custom_widget.model.getRefinedDataFrameCopy() if self.custom_widget.model else None
+                db_path = self.visits_view.db_path
+                excel_path = self.visits_view.excel_path
+                model = self.visits_view.models.get('db_model', None)
+                model_data = model.getRefinedDataFrameCopy() if model else None
             except Exception as e:
                 logging.warning(f"Error saving DB view state: {e}")
 
@@ -160,6 +205,7 @@ class MainWindow(QMainWindow):
         data = {
             'db_path': db_path,
             'model_data': model_data,
+            'excel_path': excel_path,
             'video_files': video_files,
             'current_video_index': current_video_index,
             'video_scene': scene_save,
@@ -190,7 +236,7 @@ class MainWindow(QMainWindow):
             if not isinstance(data, dict):
                 raise ValueError("Invalid autosave data.")
 
-            autosave_keys = ['db_path', 'model_data', 'video_files', 'current_video_index', 'video_scene', 'settings']
+            autosave_keys = ['db_path', 'model_data', 'excel_path', 'video_files', 'current_video_index', 'video_scene', 'settings']
 
             if not all([key in data for key in autosave_keys]):
                 raise ValueError("Invalid autosave data.")
@@ -202,13 +248,13 @@ class MainWindow(QMainWindow):
                                                  timeout=3000)
 
         try:
-            if isinstance(self.custom_widget, CustomWidget):
+            if isinstance(self.visits_view, VisitsView):
                 if data['db_path'] is None or data['model_data'] is None:
                     raise ValueError("Invalid DB view state.")
                 elif not os.path.exists(data['db_path']):
                     raise FileNotFoundError("DB file not found.")
 
-                self.custom_widget.reload_state(data['db_path'], data['model_data'])
+                self.visits_view.reload_state(data['db_path'], data['model_data'], data['excel_path'])
         except Exception as e:
             self.video_player.set_status_message(f"Error: {e}", icon=ALT_ICONS['x-circle'],
                                                  timeout=3000)
@@ -288,7 +334,6 @@ class MainWindow(QMainWindow):
         print(type(self.video_player.app_data_dir))
         print(type(s3_config))
 
-
         self.video_opener = VideoOpener(video_id,
                                         self.video_player.video_files,
                                         self.video_player.download_videos,
@@ -299,12 +344,13 @@ class MainWindow(QMainWindow):
         self.video_opener.start()
 
     def open_video(self, file_path, index):
+        print(f"Opening video: {file_path}")
         self.enable_navigation()
         self.video_player._progress_lock = False
         if file_path is None:
             self.show_message("Video not found.", icon=ALT_ICONS['alert-circle'])
             return
-
+        print("Opening video...")
         self.video_player.open_file(file_path)
         self.video_player.current_video_index = index
 
@@ -335,11 +381,19 @@ class MainWindow(QMainWindow):
         self.periods_updater.periods_updated.connect(self.on_periods_updated)
         self.periods_updater.start()
 
+    def update_excel_visits(self, visits):
+        self.excel_periods_updater = PeriodsUpdater(visits)
+        self.excel_periods_updater.periods_updated.connect(self.on_excel_periods_updated)
+        self.excel_periods_updater.start()
+
     def on_bboxes_updated(self, bboxes):
         self.video_player.set_bounding_boxes(bboxes, persistence=15)
 
     def on_periods_updated(self, periods):
         self.video_player.set_highlight_periods(periods)
+
+    def on_excel_periods_updated(self, periods):
+        self.video_player.set_highlight_periods(periods, ground_truth=True)
 
     def update_flowers(self, flowers):
         self.video_player.set_reference_bounding_boxes(flowers, persistence=0)
@@ -350,12 +404,15 @@ class MainWindow(QMainWindow):
         self.video_player.reset_status_message()
 
     def disable_navigation(self):
-        self.custom_widget.disable_navigation()
+        self.visits_view.disable_navigation()
         self.video_player.disable_navigation()
 
     def enable_navigation(self):
-        self.custom_widget.enable_navigation()
+        self.visits_view.enable_navigation()
         self.video_player.enable_navigation()
+
+    def show_export_view(self):
+        self.stack_widget.setCurrentIndex(1)
 
 from detectflow.config import S3_CONFIG
 from detectflow.utils.cfg import is_s3_config_valid, resolve_s3_config
@@ -405,7 +462,7 @@ class VideoOpener(QThread):
             if self.video_id in file_path:
                 self.video_files.append(file_path)
                 self.video_found.emit(file_path, len(self.video_files) - 1)
-                print("Video not found in app data directory.")
+                print("Video found in app data directory.")
                 return
 
         # If no matching file path is found, check if download is enabled
@@ -419,7 +476,8 @@ class VideoOpener(QThread):
             self.video_found.emit(None, 0)
             return
 
-        self.progress_callback("Downloading video...", icon=ALT_ICONS['download-cloud'])
+        if self.progress_callback is not None:
+            self.progress_callback("Downloading video...", icon=ALT_ICONS['download-cloud'])
 
         # Download video
         try:
