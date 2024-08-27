@@ -1156,6 +1156,17 @@ class InteractiveVideoPlayer(VideoPlayer, ScreenshotMixin):
         button.setFixedSize(30, 30)  # Square button
         return button
 
+    def reset_state(self):
+        self.clear_highlight_periods()
+        self.clear_current_bounding_boxes()
+        self.clear_reference_bounding_boxes()
+        self.update_bounding_boxes(0)
+        self.current_video_index = None
+        self.video_files = []
+        self.update_select_buttons_state()
+
+        self.media_player.setSource(QUrl())
+
     @property
     def download_videos(self):
         return self._download_videos
