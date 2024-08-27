@@ -226,6 +226,19 @@ class DatabaseManipulator:
         except Exception as e:
             raise RuntimeError(f"Failed to create table in {self._db_name}: {e}")
 
+    def delete_table(self, table_name: str):
+        """
+        Delete a table from the SQLite database with the specified name.
+
+        :param table_name: The name of the table to be deleted.
+        """
+        try:
+            query = f"DROP TABLE IF EXISTS {table_name};"
+            self.safe_execute(query, use_transaction=True)
+            print(f"Table {table_name} deleted successfully from {self._db_name}.")
+        except Exception as e:
+            raise RuntimeError(f"Failed to delete table {table_name} from {self._db_name}: {e}")
+
     def insert(self, table, data, use_transaction=False, update_on_conflict=True):
         """
         Insert data into a table. If a conflict on the primary key occurs, optionally update the existing row.
