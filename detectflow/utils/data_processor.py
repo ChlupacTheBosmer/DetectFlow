@@ -299,6 +299,7 @@ class ResultsLoader:
 
         self._videos_df = None
         self._visits_df = None
+        self._ground_truth_df = None
 
     @property
     def videos_df(self):
@@ -321,6 +322,16 @@ class ResultsLoader:
                 traceback.print_exc()
         return self._visits_df
 
+    @property
+    def ground_truth_df(self):
+        if self._ground_truth_df is None:
+            try:
+                self._ground_truth_df = self.load_ground_truth()
+            except Exception as e:
+                logging.error(f'Error loading and refining ground truth dataframe. Further exceptions possible: {e}')
+                traceback.print_exc()
+        return self._ground_truth_df
+
     def create_visits_ext_table(self):
         try:
             self.db_man.create_table('visits_ext', VISITS_EXT_COLS, VISITS_CONSTR)
@@ -328,14 +339,14 @@ class ResultsLoader:
             logging.error(f'Error creating visits_ext table. Further exceptions possible: {e}')
             traceback.print_exc()
 
-    def create_periods_table(self):
+    def create_periods_table(self, table_name: str = 'periods'):
         """
         Create the periods table in the SQLite database.
         """
         try:
-            self.db_man.create_table('periods', PERIODS_COLS, PERIODS_CONSTR)
+            self.db_man.create_table(table_name, PERIODS_COLS, PERIODS_CONSTR)
         except Exception as e:
-            logging.error(f'Error creating periods table. Further exceptions possible: {e}')
+            logging.error(f'Error creating table {table_name}. Further exceptions possible: {e}')
             traceback.print_exc()
 
     def save_visits(self, visits_df):
@@ -387,9 +398,68 @@ class ResultsLoader:
         Save the processed visits DataFrame to the periods table in the SQLite database.
         """
 
-        from detectflow.utils.extract_data import safe_json, safe_str, safe_datetime, safe_float, safe_timedelta, safe_int
+        self.save_periods_table(periods_df, 'periods')
 
-        self.initialize_periods()
+        # from detectflow.utils.extract_data import safe_json, safe_str, safe_datetime, safe_float, safe_timedelta, safe_int
+        #
+        # self.initialize_periods_table('periods')
+        #
+        # data = []
+        # for row in periods_df.iterrows():
+        #     entry = (
+        #         safe_str(row[1]['video_id']),
+        #         safe_timedelta(row[1]['start_time']).split('.')[0],
+        #         safe_timedelta(row[1]['end_time']).split('.')[0],
+        #         safe_int(row[1]['start_frame']),
+        #         safe_int(row[1]['end_frame']),
+        #         safe_datetime(row[1]['start_real_life_time']),
+        #         safe_datetime(row[1]['end_real_life_time']),
+        #         safe_float(row[1]['visit_duration']),
+        #         safe_json(row[1]['flower_bboxes']),
+        #         safe_json(row[1]['visitor_bboxes']),
+        #         safe_json(row[1]['frame_numbers']),
+        #         safe_json(row[1]['visit_ids']),
+        #         safe_int(row[1]['visitor_id']),
+        #         safe_str(row[1]['visitor_species']),
+        #         safe_json(row[1]['flags'])
+        #     )
+        #     data.append(entry)
+        #
+        # delete_query = "DELETE FROM periods"
+        # try:
+        #     self.db_man.safe_execute(delete_query)
+        # except Exception as e:
+        #     logging.error(f'Error deleting existing period data in SQLite. Further exceptions possible: {e}')
+        #     traceback.print_exc()
+        #
+        # query = f"""
+        #             INSERT INTO periods ({','.join([col[0] for col in PERIODS_COLS])})
+        #             VALUES ({','.join(['?'] * len(PERIODS_COLS))})
+        #             ON CONFLICT(video_id, visitor_id)
+        #             DO UPDATE SET {','.join([f"{col[0]} = excluded.{col[0]}" for col in PERIODS_COLS])}
+        #         """
+        # try:
+        #     self.db_man.safe_execute(query, data)
+        # except Exception as e:
+        #     logging.error(f'Error saving processed visit periods to SQLite. Further exceptions possible: {e}')
+        #     traceback.print_exc()
+
+    def save_periods_gt(self, periods_df):
+        """
+        Save the processed visits DataFrame to the periods_gt table in the SQLite database.
+        """
+
+        self.save_periods_table(periods_df, 'periods_gt')
+
+    def save_periods_table(self, periods_df, table_name: str):
+        """
+        Save the processed visits DataFrame to a periods type table with a specified name in the SQLite database.
+        """
+
+        from detectflow.utils.extract_data import safe_json, safe_str, safe_datetime, safe_float, safe_timedelta, \
+            safe_int
+
+        self.initialize_periods_table(table_name)
 
         data = []
         for row in periods_df.iterrows():
@@ -412,19 +482,19 @@ class ResultsLoader:
             )
             data.append(entry)
 
-        delete_query = "DELETE FROM periods"
+        delete_query = f"""DELETE FROM {table_name}"""
         try:
             self.db_man.safe_execute(delete_query)
         except Exception as e:
-            logging.error(f'Error deleting existing visits_ext data in SQLite. Further exceptions possible: {e}')
+            logging.error(f'Error deleting existing {table_name} data in SQLite. Further exceptions possible: {e}')
             traceback.print_exc()
 
         query = f"""
-                    INSERT INTO periods ({','.join([col[0] for col in PERIODS_COLS])}) 
-                    VALUES ({','.join(['?'] * len(PERIODS_COLS))}) 
-                    ON CONFLICT(video_id, visitor_id)
-                    DO UPDATE SET {','.join([f"{col[0]} = excluded.{col[0]}" for col in PERIODS_COLS])}
-                """
+                            INSERT INTO {table_name} ({','.join([col[0] for col in PERIODS_COLS])}) 
+                            VALUES ({','.join(['?'] * len(PERIODS_COLS))}) 
+                            ON CONFLICT(video_id, visitor_id)
+                            DO UPDATE SET {','.join([f"{col[0]} = excluded.{col[0]}" for col in PERIODS_COLS])}
+                        """
         try:
             self.db_man.safe_execute(query, data)
         except Exception as e:
@@ -449,10 +519,27 @@ class ResultsLoader:
         """
         Load the periods DataFrame from the SQLite database and refine it.
         """
-        self.initialize_periods()
+        self.initialize_periods_table('periods')
 
         periods_df = self.db_man.load_dataframe('periods')
         return refine_periods(periods_df)
+
+    def load_periods_gt(self):
+        """
+        Load the periods_gt DataFrame from the SQLite database and refine it.
+        """
+        self.initialize_periods_table('periods_gt')
+
+        periods_df = self.db_man.load_dataframe('periods_gt')
+        return refine_periods(periods_df)
+
+    def load_ground_truth(self):
+        """
+        Load the ground truth DataFrame from the SQLite database and refine it.
+        """
+        ground_truth_df = self.db_man.load_dataframe('ground_truth')
+        return refine_visits(ground_truth_df)
+
 
     def initialize_visits_ext(self):
         """
@@ -479,7 +566,7 @@ class ResultsLoader:
 
         return visits_df
 
-    def initialize_periods(self):
+    def initialize_periods_table(self, table_name: str):
         try:
             table_names = self.db_man.get_table_names()
         except Exception as e:
@@ -488,16 +575,16 @@ class ResultsLoader:
             table_names = []
 
         try:
-            if 'periods' not in table_names:
-                self.create_periods_table()
+            if table_name not in table_names:
+                self.create_periods_table(table_name)
         except Exception as e:
-            logging.error(f'Error initializing periods table. Further exceptions possible: {e}')
+            logging.error(f'Error initializing table {table_name}. Further exceptions possible: {e}')
             traceback.print_exc()
 
 
 class VisitsProcessor(ResultsLoader):
     def __init__(self, db_path: str):
-        super().__init__(db_path)
+        super().__init__(db_path=db_path)
 
         self._has_periods = False
 
