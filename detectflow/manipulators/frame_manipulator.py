@@ -372,6 +372,7 @@ class FrameManipulator:
         # Attempt to save the frame
         try:
             destination = os.path.join(directory, filename)
+            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)  # Ensure correct color format for saving
             success = cv2.imwrite(destination, frame)
             if not success:
                 logging.info("Error: Failed to save the frame. Please check the frame data and file path.")
