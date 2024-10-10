@@ -539,6 +539,7 @@ class TrainingDataExporter(QThread):
                 frames_per_visit = self.export_settings.get(flag.lower(), 0)
 
                 # Check if we need to export frames for this flag
+                indices = []
                 if frames_per_visit > 0:
                     # Get frame indices to extract
                     total_frames = max(0, end_frame - start_frame)
@@ -552,7 +553,7 @@ class TrainingDataExporter(QThread):
                         export_data[flag] = {}
                     if video_id not in export_data[flag]:
                         export_data[flag][video_id] = []
-                    else:
+                    if indices:
                         export_data[flag][video_id].extend(indices)
         except Exception as e:
 
