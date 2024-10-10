@@ -631,7 +631,7 @@ class TrainingDataExporter(QThread):
                 except Exception as e:
                     print(f"Error auto-annotating frames: {e}")
 
-                    self.control_panel.set_status_message(f"Error during auto-annotation",
+                    self.control_panel.set_status_message(str(e),
                                                           icon=ALT_ICONS['alert-circle'], timeout=2000)
 
             else:
@@ -652,7 +652,7 @@ class TrainingDataExporter(QThread):
                 except Exception as e:
                     print(f"Error saving frames: {e}")
 
-                    self.control_panel.set_status_message(f"Error saving frames",
+                    self.control_panel.set_status_message(str(e),
                                                           icon=ALT_ICONS['alert-circle'], timeout=5000)
 
     def export_annotated_frames(self, frames, metadata):
