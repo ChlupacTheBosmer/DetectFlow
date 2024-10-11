@@ -601,10 +601,13 @@ class VisitsTableModel(QAbstractTableModel):
         self.beginRemoveRows(parent, position, position + rows - 1)
         for row in range(position, position + rows):
             visitor_id = self._filtered_df.iloc[row]['visitor_id']
-            del self.shared_data.visitor_data[visitor_id]  # Remove the entry from the dictionary
+            try:
+                del self.shared_data.visitor_data[visitor_id]  # Remove the entry from the dictionary
+            except KeyError:
+                print(f"Visitor ID {visitor_id} not found in visitor_data dictionary.")
         self._df.drop(self._filtered_df.index[position:position+rows], inplace=True)
         self._df.reset_index(drop=True, inplace=True)
-        self.setVideoIDFilter(self._current_video_id)  # Reapply filter
+        #self.setVideoIDFilter(self._current_video_id)  # Reapply filter
         self.endRemoveRows()
         self.update_visits_signal.emit(self.shared_data.visitor_data)
         return True
@@ -1713,7 +1716,7 @@ class VisitsView(QWidget):
             if reply == QMessageBox.StandardButton.Yes:
                 model.removeRows(current_index.row())
 
-    # TODO: Check for crashes and bugs and fix
+    # DONE: Check for crashes and bugs and fix
     def merge_selected_entries(self):
         model = self.models.get('db_model', None)
         if not model or not self.database_view:
@@ -1728,7 +1731,7 @@ class VisitsView(QWidget):
 
         # Retain the first item and modify it
         primary_index = original_indices[0]
-        print(original_indices)
+        # print(original_indices)
         primary_row = model._df.loc[primary_index]
 
         # Initialize lists for merging
@@ -1757,6 +1760,8 @@ class VisitsView(QWidget):
             start_frame = min(start_frame, row['start_frame'])
             end_frame = max(end_frame, row['end_frame'])
 
+        # print("merged")
+
         # Ensure the lengths match
         def set_list_value(index, value):
             column_index = model._df.columns.get_loc(index)
@@ -1780,11 +1785,20 @@ class VisitsView(QWidget):
         model.recalculate_linked_columns(model._filtered_df.index.get_loc(primary_index), 'start_frame')
 
         # Remove the other selected items
-        for idx in original_indices[1:]:
-            model.removeRows(model._filtered_df.index.get_loc(original_indices[1]))
-            print("deleted: ", idx)
+        # print(original_indices[1:])
+        for idx in sorted(original_indices[1:], reverse=True):
+            if int(idx) in model._filtered_df.index:
+                index_loc = model._filtered_df.index.get_loc(int(idx))
+                # print(index_loc)
+                model.removeRows(index_loc, 1)
+                # print("deleted: ", idx)
+            # else:
+            #     print(f"Index {idx} not found in the DataFrame.")
 
-        print("deleted")
+        # Start the timer to trigger after 3 seconds (3000 ms)
+        QTimer.singleShot(1000, self.filter_visits_by_video_id)
+
+        # print("deleted")
 
     def emit_data(self):
         table_view = self.focused_table_view
