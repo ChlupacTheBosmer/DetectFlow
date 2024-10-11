@@ -1538,6 +1538,12 @@ class VisitsView(QWidget):
         # Filter video_df to only those video_ids that are present in visits_df
         videos_df = videos_df[videos_df['video_id'].isin(periods_df['video_id'])]
 
+        # Sort the DataFrame alphabetically by the 'video_id' column
+        videos_df = videos_df.sort_values(by='video_id')
+
+        # Reset the index after sorting to ensure it matches the current sorted order
+        videos_df = videos_df.reset_index(drop=True)
+
         if table_view == self.stacked_widget.stacked_table_widget.table_view1:
             self._videos_df = videos_df
             update_visits_signal = self.update_visits_signal
