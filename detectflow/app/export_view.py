@@ -511,7 +511,7 @@ class TrainingDataExporter(QThread):
     reset_progress_signal = pyqtSignal()
     set_progress_max_signal = pyqtSignal(int)
 
-    def __init__(self, table_data, export_settings, app_data_dir, control_panel=None):
+    def __init__(self, table_data, export_settings, app_data_dir, control_panel=None, video_opener=None):
         super().__init__()
         self.frame_count = 0
         self.table_data = table_data
@@ -519,7 +519,7 @@ class TrainingDataExporter(QThread):
         self.app_data_dir = app_data_dir
         self.train_data_dir = os.path.join(self.app_data_dir, "train_data")
         self.control_panel = control_panel
-        self.video_opener = None
+        self.video_opener = video_opener
 
     def run(self):
         print("Packing export data...")
