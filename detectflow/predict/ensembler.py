@@ -220,6 +220,7 @@ class Ensembler:
                 raise ValueError(f"Invalid frame dimension {frame.ndim}. Expected 3D array for each frame.")
 
             combined_boxes = []
+            detection_result = None
 
             # Run detection with each predictor concurrently
             with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -241,14 +242,16 @@ class Ensembler:
                 }
                 for future in concurrent.futures.as_completed(future_to_predictor):
                     result = future.result()
-                    if result is not None and result.boxes is not None:
-                        combined_boxes.append(result.boxes)
+                    if result is not None:
+                        detection_result = result
+                        if result.boxes is not None:
+                            combined_boxes.append(result.boxes)
 
             # Merge detection boxes
             merged_boxes = self._merge_boxes(combined_boxes, frame.shape[:2])
 
-            # Create DetectionResults from merged boxes
-            detection_result = DetectionResults(orig_img=frame, boxes=merged_boxes)
+            # The detection result taken from the last predictor for metadata is updated with merged boxes
+            detection_result.boxes = merged_boxes
 
             # Apply tracking if tracker is available
             if self.tracker:
