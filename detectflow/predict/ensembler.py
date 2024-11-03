@@ -283,20 +283,24 @@ class Ensembler:
         Returns:
             DetectionResults: The detection results from the predictor.
         """
-        results_generator = predictor.detect(
-            frame,
-            metadata=metadata,
-            image_size=image_size,
-            sliced=sliced,
-            save=save,
-            save_txt=save_txt,
-            device=device,
-            yolo_config=yolo_config,
-            sahi_config=sahi_config,
-            **kwargs
-        )
-        for result in results_generator:
-            return result
+        try:
+            results_generator = predictor.detect(
+                frame,
+                metadata=metadata,
+                image_size=image_size,
+                sliced=sliced,
+                save=save,
+                save_txt=save_txt,
+                device=device,
+                yolo_config=yolo_config,
+                sahi_config=sahi_config,
+                **kwargs
+            )
+            for result in results_generator:
+                return result
+        except Exception as e:
+            logging.error(f"Error running predictor: {e}")
+
         return None
 
     def _merge_boxes(self, boxes_list: List[DetectionBoxes], orig_shape: tuple) -> DetectionBoxes:
