@@ -248,7 +248,11 @@ class Ensembler:
                             combined_boxes.append(result.boxes)
 
             # Merge detection boxes
-            merged_boxes = self._merge_boxes(combined_boxes, frame.shape[:2])
+            try:
+                merged_boxes = self._merge_boxes(combined_boxes, frame.shape[:2])
+            except Exception as e:
+                logging.error(f"Error merging boxes from ensembler models: {e}")
+                merged_boxes = None
 
             # The detection result taken from the last predictor for metadata is updated with merged boxes
             detection_result.boxes = merged_boxes
