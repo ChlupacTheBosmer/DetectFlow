@@ -252,7 +252,10 @@ class Ensembler:
 
             # Apply tracking if tracker is available
             if self.tracker:
-                detection_result = self.tracker.process_tracking(detection_result, filter=False)
+                try:
+                    detection_result = self.tracker.process_tracking(detection_result, filter=False)
+                except Exception as e:
+                    logging.error(f"Error in tracking: {e}")
 
             yield detection_result
 
