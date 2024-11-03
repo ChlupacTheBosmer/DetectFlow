@@ -683,10 +683,10 @@ class TrainingDataExporter(QThread):
 
     def export_empty_frames(self, frames, metadata):
 
-        from detectflow.utils.name import parse_recording_name
+        from detectflow.utils.name import parse_video_name
 
         # Get video ID from the metadata
-        video_id = parse_recording_name(metadata.get('source_path', '')).get('video_id', None)
+        video_id = parse_video_name(metadata.get('source_path', '')).get('video_id', None)
 
         for frame, frame_number in zip(frames, metadata.get('frame_number', [])):
             frame_filename = f"{video_id}_{frame_number}"

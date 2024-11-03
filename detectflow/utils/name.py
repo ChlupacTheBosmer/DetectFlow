@@ -3,45 +3,38 @@ import logging
 import re
 
 
-def parse_video_id(video_id: str):
+def parse_recording_name(recording_name: str):
 
     try:
-        if not is_valid_video_id(video_id):
-            raise ValueError(f'Invalid video ID: {video_id}')
-        locality, transect, plant_id, date, hour, minutes = video_id.split("_")
+        if not is_valid_video_id(recording_name):
+            raise ValueError(f'Invalid video ID: {recording_name}')
+        locality, transect, plant_id = recording_name.split("_")
     except Exception as e:
         return {"recording_id": None,
-                "video_id": video_id,
-                "timestamp": None,
                 "locality": None,
                 "transect": None,
-                "plant_id": None,
-                "date": None,
-                "hour": None,
-                "minute": None}
+                "plant_id": None
+                }
 
     recording_identifier = "_".join([locality, transect, plant_id])
-    timestamp = "_".join([date, hour, minutes])
 
     return {"recording_id": recording_identifier,
-            "video_id": video_id,
-            "timestamp": timestamp,
             "locality": locality,
             "transect": transect,
             "plant_id": plant_id,
-            "date": date,
-            "hour": hour,
-            "minute": minutes}
+            }
 
-
-def parse_recording_name(video_path: str):
+#DONE: This parses a video name, not a recording name. This function should be renamed to parse_video_name and the above function
+# should be renamed to parse_recording_name, its usage changed to parse_video_name, and the above function should be updated to parse recording names.
+def parse_video_name(video_path: str):
 
     filename = os.path.basename(video_path)
 
     # Prepare name elements
     try:
         locality, transect, plant_id, date, hour, minutes = filename[:-4].split("_")
-        file_extension = os.path.splitext(filename)[-1]
+        file_extension = os.path.splitext(filename)[-1] if len(os.path.splitext(filename)) > 1 else None
+
     except Exception as e:
         logging.warning(f'Unable to parse video recording name: {video_path}. Exception: {e}')
         return {"recording_id": os.path.splitext(filename)[0],
@@ -53,7 +46,7 @@ def parse_recording_name(video_path: str):
                 "date": None,
                 "hour": None,
                 "minute": None,
-                "extension": os.path.splitext(filename)[-1]}
+                "extension": os.path.splitext(filename)[-1] if len(os.path.splitext(filename)) > 1 else None}
 
     # Define compound info
     recording_identifier = "_".join([locality, transect, plant_id])

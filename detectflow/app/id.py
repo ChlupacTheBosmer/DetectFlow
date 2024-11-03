@@ -418,7 +418,7 @@ from detectflow.config import S3_CONFIG
 from detectflow.utils.cfg import is_s3_config_valid, resolve_s3_config
 from detectflow.manipulators.dataloader import Dataloader
 from detectflow.manipulators.input_manipulator import InputManipulator
-from detectflow.utils.name import is_valid_video_id, parse_video_id
+from detectflow.utils.name import is_valid_video_id, parse_video_name
 
 def gather_video_filepaths(directory, video_extensions=None):
     if video_extensions is None:
@@ -498,7 +498,7 @@ class VideoOpener(QThread):
             return None
 
         # Extract video info
-        video_info = parse_video_id(video_id)
+        video_info = parse_video_name(video_id)
 
         # Resolve S3 config
         resolve_s3_config(self.s3_config)

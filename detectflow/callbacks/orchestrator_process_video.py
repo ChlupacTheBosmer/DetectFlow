@@ -6,7 +6,7 @@ from detectflow.validators.validator import Validator
 from detectflow.models import DEFAULT_MODEL_CONFIG as model_defaults
 from detectflow.callbacks.frame_generator_predictions import frame_generator_predict
 from detectflow.utils.extract_data import extract_data_from_video
-from detectflow.utils.name import parse_recording_name
+from detectflow.utils.name import parse_video_name
 import logging
 from datetime import datetime
 import os
@@ -209,7 +209,7 @@ def process_video_callback(task: Task,
         try:
             # Get video_id
             try:
-                name_info = parse_recording_name(video_path)
+                name_info = parse_video_name(video_path)
                 video_id = name_info.get("video_id", None)
                 recording_id = name_info.get("recording_id", None)
             except Exception as e:

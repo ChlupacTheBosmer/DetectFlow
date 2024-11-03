@@ -58,7 +58,7 @@ def gather_flower_data(**kwargs):
     return results
 
 
-from detectflow.utils.name import parse_recording_name
+from detectflow.utils.name import parse_video_name
 from detectflow.manipulators.database_manipulator import DatabaseManipulator
 from detectflow.process.database_manager import VIDEOS_COLS
 from detectflow.utils.extract_data import extract_data_from_video
@@ -74,7 +74,7 @@ def diagnose_video(**kwargs):
     if not video_path:
         return False
 
-    recording_id = parse_recording_name(video_path).get('recording_id', None)
+    recording_id = parse_video_name(video_path).get('recording_id', None)
 
     if not recording_id:
         return False

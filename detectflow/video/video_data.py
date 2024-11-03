@@ -12,7 +12,7 @@ from detectflow.validators.s3_validator import S3Validator
 from detectflow.validators.video_validator import VideoValidator
 from detectflow.video.frame_reader import FrameReader
 from detectflow.video.picture_quality import PictureQualityAnalyzer
-from detectflow.utils.name import parse_recording_name
+from detectflow.utils.name import parse_video_name
 
 
 class Video(FrameReader):
@@ -30,7 +30,7 @@ class Video(FrameReader):
         Initializes the Video class.
         """
         # Parse the recording name
-        parsed_data = parse_recording_name(video_path)
+        parsed_data = parse_video_name(video_path)
 
         # Set the attributes
         self.recording_id = parsed_data.get("recording_id", None)

@@ -10,7 +10,7 @@ import cv2
 from typing import List, Optional, Type, Tuple
 from datetime import timedelta, datetime
 from detectflow.utils import BaseClass
-from detectflow.utils.name import is_valid_video_id, parse_recording_name
+from detectflow.utils.name import is_valid_video_id, parse_video_name
 import logging
 from functools import lru_cache
 
@@ -752,7 +752,7 @@ class DetectionResults(BaseClass):
             logging.warning("Source name pattern not recognized. Source name treated as recording ID.")
             return self.source_name
         else:
-            return parse_recording_name(self.source_path).get("recording_id", self.source_name)
+            return parse_video_name(self.source_path).get("recording_id", self.source_name)
 
     @property
     def video_id(self):
@@ -774,7 +774,7 @@ class DetectionResults(BaseClass):
             logging.warning("Source name pattern not recognized. Source name treated as video ID.")
             return self.source_name
         else:
-            return parse_recording_name(self.source_path).get("video_id", self.source_name)
+            return parse_video_name(self.source_path).get("video_id", self.source_name)
 
     @property
     def source_name(self):

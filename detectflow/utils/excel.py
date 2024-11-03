@@ -483,7 +483,7 @@ class AnnotationFileDiagnoser:
 
 from datetime import datetime, timedelta
 from typing import Type, Tuple
-from detectflow.utils.name import parse_recording_name
+from detectflow.utils.name import parse_video_name
 from detectflow.video.video_data import get_video_file_instance
 
 
@@ -764,7 +764,7 @@ class Annotation:
         # Get the video ID from the video path
         video_id = None
         if self.video_path:
-            video_id = parse_recording_name(self.video_path).get("video_id", None)
+            video_id = parse_video_name(self.video_path).get("video_id", None)
         elif self.detection_results:
             if isinstance(self.detection_results, (list, tuple)) and len(self.detection_results) > 0:
                 try:
@@ -790,7 +790,7 @@ class Annotation:
         recording_id = None
         if self.video_path:
             try:
-                recording_id = parse_recording_name(self.video_path).get("recording_id", None)
+                recording_id = parse_video_name(self.video_path).get("recording_id", None)
             except Exception as e:
                 logging.error(f"Failed to get recording ID from video path: {e}")
         elif self.video_id:
