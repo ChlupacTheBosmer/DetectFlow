@@ -55,6 +55,13 @@ def get_relative_path(full_path, folder_name):
     return relative_path
 
 
+#TODO: Add copy and deep copy functionality to the Dataset class.
+#TODO: Implement other dictionary specific methods correctly.
+#TODO: IMplement way of creating a Dataset from dictionary, also make it so that passing argument into the ocnstructor will
+# create a Dataset if you unpack a dictionary.
+#TODO: Add ways of poping out items and updating values easily
+#TODO: Add way of slicing or spliting the dataste
+#TODO: Add way of getting and removing ust empty or object images
 class Dataset(dict):
     """
     A dictionary-like object to store information about a dataset. The keys are the file names and the values are
