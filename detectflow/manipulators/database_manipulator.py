@@ -706,3 +706,26 @@ def extract_table_name(query):
             return match.group(1)
 
     return None
+
+
+def sqlite_to_excel(db_path: str, excel_path: str, table_name: str, selection_criteria: str = '*'):
+    """
+    Export data from a SQLite database table to an Excel file.
+
+    :param db_path: Path to the SQLite database file.
+    :param excel_path: Path to the Excel file to save the data.
+    :param table_name: Name of the table to export data from.
+    :param selection_criteria: Part of SQLite query to select specific columns or rows. Default is '*'.
+    """
+
+    if not os.path.exists(db_path):
+        raise RuntimeError("SQL database not found.")
+
+    db_man = DatabaseManipulator(db_path)
+
+    query = f"SELECT {selection_criteria} FROM {table_name}"
+    df = pd.read_sql(query, db_man.conn)
+
+    df.to_excel(excel_path, index=False, engine='openpyxl')
+
+    db_man.close_connection()
