@@ -172,12 +172,15 @@ def frame_generator_predict(**kwargs):
                 logging.error(f"Error when saving training data: {e}")
 
             # Add to queue
-            if result.boxes is not None or not skip_empty_frames:
-                if db_manager_data_queue is not None:
-                    result_data_entry = extract_data_from_result(result)
-                    db_manager_data_queue.put(result_data_entry)
-                else:
-                    raise TypeError("Database task queue not defined")
+            try:
+                if result.boxes is not None or not skip_empty_frames:
+                    if db_manager_data_queue is not None:
+                        result_data_entry = extract_data_from_result(result)
+                        db_manager_data_queue.put(result_data_entry)
+                    else:
+                        raise TypeError("Database task queue not defined")
+            except Exception as e:
+                logging.error(f"Error when adding data to the database queue: {e}")
 
         # If orchestrator_control_queue task was passed then update the progress
         if update_info is not None and len(frame_numbers) >= i + 1:
