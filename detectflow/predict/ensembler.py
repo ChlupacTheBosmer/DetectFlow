@@ -234,7 +234,7 @@ class Ensembler:
             combined_boxes = []
             detection_result = None
 
-            # Set any attributes passed in metadata
+            # Prepare metadata for the current frame
             frame_metadata = {}
             if metadata:
                 for key, value in metadata.items():
