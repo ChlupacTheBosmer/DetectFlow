@@ -226,13 +226,22 @@ class Ensembler:
             raise ValueError(f"Frames passed in an invalid format. Type: {type(frame_numpy_array)}")
 
         # Iterate over frames and run detection on each frame
-        for frame in list_of_frames:
+        for i, frame in enumerate(list_of_frames):
             # Ensure frame is at least a 3D array
             if frame.ndim != 3:
                 raise ValueError(f"Invalid frame dimension {frame.ndim}. Expected 3D array for each frame.")
 
             combined_boxes = []
             detection_result = None
+
+            # Set any attributes passed in metadata
+            frame_metadata = {}
+            if metadata:
+                for key, value in metadata.items():
+                    if isinstance(value, (list, tuple)) and len(value) > i:
+                        frame_metadata[key] = value[i]
+                    else:
+                        frame_metadata[key] = value
 
             # Run detection with each predictor concurrently
             with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -241,7 +250,7 @@ class Ensembler:
                         self._run_predictor,
                         predictor,
                         frame,
-                        metadata,
+                        frame_metadata,
                         image_size=image_size,
                         sliced=sliced,
                         save=save,
