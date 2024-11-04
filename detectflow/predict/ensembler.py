@@ -174,17 +174,29 @@ class Ensembler:
         self.predictors = predictors
         self.tracker = Tracker(tracker_type=tracker) if tracker else None
 
-    def detect(self, frames_numpy_array: Union[np.ndarray, List[np.ndarray]], metadata: dict = None,
-               image_size: Optional[tuple] = None, sliced: bool = True,
-               save: bool = False, save_txt: bool = False, device: Optional[str] = None,
-               yolo_config: Optional[dict] = {}, sahi_config: Optional[dict] = {}, **kwargs) -> Generator[DetectionResults, None, None]:
+#TODO: Sort kwrgs and sahi and yolo config before passing into predictors
+    def detect(self,
+               frame_numpy_array: Union[np.ndarray, List[np.ndarray]],
+               metadata: dict = None,
+               image_size: Optional[tuple] = None,
+               sliced: bool = True,
+               tracked: bool = False,
+               filter_tracked: bool = False,
+               save: bool = False,
+               save_txt: bool = False,
+               device: Optional[str] = None,
+               yolo_config: Optional[dict] = {},
+               sahi_config: Optional[dict] = {},
+               **kwargs) -> Generator[DetectionResults, None, None]:
         """
         Run detection on the given frames using all predictors and combine the results.
         Args:
-            frames_numpy_array (Union[np.ndarray, List[np.ndarray]]): The input frames as a numpy array (4D array for multiple frames, 3D array for a single frame, or list of 3D arrays).
+            frame_numpy_array (Union[np.ndarray, List[np.ndarray]]): The input frames as a numpy array (4D array for multiple frames, 3D array for a single frame, or list of 3D arrays).
             metadata (dict, optional): Metadata to pass to each predictor.
             image_size (tuple, optional): Size of the image for prediction.
             sliced (bool): Whether to slice the image for prediction.
+            tracked (bool): Whether to apply tracking to the results.
+            filter_tracked (bool): Whether to filter the tracked boxes.
             save (bool): Whether to save the results.
             save_txt (bool): Whether to save the results in txt format.
             device (str, optional): The device to run the model on.
@@ -195,23 +207,23 @@ class Ensembler:
             DetectionResults: Combined detection results from all models for each frame.
         """
         # Prepare input for detection
-        if isinstance(frames_numpy_array, np.ndarray):
-            if frames_numpy_array.ndim == 3:
+        if isinstance(frame_numpy_array, np.ndarray):
+            if frame_numpy_array.ndim == 3:
                 # Convert the 3D frame into a 4D array with only one frame
-                frames_numpy_array = np.expand_dims(frames_numpy_array, axis=0)
+                frame_numpy_array = np.expand_dims(frame_numpy_array, axis=0)
 
-            elif frames_numpy_array.ndim == 1:
+            elif frame_numpy_array.ndim == 1:
                 # Handle the case where a single image might be passed in improperly as a 1D array
                 raise ValueError("Frames passed as a 1D array. Expected 3D or 4D array for proper processing.")
 
             # Flatten the 4D array into a list of 3D arrays
-            list_of_frames = np.split(frames_numpy_array, frames_numpy_array.shape[0], axis=0)
+            list_of_frames = np.split(frame_numpy_array, frame_numpy_array.shape[0], axis=0)
             list_of_frames = [np.squeeze(frame) for frame in list_of_frames]  # Remove singleton dimension
 
-        elif isinstance(frames_numpy_array, list) and all(isinstance(frame, np.ndarray) for frame in frames_numpy_array):
-            list_of_frames = frames_numpy_array
+        elif isinstance(frame_numpy_array, list) and all(isinstance(frame, np.ndarray) for frame in frame_numpy_array):
+            list_of_frames = frame_numpy_array
         else:
-            raise ValueError(f"Frames passed in an invalid format. Type: {type(frames_numpy_array)}")
+            raise ValueError(f"Frames passed in an invalid format. Type: {type(frame_numpy_array)}")
 
         # Iterate over frames and run detection on each frame
         for frame in list_of_frames:
@@ -258,9 +270,9 @@ class Ensembler:
             detection_result.boxes = merged_boxes
 
             # Apply tracking if tracker is available
-            if self.tracker:
+            if tracked and self.tracker:
                 try:
-                    detection_result = self.tracker.process_tracking(detection_result, filter=False)
+                    detection_result = self.tracker.process_tracking(detection_result, filter=filter_tracked)
                 except Exception as e:
                     logging.error(f"Error in tracking: {e}")
 
