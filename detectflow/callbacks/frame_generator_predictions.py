@@ -5,6 +5,7 @@ from detectflow.utils.inspector import Inspector
 from detectflow.video.video_data import Video
 from detectflow.utils.extract_data import extract_data_from_result
 from detectflow.models import DEFAULT_MODEL_CONFIG as model_defaults
+from detectflow.predict.ensembler import Ensembler
 
 
 def frame_generator_predict(**kwargs):
@@ -26,8 +27,9 @@ def frame_generator_predict(**kwargs):
                Model parameters:
                - model_config: List or Dictionary of models and their paths and confs (default: model_defaults - see for dict structure)
                                Note that the dictionary should have keys 0 and 1 for flowers and visitors models respectively.
-                               Having list with two elements is also acceptable because when loading from json dictionary
-                               is not acceptable data type.
+                               Having list with two or more elements is also acceptable because when loading from json dictionary
+                               is not acceptable data type. If the model_config has more than two models, Ensembler
+                               combining results from multiple models will be used instead of a single Predictor.
 
                Passed in the kwargs dict passed from orchestrator_control_queue - fully optional
                - db_manager_data_queue: Queue to which results should be put for logging into database (default: None)
@@ -90,6 +92,14 @@ def frame_generator_predict(**kwargs):
     if frames is None or len(frames) == 0:
         raise ValueError("No frames passed to generator callback")
 
+    # Process model config to ensure it is in the correct format
+    if isinstance(model_config, dict):
+        model_config = [model_config[key] for key in model_config.keys()]
+    elif isinstance(model_config, list):
+        model_config = model_config
+    else:
+        raise ValueError("Model config must be a dictionary or a list")
+
     ############ FLOWERS ############
     # Define Predictor
     flower_predictor = Predictor()
@@ -122,18 +132,31 @@ def frame_generator_predict(**kwargs):
         'reference_boxes': det_results[0].boxes if det_results and len(det_results) > 0 and hasattr(det_results[0], 'boxes') else None
     }
 
-    # Define Predictor
-    visitor_predictor = Predictor(tracker=tracker_type)
+    # Define Predictor(s) and Ensembler as detector
+    if len(model_config) > 2:
+        visitor_predictors = [Predictor(model_path=cfg.get('path', model_defaults[1]['path']),
+                                        detection_conf_threshold=cfg.get('conf', model_defaults[1]['conf']),
+                                        tracker=tracker_type) for cfg in model_config[1:]]
+        detector = Ensembler(predictors=visitor_predictors)
+        logging.info(f"Ensembling {len(visitor_predictors)} models")
+
+    else:
+        detector = Predictor(model_path=model_config[1].get('path', model_defaults[1]['path']),
+                             detection_conf_threshold=model_config[1].get('conf', model_defaults[1]['conf']),
+                             tracker=tracker_type)
+        logging.info(f"Using single model for visitors")
+
+    # Define detection kwargs
+    detect_kwargs = {'frame_numpy_array': frames,
+                     'metadata': metadata,
+                     'sliced': True,
+                     'tracked': track_results,
+                     'filter_tracked': False,
+                     'device': device
+                     }
 
     # Get the position of visitors. Return DetectionResults
-    for i, result in enumerate(visitor_predictor.detect(frame_numpy_array=frames,
-                                                        model_path=model_config[1].get('path', model_defaults[1]['path']),
-                                                        detection_conf_threshold=model_config[1].get('conf', model_defaults[1]['conf']),
-                                                        metadata=metadata,
-                                                        tracked=track_results,
-                                                        filter_tracked=False,
-                                                        device=device,
-                                                        sliced=True)):
+    for i, result in enumerate(detector.detect(**detect_kwargs)):
         if result is not None:
 
             # Display all boxes on the frame if inspection requested
