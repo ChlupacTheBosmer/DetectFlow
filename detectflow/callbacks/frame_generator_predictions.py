@@ -69,6 +69,7 @@ def frame_generator_predict(**kwargs):
     orchestrator_control_queue = kwargs.get('orchestrator_control_queue', None)
     update_info = kwargs.get('update_info', None)
     scratch_path = kwargs.get('scratch_path', None)
+    save_training_data = kwargs.get('save_training_data', False)
 
     # Functionality flags
     inspect = kwargs.get('inspect', False)
@@ -165,7 +166,7 @@ def frame_generator_predict(**kwargs):
 
             # Save training data to scratch folder
             try:
-                if scratch_path and result.boxes is not None:
+                if save_training_data and scratch_path and result.boxes is not None:
                     result.save_dir = os.path.join(scratch_path, 'train', result.video_id)
                     result.save(sort=True, assume_folder_exists=False, save_txt=True, box_type='boxes')
             except Exception as e:

@@ -110,6 +110,7 @@ def process_video_callback(task: Task,
                   "skip_empty_videos": bool,
                   "detect_empty_videos": bool,
                   "skip_empty_frames": bool,
+                  "save_training_data": bool,
                   "inspect": bool}
 
     logging.info(f"Processing video task: {task}: kwargs: {kwargs}")
@@ -140,6 +141,7 @@ def process_video_callback(task: Task,
     # Unpack kwargs
     scratch = kwargs.get('scratch_path', None)
     train_data_folder = kwargs.get('train_data_folder', None)
+    save_training_data = kwargs.get('save_training_data', False)
     db_manager_control_queue = kwargs.get('db_manager_control_queue', None)
     db_manager_data_queue = kwargs.get('db_manager_data_queue', None)
     resource_monitor_queue = kwargs.get('resource_monitor_queue', None)
@@ -310,6 +312,7 @@ def process_video_callback(task: Task,
                 'track_results': track_results,
                 'tracker_type': tracker_type,
                 'scratch_path': scratch,
+                'save_training_data': save_training_data,
                 'skip_empty_frames': skip_empty_frames
             }
 
@@ -353,27 +356,28 @@ def process_video_callback(task: Task,
                 logging.error(f"{name} - Error when backing up database: {e}")
 
         # Move the folder with train data to a specified location
-        try:
-            if not train_data_folder:
-                raise ValueError(f"{name} - Train data folder not defined. Skipped train data backup.")
+        if save_training_data:
+            try:
+                if not train_data_folder:
+                    raise ValueError(f"{name} - Train data folder not defined. Skipped train data backup.")
 
-            if not recording_id or not video_id:
-                raise ValueError(f"{name} - Recording ID or video ID not defined. Skipped train data backup.")
+                if not recording_id or not video_id:
+                    raise ValueError(f"{name} - Recording ID or video ID not defined. Skipped train data backup.")
 
-            if not dataloader:
-                raise ValueError(f"{name} - Dataloader not defined. Skipped train data backup.")
+                if not dataloader:
+                    raise ValueError(f"{name} - Dataloader not defined. Skipped train data backup.")
 
-            recording_train_folder = os.path.join(train_data_folder, recording_id)
-            os.makedirs(recording_train_folder, exist_ok=True)
-            train_folder = dataloader.locate_folder_local(r"train", scratch, selection_criteria='name')
-            if train_folder:
-                video_train_folder = str(os.path.join(train_folder, video_id))
-                destination_folder = os.path.join(recording_train_folder, video_id)
-                if os.path.isdir(video_train_folder):
-                    dataloader.move_folder(video_train_folder, destination_folder, overwrite=True, copy=False)
-                    logging.info(f"{name} - Moved train data folder: {video_train_folder} to {destination_folder}")
-        except Exception as e:
-            logging.error(f"{name} - Error when moving train data folder: {e}")
+                recording_train_folder = os.path.join(train_data_folder, recording_id)
+                os.makedirs(recording_train_folder, exist_ok=True)
+                train_folder = dataloader.locate_folder_local(r"train", scratch, selection_criteria='name')
+                if train_folder:
+                    video_train_folder = str(os.path.join(train_folder, video_id))
+                    destination_folder = os.path.join(recording_train_folder, video_id)
+                    if os.path.isdir(video_train_folder):
+                        dataloader.move_folder(video_train_folder, destination_folder, overwrite=True, copy=False)
+                        logging.info(f"{name} - Moved train data folder: {video_train_folder} to {destination_folder}")
+            except Exception as e:
+                logging.error(f"{name} - Error when moving train data folder: {e}")
 
     # After processing, delete the files
     try:
