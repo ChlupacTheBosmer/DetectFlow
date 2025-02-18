@@ -660,7 +660,7 @@ class VisitsControlPanel(QWidget):
 
         self.gap_tolerance = QSpinBox()
         self.gap_tolerance.setValue(30)
-        self.gap_tolerance.setRange(0, 100)
+        self.gap_tolerance.setRange(0, 100000)
         self.gap_tolerance.setSingleStep(1)
 
         self.min_box_confidence = QDoubleSpinBox()
@@ -1147,36 +1147,6 @@ class VisitsView(QWidget):
         self.toolbar.filter_visits_button.clicked.connect(self.confirm_filter_visits)
         self.toolbar.help_button.clicked.connect(self.show_help)
 
-        # # Setup main toolbar
-        # self.toolbar = QToolBar("Main Toolbar")
-        # layout.addWidget(self.toolbar)
-        #
-        # open_db_action = self.create_toolbar_button(ALT_ICONS['database'])
-        # open_db_action.clicked.connect(self.open_database)
-        # self.buttons['open_db'] = open_db_action
-        # self.toolbar.addWidget(open_db_action)
-        #
-        # save_db_action = self.create_toolbar_button(ALT_ICONS['save'])
-        # save_db_action.clicked.connect(self.save_database)
-        # self.buttons['save_db'] = save_db_action
-        # self.toolbar.addWidget(save_db_action)
-        #
-        # self.regenerate_visits_action = self.create_toolbar_button(ALT_ICONS['repeat'])
-        # self.regenerate_visits_action.clicked.connect(self.confirm_regenerate_visits)
-        # self.buttons['regenerate_visits'] = self.regenerate_visits_action
-        # self.toolbar.addWidget(self.regenerate_visits_action)
-        #
-        # self.filter_visits_action = self.create_toolbar_button(ALT_ICONS['filter'])
-        # self.filter_visits_action.clicked.connect(self.confirm_filter_visits)
-        # self.buttons['filter_visits'] = self.filter_visits_action
-        # self.toolbar.addWidget(self.filter_visits_action)
-        #
-        # help_action = self.create_toolbar_button(ALT_ICONS['help-circle'])
-        # help_action.clicked.connect(self.show_help)
-        # self.toolbar.addWidget(help_action)
-
-        # Setup control panel
-
         # Setup control panel
         self.control_panel = VisitsControlPanel()
         self.control_panel.setFixedHeight(150)
@@ -1205,70 +1175,7 @@ class VisitsView(QWidget):
         self.table_view_toolbar.toggle_selection_mode_button.clicked.connect(self.toggle_selection_mode)
         self.table_view_toolbar.settings_button.clicked.connect(self.show_settings)
 
-        # # Setup table view toolbar
-        # self.table_view_toolbar = QToolBar("Table View Toolbar")
-        # layout.addWidget(self.table_view_toolbar)
-        #
-        # seek_button = self.create_toolbar_button(ALT_ICONS['video'])
-        # seek_button.setEnabled(False)
-        # seek_button.clicked.connect(self.seek_video)
-        # self.table_view_toolbar.addWidget(seek_button)
-        # self.buttons['seek'] = seek_button
-        #
-        # add_entry_action = self.create_toolbar_button(ALT_ICONS['plus-circle'])
-        # add_entry_action.clicked.connect(self.add_entry)
-        # self.buttons['add_entry'] = add_entry_action
-        # self.table_view_toolbar.addWidget(add_entry_action)
-        #
-        # remove_entry_action = self.create_toolbar_button(ALT_ICONS['minus-circle'])
-        # remove_entry_action.clicked.connect(self.confirm_remove_entry)
-        # self.buttons['remove_entry'] = remove_entry_action
-        # self.table_view_toolbar.addWidget(remove_entry_action)
-        #
-        # merge_entries_action = self.create_toolbar_button(ALT_ICONS['layers'])
-        # merge_entries_action.setEnabled(False)
-        # merge_entries_action.clicked.connect(self.merge_selected_entries)
-        # self.buttons['merge_entries'] = merge_entries_action
-        # self.table_view_toolbar.addWidget(merge_entries_action)
-        #
-        # previous_video_action = self.create_toolbar_button(ALT_ICONS['chevron-left'])
-        # previous_video_action.clicked.connect(self.show_previous_video)
-        # self.buttons['previous_video'] = previous_video_action
-        # self.table_view_toolbar.addWidget(previous_video_action)
-        #
-        # select_video_action = self.create_toolbar_button(ALT_ICONS['film'])
-        # select_video_action.clicked.connect(self.select_video)
-        # self.buttons['select_video'] = select_video_action
-        # self.table_view_toolbar.addWidget(select_video_action)
-        #
-        # next_video_action = self.create_toolbar_button(ALT_ICONS['chevron-right'])
-        # next_video_action.clicked.connect(self.show_next_video)
-        # self.buttons['next_video'] = next_video_action
-        # self.table_view_toolbar.addWidget(next_video_action)
-        #
-        # self.cycle_icons = [ALT_ICONS['hash'], ALT_ICONS['clock'], ALT_ICONS['calendar']]
-        # self.current_cycle_icon_index = 0
-        # self.cycle_columns_action = self.create_toolbar_button(self.cycle_icons[self.current_cycle_icon_index])
-        # self.cycle_columns_action.clicked.connect(self.cycle_columns)
-        # self.buttons['cycle_columns'] = self.cycle_columns_action
-        # self.table_view_toolbar.addWidget(self.cycle_columns_action)
-        #
-        # # In the __init__ method
-        # self.plot_icon = QIcon(ALT_ICONS['activity'])
-        # self.table_icon = QIcon(ALT_ICONS['table'])
-        #
-        # self.toggle_view_action = self.create_toolbar_button(self.plot_icon)
-        # self.toggle_view_action.clicked.connect(self.toggle_view)
-        # self.buttons['toggle_view'] = self.toggle_view_action
-        # self.table_view_toolbar.addWidget(self.toggle_view_action)
-        #
-        # settings_action = self.create_toolbar_button(ALT_ICONS['settings'])
-        # settings_action.clicked.connect(self.show_settings)
-        # self.buttons['settings'] = settings_action
-        # self.table_view_toolbar.addWidget(settings_action)
-
         # Disable all buttons except for open file
-
         for key, button in self.buttons.items():
             button.setEnabled(False)
 
@@ -1281,18 +1188,6 @@ class VisitsView(QWidget):
 
         self.table_view = self.stacked_widget.stacked_table_widget.table_view1
         self.plot_widget = self.stacked_widget.stacked_plot_widget.plot_widget1
-
-        # # Setup stack and table view
-        # self.stack = QStackedWidget()
-        # self.table_view = VisitsTableView(self)
-        # self.table_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        # self.stack.addWidget(self.table_view)
-        #
-        # self.plot_widget = PlotWidget()
-        # self.plot_widget.setBackground('white')  # Set initial background color
-        # self.stack.addWidget(self.plot_widget)
-        #
-        # layout.addWidget(self.stack)
 
         # Setup bottom layout
         bottom_layout = QHBoxLayout()
@@ -1573,6 +1468,8 @@ class VisitsView(QWidget):
             self.stacked_widget.stacked_table_widget.set_model2(model)
 
         if not self._videos_df.empty:
+
+            # Setup filter for video ID
             self.current_video_id = self.current_video_id or self._videos_df.iloc[0]['video_id']
             model.setVideoIDFilter(self.current_video_id)
             self.update_video_id_status()
@@ -1581,6 +1478,7 @@ class VisitsView(QWidget):
             for key, button in self.buttons.items():
                 button.setEnabled(True)
 
+            # Disable the cycle tables button if there is only one table
             if self.stacked_widget.stacked_table_widget.count() == 1:
                 self.buttons.get('cycle_tables_button').setEnabled(False)
 
@@ -1716,6 +1614,9 @@ class VisitsView(QWidget):
             if reply == QMessageBox.StandardButton.Yes:
                 model.removeRows(current_index.row())
 
+        # Start the timer to trigger after 1 second
+        QTimer.singleShot(1000, self.filter_visits_by_video_id)
+
     # DONE: Check for crashes and bugs and fix
     def merge_selected_entries(self):
         model = self.models.get('db_model', None)
@@ -1795,7 +1696,7 @@ class VisitsView(QWidget):
             # else:
             #     print(f"Index {idx} not found in the DataFrame.")
 
-        # Start the timer to trigger after 3 seconds (3000 ms)
+        # Start the timer to trigger after 1 second
         QTimer.singleShot(1000, self.filter_visits_by_video_id)
 
         # print("deleted")
@@ -1846,17 +1747,6 @@ class VisitsView(QWidget):
             # self.current_cycle_icon_index = (self.current_cycle_icon_index + 1) % len(self.cycle_icons)
             # self.cycle_columns_action.setIcon(QIcon(self.cycle_icons[self.current_cycle_icon_index]))
 
-    # def open_plot_window(self):
-    #     if self.model and self.processor:
-    #         df = self.model.getDataFrameCopy()
-    #         filtered_df = df[df['video_id'] == self.current_video_id]
-    #         if not filtered_df.empty:
-    #             video_info = self.processor.videos_df[self.processor.videos_df['video_id'] == self.current_video_id].iloc[0]
-    #             video_start = video_info['start_time']
-    #             video_end = video_info['end_time']
-    #             self.plot_window = PlotWindow(filtered_df, video_start, video_end)
-    #             self.plot_window.show()
-
     def cycle_tables(self):
         if self.stacked_widget.currentIndex() == 0:
             self.stacked_widget.cycle_table_layers()
@@ -1891,68 +1781,6 @@ class VisitsView(QWidget):
         self.table_view_toolbar.cycle_tables_button_index = 0
         self.stacked_widget.stacked_table_widget.setCurrentIndex(0)
         self.stacked_widget.stacked_plot_widget.setCurrentIndex(0)
-
-    # def plot_visits(self, visits_df, video_start, video_end):
-    #     self.plot_widget.clear()  # Clear the previous plot
-    #
-    #     video_start = pd.to_datetime(video_start)
-    #     video_end = pd.to_datetime(video_end)
-    #     video_duration = (video_end - video_start).total_seconds()
-    #
-    #     # Convert start_time and end_time to seconds from the video start
-    #     visits_df.loc[:, f'start_time_num'] = (pd.to_timedelta(visits_df['start_time']) - pd.to_timedelta(0, unit='s')).dt.total_seconds()
-    #     visits_df.loc[:, f'end_time_num'] = (pd.to_timedelta(visits_df['end_time']) - pd.to_timedelta(0, unit='s')).dt.total_seconds()
-    #
-    #     # Plot the video timeline
-    #     self.plot_widget.addItem(
-    #         pg.BarGraphItem(x=[video_duration / 2], height=0.25, width=video_duration, brush='grey', pen='black'))
-    #
-    #     # Prepare intervals for plotting
-    #     def get_intervals(df, level_height):
-    #         intervals = []
-    #         current_y = level_height
-    #         max_y = current_y
-    #
-    #         for idx, row in df.iterrows():
-    #             start_num = row['start_time_num']
-    #             duration = row['end_time_num'] - row['start_time_num']
-    #             overlap = False
-    #
-    #             # Check for overlap
-    #             for interval in intervals:
-    #                 if not (start_num + duration < interval[0] or start_num > interval[0] + interval[1]):
-    #                     overlap = True
-    #                     current_y += level_height * 1  # Adjust spacing factor here
-    #                     break
-    #
-    #             if not overlap:
-    #                 current_y = level_height * 1.5  # reset to first level if no overlap
-    #
-    #             intervals.append((start_num, duration, current_y))
-    #             max_y = max(max_y, current_y)
-    #
-    #         return intervals, max_y
-    #
-    #     # Plot the visits
-    #     level_height = 0.25  # Adjust this value to change the height of each level
-    #     visit_intervals, max_y = get_intervals(visits_df, level_height)
-    #     for idx, (start, duration, y) in enumerate(visit_intervals):
-    #         self.plot_widget.addItem(
-    #             pg.BarGraphItem(x=[start + duration / 2], height=level_height, width=duration, y=y, brush='green',
-    #                             pen='black'))
-    #
-    #     # Adjust the plot
-    #     self.plot_widget.setYRange(0, max_y + level_height)
-    #     self.plot_widget.setLabel('bottom', 'Time', units='s')
-    #     self.plot_widget.setLabel('left', 'Visits')
-    #     self.plot_widget.getAxis('bottom').setTickSpacing(60, 10)  # Set tick spacing to 60 seconds
-    #
-    #     # Set the color of the ticks and labels
-    #     axis_color = 'black'  # Replace with your desired color
-    #     self.plot_widget.getAxis('bottom').setPen(pg.mkPen(color=axis_color))
-    #     self.plot_widget.getAxis('bottom').setTextPen(pg.mkPen(color=axis_color))
-    #     self.plot_widget.getAxis('left').setPen(pg.mkPen(color=axis_color))
-    #     self.plot_widget.getAxis('left').setTextPen(pg.mkPen(color=axis_color))
 
     def toggle_selection_mode(self):
         for table_view in [self.stacked_widget.stacked_table_widget.table_view1,
@@ -2148,6 +1976,7 @@ class VisitsView(QWidget):
                                      QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
             self.filter_visits()
+
 
 if __name__ == '__main__':
 
