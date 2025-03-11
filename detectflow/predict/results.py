@@ -47,7 +47,7 @@ def process_box(box, orig_shape, format_flag):
         new_box[format_map['p']] = float(box[format_flag.index('p')])
 
     if 'c' in format_flag:
-        new_box[format_map['c']] = box[format_flag.index('c')]
+        new_box[format_map['c']] = int(box[format_flag.index('c')])
 
     if 't' in format_flag:
         new_box[format_map['t']] = int(box[format_flag.index('t')])
@@ -136,7 +136,7 @@ class DetectionBoxes(BaseClass):
     def __init__(self, boxes, orig_shape):
 
         try:
-            boxes = np.array(boxes, dtype=object)
+            boxes = np.array(boxes)
             if boxes.ndim == 1:
                 boxes = boxes[None, :]
         except Exception as e:
@@ -198,8 +198,7 @@ class DetectionBoxes(BaseClass):
             raise TypeError(f"Boxes must be a numpy array, list, or tuple: {e}")
 
         try:
-            processed_boxes = np.array([process_box(box, orig_shape, format_flag) for box in boxes],
-            dtype=object)
+            processed_boxes = np.array([process_box(box, orig_shape, format_flag) for box in boxes])
         except Exception as e:
             raise RuntimeError(f"Error in DetectionBoxes initialization: {e}")
 
