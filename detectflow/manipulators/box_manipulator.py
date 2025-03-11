@@ -400,7 +400,7 @@ class BoxManipulator:
             rois.append((best_roi, boxes_included if not empty else None))
 
             # Append the done boxes
-            done_boxes = done_boxes + [box for box in np.array(boxes_included.xyxy)]
+            done_boxes = done_boxes + [box for box in np.array(boxes_included.data)]
 
             # If partial overlap is allowed boxes that overlap partially with the roi (with some threshold) will be treated as included in the roi
             if partial_overlap:
@@ -435,7 +435,7 @@ class BoxManipulator:
         best_roi = None
         best_included_boxes = None
         max_boxes_included = 0
-        all_boxes = np.array([box for cluster in sorted_clusters for box in cluster[1].xyxy])
+        all_boxes = np.array([box for cluster in sorted_clusters for box in cluster[1].data])
         total_boxes = len(all_boxes)
 
         # For each cluster try searching for the best possible ROI by expanding the cluster with more boxes
