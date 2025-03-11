@@ -136,7 +136,7 @@ class DetectionBoxes(BaseClass):
     def __init__(self, boxes, orig_shape):
 
         try:
-            boxes = np.array(boxes)
+            boxes = np.array(boxes, dtype=object)
             if boxes.ndim == 1:
                 boxes = boxes[None, :]
         except Exception as e:
