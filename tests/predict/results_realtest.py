@@ -5,6 +5,29 @@ import unittest
 import numpy as np
 from detectflow.predict.results import DetectionBoxes, DetectionResults
 
+import math
+
+
+def compare_arrays_allow_str(a, b, rtol=1e-05, atol=1e-08):
+    """
+    Compare two sequences (lists, arrays) element-wise,
+    allowing strings for some elements and numeric tolerance for floats.
+    """
+    if len(a) != len(b):
+        return False
+
+    for x, y in zip(a, b):
+        # Both numeric => compare with isclose
+        if isinstance(x, (float, int)) and isinstance(y, (float, int)):
+            if not math.isclose(x, y, rel_tol=rtol, abs_tol=atol):
+                return False
+        else:
+            # Otherwise do direct equality (covers strings, ints vs. str, etc.)
+            if x != y:
+                return False
+
+    return True
+
 
 class TestDetectionBoxes(unittest.TestCase):
     def setUp(self):
@@ -31,7 +54,7 @@ class TestDetectionBoxes(unittest.TestCase):
         # Example Boxes
         boxes = {
             'xywh': [0.5, 0.5, 0.2, 0.2],
-            'cxywh': [1, 0.5, 0.5, 0.2, 0.2],
+            'cxywh': ["elephant", 0.5, 0.5, 0.2, 0.2],
             'xywhp': [0.5, 0.5, 0.2, 0.2, 0.9],
             'cxywhp': [1, 0.5, 0.5, 0.2, 0.2, 0.9],
             'xyxyc': [0.2, 0.2, 0.8, 0.8, 1],
@@ -44,7 +67,7 @@ class TestDetectionBoxes(unittest.TestCase):
         # Expected Results
         expected_results = {
             'xywh': [0.4, 0.4, 0.6, 0.6],
-            'cxywh': [0.4, 0.4, 0.6, 0.6, 0.0, 1],
+            'cxywh': [0.4, 0.4, 0.6, 0.6, 0.0, "elephant"],
             'xywhp': [0.4, 0.4, 0.6, 0.6, 0.9],
             'cxywhp': [0.4, 0.4, 0.6, 0.6, 0.9, 1],
             'xyxyc': [0.2, 0.2, 0.8, 0.8, 0.0, 1],
@@ -67,11 +90,11 @@ class TestDetectionBoxes(unittest.TestCase):
             expected_result = expected_results[format_flag]
             result = process_box(box, orig_shape, format_flag)
 
-            if np.allclose(result, expected_result):
-                print(f"Test Passed for format_flag: {format_flag}. Result: {box_to_str(result)}")
+            if compare_arrays_allow_str(result, expected_result):
+                print(f"Test Passed for format_flag: {format_flag}.")
             else:
-                print(
-                    f"Test Failed for format_flag: {format_flag}. Result: {box_to_str(result)}, Expected: {box_to_str(expected_result)}")
+                print(f"Test Failed for format_flag: {format_flag}. "
+                      f"Result: {result}, Expected: {expected_result}")
                 all_tests_passed = False
 
         self.assertTrue(all_tests_passed)
@@ -100,6 +123,50 @@ class TestDetectionBoxes(unittest.TestCase):
         # Check that the new instance has the same data and orig_shape as the original
         self.assertTrue(np.array_equal(new_detection_boxes.data, self.detection_boxes.data))
         self.assertEqual(new_detection_boxes.orig_shape, self.detection_boxes.orig_shape)
+
+    def test_from_label_file(self):
+        # Define filepath
+        filepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), "test_results", "n02504013_10159.txt")
+        orig_shape = (375, 500)
+
+        from detectflow.utils.file import yolo_label_load
+        from detectflow.predict.results import process_box
+
+        print("Directly loaded file:")
+        print(yolo_label_load(filepath))
+
+        expected_result = [
+            [[236.00000000000003, 85.99999999999999, 428.00000000000006, 318.0, 0, 'elephant'],
+             [21.999999999999993, 197.0, 282.0, 333.0, 0, '0']]
+        ]
+
+        boxes = yolo_label_load(filepath)
+        result = np.array(
+            [process_box(box, orig_shape, "cnxywh") for box in boxes],
+            dtype=object
+        )
+        print("Manually processed result:")
+        print(result)
+
+        # Create a new instance of DetectionBoxes using the label file
+        new_detection_boxes = DetectionBoxes.from_label_file(filepath, orig_shape)
+
+        print("cls:")
+        print(new_detection_boxes.cls)
+        print("data: ")
+        print(new_detection_boxes.data)
+        print("xyxy:")
+        print(new_detection_boxes.xyxy)
+        print("xywh:")
+        print(new_detection_boxes.xywhn)
+
+        # Check that the new instance has the same data and orig_shape as the original
+        if compare_arrays_allow_str(new_detection_boxes.data, expected_result):
+            print(f"Test Passed.")
+        else:
+            print(f"Test Failed. "
+                  f"Result: {new_detection_boxes.data}, Expected: {expected_result}")
+
 
     def test_properties(self):
         self.assertEqual(self.detection_boxes.xyxy.shape, self.boxes[:, :4].shape)

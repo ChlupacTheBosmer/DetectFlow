@@ -555,7 +555,7 @@ class FrameCropper(CheckpointHandler):
             txt_file = image_file.replace(extension_in, '.txt')
             if os.path.exists(txt_file):
                 boxes = yolo_label_load(txt_file)
-                detection_boxes = DetectionBoxes.from_custom_format(boxes[:, 1:], tuple(image_shape), "nxywh") if boxes is not None else None
+                detection_boxes = DetectionBoxes.from_custom_format(boxes, tuple(image_shape), "cxywhn") if boxes is not None else None
             else:
                 detection_boxes = None
         except Exception as e:

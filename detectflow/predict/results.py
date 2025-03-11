@@ -47,7 +47,7 @@ def process_box(box, orig_shape, format_flag):
         new_box[format_map['p']] = float(box[format_flag.index('p')])
 
     if 'c' in format_flag:
-        new_box[format_map['c']] = int(box[format_flag.index('c')])
+        new_box[format_map['c']] = box[format_flag.index('c')]
 
     if 't' in format_flag:
         new_box[format_map['t']] = int(box[format_flag.index('t')])
@@ -198,11 +198,26 @@ class DetectionBoxes(BaseClass):
             raise TypeError(f"Boxes must be a numpy array, list, or tuple: {e}")
 
         try:
-            processed_boxes = np.array([process_box(box, orig_shape, format_flag) for box in boxes])
+            processed_boxes = np.array([process_box(box, orig_shape, format_flag) for box in boxes],
+            dtype=object)
         except Exception as e:
             raise RuntimeError(f"Error in DetectionBoxes initialization: {e}")
 
         return cls(processed_boxes, orig_shape)
+
+    @classmethod
+    def from_label_file(cls, filepath: str, image_shape: Tuple[int, int]):
+
+        from detectflow.utils.file import yolo_label_load
+
+        if os.path.exists(filepath):
+            boxes = yolo_label_load(filepath)
+            if boxes is None:
+                raise ValueError(f"Error in loading label file: {filepath}")
+            else:
+                return cls.from_custom_format(boxes, tuple(image_shape),"cnxywh")
+        else:
+            raise FileNotFoundError(f"Label file not found: {filepath}")
 
     @property
     def xyxy(self):

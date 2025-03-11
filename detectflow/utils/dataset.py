@@ -333,8 +333,8 @@ class Dataset(dict):
                     image_path = file_info['full_path']
                     image_shape = open_image(image_path).shape[:2]
                     boxes = yolo_label_load(file_info['label_full_path'])
-                    file_info['detection_boxes'] = DetectionBoxes.from_custom_format(boxes[:, 1:], tuple(image_shape),
-                                                                        "nxywh") if boxes is not None else None
+                    file_info['detection_boxes'] = DetectionBoxes.from_custom_format(boxes, tuple(image_shape),
+                                                                        "cnxywh") if boxes is not None else None
                 except Exception as e:
                     logging.error(f"Error reading label file {file_info['label_full_path']}: {e}")
                     file_info['detection_boxes'] = None
