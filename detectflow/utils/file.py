@@ -99,19 +99,53 @@ def yolo_label_save(txt_file: str, boxes: np.ndarray):
             file.write(' '.join(map(str, box)) + '\n')
 
 
+# def yolo_label_load(txt_file: str) -> np.ndarray:
+#     """
+#     Read YOLO formatted txt file and convert to numpy array.
+#     Format: class x_center y_center width height (all values normalized)
+#     """
+#     with open(txt_file, 'r') as file:
+#         lines = file.readlines()
+#     boxes = []
+#     for line in lines:
+#         parts = list(map(float, line.strip().split()))
+#         boxes.append(parts)
+#     return np.array(boxes)
+
 def yolo_label_load(txt_file: str) -> np.ndarray:
     """
-    Read YOLO formatted txt file and convert to numpy array.
-    Format: class x_center y_center width height (all values normalized)
+    Read YOLO-formatted txt file and convert to a NumPy array.
+    The first value may be an integer class id or a string label.
+    The remaining values are floats (x_center, y_center, width, height, etc.),
+    all presumably normalized in [0,1].
     """
     with open(txt_file, 'r') as file:
         lines = file.readlines()
+
     boxes = []
     for line in lines:
-        parts = list(map(float, line.strip().split()))
-        boxes.append(parts)
-    return np.array(boxes)
+        parts = line.strip().split()
+        if not parts:
+            continue  # skip blank lines
 
+        # The first token could be numeric or a string label
+        first_val = parts[0]
+        # Attempt to parse the remaining tokens as floats
+        try:
+            coords = list(map(float, parts[1:]))
+        except ValueError as e:
+            raise ValueError(
+                f"Could not parse numeric coordinates for line: '{line}'. Error: {e}"
+            )
+
+        # Store the row with the first value as-is plus the numeric coords
+        # We must use dtype=object later, because the array has both floats and a string/float in the first column
+        row = [first_val] + coords
+        boxes.append(row)
+
+    # Convert to NumPy array with `dtype=object`,
+    # so that string-labeled rows and float-labeled rows both work
+    return np.array(boxes, dtype=object)
 
 def is_yolo_label(file_path):
     try:
