@@ -139,6 +139,7 @@ class SmartCrop:
         '''
 
         logging.info("Running tile()")
+        self.crop_aspect_ratio = crop_size[0] / crop_size[1]
 
         if self.image_size[0] < crop_size[0] or self.image_size[1] < crop_size[1]:
 
@@ -315,6 +316,7 @@ class SmartCrop:
                 and the new (width, height).
         """
         logging.info("Running adjust()")
+        self.crop_aspect_ratio = crop_size[0] / crop_size[1]
         try:
             # Calculate how much we'd need to scale to be >= crop_size in both dims
             factor = max(
@@ -408,6 +410,7 @@ class SmartCrop:
         '''
 
         logging.info("Running smart_crop()")
+        self.crop_aspect_ratio = crop_size[0] / crop_size[1]
 
         # Prepare conditions
 
