@@ -1,7 +1,7 @@
 import logging
 
 import traceback
-
+import numpy as np
 import sys
 import sqlite3
 import pandas as pd
@@ -22,10 +22,11 @@ from PyQt6.QtWidgets import QMainWindow, QListWidget, QTextEdit, QVBoxLayout, QW
 from PyQt6.QtWidgets import QMessageBox, QMainWindow, QListWidget, QTextEdit, QVBoxLayout, QListWidgetItem
 from PyQt6.QtWidgets import QMessageBox, QMainWindow, QListWidget, QTextEdit, QVBoxLayout, QListWidgetItem, QToolBar
 from PyQt6.QtCore import QSize
-from PyQt6.QtGui import QIcon, QColor, QBrush
+from PyQt6.QtGui import QIcon, QColor, QBrush, QAction
 from PyQt6.QtWidgets import QMessageBox, QMainWindow, QListWidget, QTextEdit, QVBoxLayout, QListWidgetItem, QToolBar, QInputDialog
 from PyQt6.QtWidgets import QMessageBox, QMainWindow, QListWidget, QTextEdit, QVBoxLayout, QListWidgetItem, QToolBar, QInputDialog, QDialog, QVBoxLayout, QCheckBox, QPushButton
-
+from PyQt6.QtCore import QSortFilterProxyModel, QRegularExpression # Added QSortFilterProxyModel and QRegularExpression
+from PyQt6.QtWidgets import QMenu # Added QMenu for context menu
 from detectflow.app import VISIT_VIEW_HELP
 from PyQt6.QtWidgets import QStackedWidget, QStyledItemDelegate
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QCheckBox, QPushButton
@@ -181,7 +182,8 @@ class ColumnSettingsDialog(QDialog):
     def __init__(self, model):
         super().__init__()
         self.setWindowTitle("Column Settings")
-        self.model = model
+        self.model = model.sourceModel()
+        model = self.model
 
         layout = QVBoxLayout()
 
@@ -323,6 +325,134 @@ class PeriodsDictionary:
 
 shared_data = PeriodsDictionary()
 shared_excel_data = PeriodsDictionary()
+
+
+class VisitsSortFilterProxyModel(QSortFilterProxyModel):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._filter_column = -1
+        self._filter_non_empty = False
+        self._filter_regex = QRegularExpression()
+
+    def set_non_empty_filter(self, column_index, enabled):
+        """Sets or clears the non-empty filter for a specific column."""
+        if enabled:
+            self._filter_column = column_index
+            self._filter_non_empty = True
+        else:
+            self._filter_column = -1
+            self._filter_non_empty = False
+        self.invalidateFilter() # Re-apply the filter
+
+    # Override filterAcceptsRow for custom filtering
+    def filterAcceptsRow(self, source_row, source_parent):
+        # Basic regex filtering (if needed in the future, currently unused for non-empty)
+        # regex_accepts = super().filterAcceptsRow(source_row, source_parent)
+        # if not regex_accepts:
+        #     return False
+
+        # Non-empty filter logic
+        if self._filter_non_empty and self._filter_column != -1:
+            source_model = self.sourceModel()
+            if not isinstance(source_model, VisitsTableModel):
+                 return True # Cannot filter if source model is wrong
+
+            # Get the actual column name from the visible columns
+            if self._filter_column < len(source_model._visible_columns):
+                column_name = source_model._visible_columns[self._filter_column]
+            else:
+                return True # Column index out of bounds for visible columns
+
+            # Get the original index in the underlying DataFrame
+            try:
+                # Use the source_row which corresponds to the row index in the source model's filtered view
+                original_index = source_model._filtered_df.index[source_row]
+                # Access the data directly from the main DataFrame using the original index
+                value = source_model._df.loc[original_index, column_name]
+            except (IndexError, KeyError):
+                # Handle cases where the row or column might not exist
+                return False
+
+
+            # Define "non-empty" based on type
+            if isinstance(value, (list, tuple, str)):
+                return value is not None and len(value) > 0
+            elif isinstance(value, (int, float)):
+                 # For the new 1/0 flags or num_F, non-empty means > 0
+                 # For other numerics, it might just mean not None or not NaN
+                 if column_name in ["FC", "AC", "CS", "F", "R", "T", "num_F"]:
+                      return value is not None and pd.notna(value) and value > 0
+                 else:
+                      return value is not None and pd.notna(value) # Check for None/NaN for other numerics
+            elif pd.isna(value): # Handles None, np.nan, pd.NaT etc.
+                 return False
+            else:
+                 return True # Consider other types non-empty by default
+
+        return True # Accept row if no non-empty filter is active or column is invalid
+
+    # Optional: Override lessThan for custom sorting (e.g., for timedelta)
+    # def lessThan(self, left, right):
+    #     left_data = self.sourceModel().data(left)
+    #     right_data = self.sourceModel().data(right)
+    #
+    #     # Example: Try converting timedelta strings back for comparison
+    #     try:
+    #         # Assuming format_timedelta produces strings like 'MM:SS' or 'HH:MM:SS'
+    #         def parse_custom_timedelta(td_str):
+    #              parts = list(map(int, td_str.split(':')))
+    #              if len(parts) == 2:
+    #                  return pd.Timedelta(minutes=parts[0], seconds=parts[1])
+    #              elif len(parts) == 3:
+    #                  return pd.Timedelta(hours=parts[0], minutes=parts[1], seconds=parts[2])
+    #              return pd.Timedelta(seconds=0) # Fallback
+    #
+    #         left_td = parse_custom_timedelta(left_data)
+    #         right_td = parse_custom_timedelta(right_data)
+    #         return left_td < right_td
+    #     except (ValueError, AttributeError, TypeError):
+    #          # Fallback to default string comparison if conversion fails
+    #          return super().lessThan(left, right)
+
+    def lessThan(self, left_index, right_index):
+        # Get data using EditRole, which should now return the raw types
+        left_data = self.sourceModel().data(left_index, Qt.ItemDataRole.EditRole)
+        right_data = self.sourceModel().data(right_index, Qt.ItemDataRole.EditRole)
+
+        # --- Try Numeric Comparison First ---
+        try:
+            # Attempt conversion to float (handles both int and float)
+            left_num = float(left_data)
+            right_num = float(right_data)
+            return left_num < right_num
+        except (ValueError, TypeError):
+            # If conversion to number fails, proceed to other types
+            pass
+
+        # --- Try Timedelta Comparison (using total seconds) ---
+        if isinstance(left_data, pd.Timedelta) and isinstance(right_data, pd.Timedelta):
+            #return left_data.total_seconds() < right_data.total_seconds()
+        # --- Optional: Handle Timedelta strings if EditRole returns strings ---
+            try:
+                def parse_custom_timedelta(td_str):
+                    parts = list(map(int, td_str.split(':')))
+                    if len(parts) == 2:
+                        return pd.Timedelta(minutes=parts[0], seconds=parts[1])
+                    elif len(parts) == 3:
+                        return pd.Timedelta(hours=parts[0], minutes=parts[1], seconds=parts[2])
+                    return pd.Timedelta(seconds=0)  # Fallback
+                left_td = parse_custom_timedelta(str(left_data))
+                right_td = parse_custom_timedelta(str(right_data))
+                return left_td < right_td
+            except (ValueError, AttributeError, TypeError):
+                pass
+
+        # --- Fallback to String Comparison (Case-Insensitive) ---
+        try:
+            return str(left_data).lower() < str(right_data).lower()
+        except Exception:
+            # Final fallback if string conversion fails
+            return False  # Or handle as appropriate
 
 
 class VisitsTableModel(QAbstractTableModel):
@@ -1203,6 +1333,17 @@ class VisitsView(QWidget):
         self.table_view = self.stacked_widget.stacked_table_widget.table_view1
         self.plot_widget = self.stacked_widget.stacked_plot_widget.plot_widget1
 
+        # --- Add Context Menu for Table Headers ---
+        for tv in [self.stacked_widget.stacked_table_widget.table_view1,
+                   self.stacked_widget.stacked_table_widget.table_view2,
+                   self.stacked_widget.stacked_table_widget.table_view1s,
+                   self.stacked_widget.stacked_table_widget.table_view2s]:
+            tv.horizontalHeader().setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            tv.horizontalHeader().customContextMenuRequested.connect(
+                lambda pos, view=tv: self.show_header_context_menu(pos, view)  # Use lambda to pass the view
+            )
+        # --- End Context Menu Setup ---
+
         # Setup bottom layout
         bottom_layout = QHBoxLayout()
 
@@ -1251,6 +1392,67 @@ class VisitsView(QWidget):
         self._focused_table_view = None
         self._database_view = None
         self._excel_view = None
+
+    def show_header_context_menu(self, position, table_view):
+        """Shows context menu on header right-click."""
+        header = table_view.horizontalHeader()
+        column_index = header.logicalIndexAt(position)  # Get logical index (visible column index)
+
+        proxy_model = table_view.model()
+        if not isinstance(proxy_model, VisitsSortFilterProxyModel):
+            return  # Ensure we have the correct model
+
+        source_model = proxy_model.sourceModel()
+        if not isinstance(source_model, VisitsTableModel) or column_index >= len(source_model._visible_columns):
+            return  # Ensure source model and index are valid
+
+        column_name = source_model._visible_columns[column_index]  # Get the actual column name
+
+        menu = QMenu(self)
+
+        # --- Sorting Actions ---
+        sort_asc_action = QAction(f"Sort Ascending by '{column_name}'", self)
+        sort_asc_action.triggered.connect(lambda: table_view.sortByColumn(column_index, Qt.SortOrder.AscendingOrder))
+        menu.addAction(sort_asc_action)
+
+        sort_desc_action = QAction(f"Sort Descending by '{column_name}'", self)
+        sort_desc_action.triggered.connect(lambda: table_view.sortByColumn(column_index, Qt.SortOrder.DescendingOrder))
+        menu.addAction(sort_desc_action)
+
+        menu.addSeparator()
+
+        # --- Filtering Actions ---
+        filter_action = QAction(f"Filter Non-Empty '{column_name}'", self)
+        filter_action.setCheckable(True)
+        # Check if this column is currently the active filter
+        is_currently_filtered = (proxy_model._filter_non_empty and proxy_model._filter_column == column_index)
+        filter_action.setChecked(is_currently_filtered)
+
+        filter_action.triggered.connect(
+            lambda checked, idx=column_index: self.toggle_non_empty_filter(idx, checked, proxy_model))
+        menu.addAction(filter_action)
+
+        clear_filter_action = QAction("Clear Non-Empty Filter", self)
+        clear_filter_action.setEnabled(proxy_model._filter_non_empty)  # Enable only if a filter is active
+        clear_filter_action.triggered.connect(
+            lambda: self.toggle_non_empty_filter(-1, False, proxy_model))  # Clear filter
+        menu.addAction(clear_filter_action)
+
+        # Execute the menu
+        menu.exec(table_view.horizontalHeader().mapToGlobal(position))
+
+    def toggle_non_empty_filter(self, column_index, checked, proxy_model):
+        """Applies or clears the non-empty filter."""
+        if not isinstance(proxy_model, VisitsSortFilterProxyModel):
+            return
+        proxy_model.set_non_empty_filter(column_index, checked)
+        # Update status bar maybe?
+        if checked:
+            source_model = proxy_model.sourceModel()
+            column_name = source_model._visible_columns[column_index]
+            self.set_status_message(f"Filtered non-empty '{column_name}'", icon=ALT_ICONS['filter'], timeout=3000)
+        else:
+            self.set_status_message(f"Filter cleared", icon=ALT_ICONS['filter'], timeout=3000)
 
     @property
     def models(self):
@@ -1441,63 +1643,204 @@ class VisitsView(QWidget):
 
             self.buttons.get('regenerate_visits_button').setEnabled(True)
 
+    # def set_tableview_model(self, table_view, periods_df: pd.DataFrame, videos_df: pd.DataFrame,
+    #                         visits_df: pd.DataFrame = None):
+    #
+    #     # Sort periods_df by start_frame
+    #     periods_df = periods_df.sort_values(by='start_frame')
+    #
+    #     # Filter video_df to only those video_ids that are present in visits_df
+    #     videos_df = videos_df[videos_df['video_id'].isin(periods_df['video_id'])]
+    #
+    #     # Sort the DataFrame alphabetically by the 'video_id' column
+    #     videos_df = videos_df.sort_values(by='video_id')
+    #
+    #     # Reset the index after sorting to ensure it matches the current sorted order
+    #     videos_df = videos_df.reset_index(drop=True)
+    #
+    #     if table_view == self.stacked_widget.stacked_table_widget.table_view1:
+    #         self._videos_df = videos_df
+    #         update_visits_signal = self.update_visits_signal
+    #         update_video_id_signal = self.update_video_id_signal
+    #         update_flowers_signal = self.update_flowers_signal
+    #         global_data = None
+    #     else:
+    #         update_visits_signal = self.update_excel_visits_signal
+    #         update_video_id_signal = None
+    #         update_flowers_signal = self.update_flowers_signal
+    #         global_data = self.shared_excel_data
+    #
+    #     model = VisitsTableModel(periods_df,
+    #                              videos_df,
+    #                              visits_df,
+    #                              update_visits_signal=update_visits_signal,
+    #                              update_video_id_signal=update_video_id_signal,
+    #                              update_flowers_signal=update_flowers_signal,
+    #                              global_data=global_data)
+    #
+    #     if table_view == self.stacked_widget.stacked_table_widget.table_view1:
+    #         self.stacked_widget.stacked_table_widget.set_model1(model)
+    #     elif table_view == self.stacked_widget.stacked_table_widget.table_view2:
+    #         self.stacked_widget.stacked_table_widget.set_model2(model)
+    #
+    #     if not self._videos_df.empty:
+    #
+    #         # Setup filter for video ID
+    #         self.current_video_id = self.current_video_id or self._videos_df.iloc[0]['video_id']
+    #         model.setVideoIDFilter(self.current_video_id)
+    #         self.update_video_id_status()
+    #
+    #         # Enable all buttons
+    #         for key, button in self.buttons.items():
+    #             button.setEnabled(True)
+    #
+    #         # Disable the cycle tables button if there is only one table
+    #         if self.stacked_widget.stacked_table_widget.count() == 1:
+    #             self.buttons.get('cycle_tables_button').setEnabled(False)
+    #
+    #         selection_model = table_view.selectionModel()
+    #         selection_model.selectionChanged.connect(self.update_button_states)
+
     def set_tableview_model(self, table_view, periods_df: pd.DataFrame, videos_df: pd.DataFrame,
                             visits_df: pd.DataFrame = None):
 
+        # --- Existing Pre-processing ---
         # Sort periods_df by start_frame
         periods_df = periods_df.sort_values(by='start_frame')
 
-        # Filter video_df to only those video_ids that are present in visits_df
-        videos_df = videos_df[videos_df['video_id'].isin(periods_df['video_id'])]
+        # Filter video_df to only those video_ids that are present in periods_df
+        videos_df = videos_df[
+            videos_df['video_id'].isin(periods_df['video_id'].unique())]  # Use unique() for efficiency
 
         # Sort the DataFrame alphabetically by the 'video_id' column
         videos_df = videos_df.sort_values(by='video_id')
 
         # Reset the index after sorting to ensure it matches the current sorted order
         videos_df = videos_df.reset_index(drop=True)
+        # --- End Existing Pre-processing ---
 
+        # --- Determine Signals and Global Data based on Target View ---
         if table_view == self.stacked_widget.stacked_table_widget.table_view1:
-            self._videos_df = videos_df
+            self._videos_df = videos_df  # Store potentially filtered videos_df
             update_visits_signal = self.update_visits_signal
             update_video_id_signal = self.update_video_id_signal
             update_flowers_signal = self.update_flowers_signal
-            global_data = None
-        else:
-            update_visits_signal = self.update_excel_visits_signal
-            update_video_id_signal = None
-            update_flowers_signal = self.update_flowers_signal
-            global_data = self.shared_excel_data
-
-        model = VisitsTableModel(periods_df,
-                                 videos_df,
-                                 visits_df,
-                                 update_visits_signal=update_visits_signal,
-                                 update_video_id_signal=update_video_id_signal,
-                                 update_flowers_signal=update_flowers_signal,
-                                 global_data=global_data)
-
-        if table_view == self.stacked_widget.stacked_table_widget.table_view1:
-            self.stacked_widget.stacked_table_widget.set_model1(model)
+            global_data = self.shared_data  # Use the main shared data
         elif table_view == self.stacked_widget.stacked_table_widget.table_view2:
-            self.stacked_widget.stacked_table_widget.set_model2(model)
+            # For the Excel view, videos_df might be the same or different depending on logic
+            # Assuming it uses the same videos_df for now
+            # Note: _videos_df should ideally be set only once or managed carefully if Excel loads different videos
+            if self._videos_df is None: self._videos_df = videos_df  # Set if not already set
+            update_visits_signal = self.update_excel_visits_signal
+            update_video_id_signal = None  # Excel view might not update the main video ID
+            update_flowers_signal = self.update_flowers_signal  # Assuming flowers are shared
+            global_data = self.shared_excel_data  # Use the Excel-specific shared data
+        else:
+            # Handle split views or other potential table views if necessary
+            # For simplicity, assume split views mirror their main view's signals/data for now
+            if table_view == self.stacked_widget.stacked_table_widget.table_view1s:
+                # Mirrors table_view1 settings
+                update_visits_signal = self.update_visits_signal
+                update_video_id_signal = self.update_video_id_signal
+                update_flowers_signal = self.update_flowers_signal
+                global_data = self.shared_data
+            elif table_view == self.stacked_widget.stacked_table_widget.table_view2s:
+                # Mirrors table_view2 settings
+                update_visits_signal = self.update_excel_visits_signal
+                update_video_id_signal = None
+                update_flowers_signal = self.update_flowers_signal
+                global_data = self.shared_excel_data
+            else:
+                # Fallback or error for unexpected table_view
+                logging.warning(f"Unhandled table_view in set_tableview_model: {table_view}")
+                return
+        # --- End Signal/Data Determination ---
 
-        if not self._videos_df.empty:
+        # --- Create Source Model ---
+        source_model = VisitsTableModel(periods_df,
+                                        videos_df,  # Pass the potentially filtered videos_df
+                                        visits_df,
+                                        update_visits_signal=update_visits_signal,
+                                        update_video_id_signal=update_video_id_signal,
+                                        update_flowers_signal=update_flowers_signal,
+                                        global_data=global_data)
+        # --- End Create Source Model ---
 
-            # Setup filter for video ID
-            self.current_video_id = self.current_video_id or self._videos_df.iloc[0]['video_id']
-            model.setVideoIDFilter(self.current_video_id)
-            self.update_video_id_status()
+        # --- Create and Set Proxy Model ---
+        proxy_model = VisitsSortFilterProxyModel(self)  # Create the proxy model
+        proxy_model.setSourceModel(source_model)  # Set the source model
 
-            # Enable all buttons
-            for key, button in self.buttons.items():
-                button.setEnabled(True)
+        table_view.setModel(proxy_model)  # Set the PROXY model on the table view
 
-            # Disable the cycle tables button if there is only one table
-            if self.stacked_widget.stacked_table_widget.count() == 1:
-                self.buttons.get('cycle_tables_button').setEnabled(False)
+        table_view.setSortingEnabled(True)  # IMPORTANT: Enable sorting on the VIEW
+        # table_view.sortByColumn(proxy_model.columnCount() - 5,
+        #                         Qt.SortOrder.DescendingOrder)  # Optional: initial sort by start_frame (adjust index if needed)
+        # --- End Create and Set Proxy Model ---
 
-            selection_model = table_view.selectionModel()
-            selection_model.selectionChanged.connect(self.update_button_states)
+        # --- Store Model References and Update Split Views ---
+        if table_view == self.stacked_widget.stacked_table_widget.table_view1:
+            self._models['db_model'] = source_model  # Store reference to the original source model
+            split_view = self.stacked_widget.stacked_table_widget.table_view1s
+            if split_view.model() != proxy_model:  # Check if model needs update
+                split_view.setModel(proxy_model)
+                split_view.setSortingEnabled(True)  # Enable sorting on split view too
+
+        elif table_view == self.stacked_widget.stacked_table_widget.table_view2:
+            self._models['excel_model'] = source_model  # Store reference to the original source model
+            split_view = self.stacked_widget.stacked_table_widget.table_view2s
+            if split_view.model() != proxy_model:  # Check if model needs update
+                split_view.setModel(proxy_model)
+                split_view.setSortingEnabled(True)  # Enable sorting on split view too
+        # --- End Store Model References ---
+
+        # --- Final UI Updates (Mostly Existing Logic) ---
+        if self._videos_df is not None and not self._videos_df.empty:
+
+            # Setup filter for video ID using the SOURCE model's method
+            # Use self.current_video_id if it's already set (e.g. from loading state), otherwise default to first video
+            video_id_to_set = self.current_video_id if self.current_video_id in self._videos_df['video_id'].values else \
+            self._videos_df.iloc[0]['video_id']
+            source_model.setVideoIDFilter(video_id_to_set)  # Apply filter on the source model
+            self.current_video_id = video_id_to_set  # Ensure self.current_video_id is correctly set
+
+            # --- Modification Start: Explicitly set sort order AFTER filtering ---
+            table_view.sortByColumn(proxy_model.columnCount() - 5,
+                                    Qt.SortOrder.AscendingOrder)  # Sort by start_frame (adjust index if columns changed)
+            if split_view:  # Also sort the split view
+                split_view.sortByColumn(proxy_model.columnCount() - 5, Qt.SortOrder.AscendingOrder)
+            # --- Modification End ---
+
+            # Update status bar only if this is the main DB view being set
+            if table_view == self.stacked_widget.stacked_table_widget.table_view1:
+                self.update_video_id_status()
+
+            # Enable buttons (only if setting the main DB view, perhaps?)
+            if table_view == self.stacked_widget.stacked_table_widget.table_view1:
+                for key, button in self.buttons.items():
+                    # Keep specific buttons disabled if needed (e.g., save until changes)
+                    if key != 'save_db_button':  # Example: keep save disabled initially
+                        button.setEnabled(True)
+
+                # Disable cycle tables button if only one main model is set
+                if not self._models.get('excel_model'):
+                    self.buttons.get('cycle_tables_button').setEnabled(False)
+
+                # Connect selection changed signal (connect only once, maybe in __init__)
+                # If connecting here, ensure it's not duplicated
+                try:
+                    table_view.selectionModel().selectionChanged.disconnect(self.update_button_states)
+                except TypeError:
+                    pass  # Ignore if not connected
+                table_view.selectionModel().selectionChanged.connect(self.update_button_states)
+                self.update_button_states()  # Update button states immediately
+
+        else:
+            # Handle case where videos_df is empty or None
+            if table_view == self.stacked_widget.stacked_table_widget.table_view1:
+                self.current_video_id = None
+                self.disable_navigation()  # Disable navigation if no videos loaded
+                self.set_status_message("No video data loaded.", icon=ALT_ICONS['alert-circle'], timeout=5000)
+        # --- End Final UI Updates ---
 
     def open_excel(self, excel_path=None):
 
