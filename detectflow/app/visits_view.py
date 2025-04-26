@@ -340,7 +340,11 @@ class VisitsTableModel(QAbstractTableModel):
         self.colored_visitor_ids = []
         self._current_video_id = None
         self._visible_columns = self._df.columns.tolist()
-        self._hidden_columns = ["video_id", "flower_bboxes", "visitor_bboxes", "visit_ids", "flags", "frame_numbers"]
+        self._hidden_columns = ["video_id", "flower_bboxes", "visitor_bboxes", "visit_ids", "flags", "frame_numbers",
+                                # --- Hide New Columns Initially ---
+                                "FC", "AC", "CS", "F", "R", "T", "num_F"
+                                # --- End New Columns ---
+                                ]
         self._cycle_columns = [
             ("start_frame", "end_frame"),
             ("start_time", "end_time"),
@@ -428,6 +432,7 @@ class VisitsTableModel(QAbstractTableModel):
                 return format_timedelta(value)
 
             return str(value)
+
         if role == Qt.ItemDataRole.EditRole:
             col_name = self._visible_columns[index.column()]
             return str(self._filtered_df[col_name].iloc[index.row()])
@@ -441,7 +446,7 @@ class VisitsTableModel(QAbstractTableModel):
     def setData(self, index, value, role=Qt.ItemDataRole.EditRole):
         if role == Qt.ItemDataRole.EditRole:
             col_name = self._visible_columns[index.column()]  # Get the actual column name
-            print(index.column(), col_name, value)
+            #print(index.column(), col_name, value)
             dtype = self._df[col_name].dtype
 
             # Cast value to the appropriate type
@@ -585,7 +590,16 @@ class VisitsTableModel(QAbstractTableModel):
                 'end_time': pd.to_timedelta(0, unit='s'),
                 'start_real_life_time': pd.Timestamp(0),  # Assuming these columns are present and timestamp type
                 'end_real_life_time': pd.Timestamp(0),
-                'flags': []
+                'flags': [],
+                # --- Add Defaults for New Columns ---
+                'FC': 0,
+                'AC': 0,
+                'CS': 0,
+                'F': 0,
+                'R': 0,
+                'T': 0,
+                'num_F': 0
+                # --- End New Columns ---
             }
 
             empty_row = pd.Series(default_values, index=self._df.columns)
@@ -1541,22 +1555,104 @@ class VisitsView(QWidget):
                 model.setVideoIDFilter(self.current_video_id)
         print("Visits filtered by video_id")
 
+    # def save_database(self):
+    #     model = self.models.get('db_model', None)
+    #     if model:
+    #         db_path, _ = QFileDialog.getSaveFileName(self, "Save Database", "", "SQLite Database Files (*.db)")
+    #         if db_path:
+    #
+    #             if not os.path.isfile(db_path):
+    #                 try:
+    #                     shutil.copyfile(self.db_path, db_path)
+    #                     self.db_path = db_path
+    #                 except Exception as e:
+    #                     self.set_status_message(str(e), icon=ALT_ICONS['alert-circle'], timeout=5000)
+    #                     return
+    #
+    #             try:
+    #                 self.processor = VisitsProcessor(db_path)
+    #
+    #                 periods_df = model.getDataFrameCopy()
+    #
+    #                 try:
+    #                     periods_df = refine_periods(periods_df)
+    #                 except Exception as e:
+    #                     self.set_status_message(str(e), icon=ALT_ICONS['alert-circle'], timeout=5000)
+    #                     return
+    #
+    #                 self.processor.save_periods(periods_df)
+    #             except Exception as e:
+    #                 self.set_status_message(str(e), icon=ALT_ICONS['alert-circle'], timeout=5000)
+    #                 return
+
     def save_database(self):
+        from detectflow.utils.data_processor import PERIODS_COLS  # Import the definition
+        from detectflow.manipulators.database_manipulator import DatabaseManipulator  # Import if not already
+
         model = self.models.get('db_model', None)
         if model:
-            db_path, _ = QFileDialog.getSaveFileName(self, "Save Database", "", "SQLite Database Files (*.db)")
-            if db_path:
+            db_path_to_save, _ = QFileDialog.getSaveFileName(self, "Save Database As", "",
+                                                             "SQLite Database Files (*.db)")
 
-                if not os.path.isfile(db_path):
+            if db_path_to_save:
+
+                # --- Start Schema Migration Logic ---
+                try:
+                    if os.path.isfile(db_path_to_save):
+                        # Create a temporary manipulator for the target DB to check schema
+                        temp_db_man = DatabaseManipulator(db_path_to_save)
+
+                        # Get expected columns (including new ones) from PERIODS_COLS definition
+                        expected_columns = [col[0] for col in PERIODS_COLS]
+
+                        # Get existing columns from the target database table
+                        existing_columns = temp_db_man.get_column_names('periods', exclude_autoincrement=False)
+
+                        # Find missing columns
+                        missing_columns = [col for col in expected_columns if col not in existing_columns]
+
+                        if missing_columns:
+                            self.set_status_message(f"Updating table schema in {os.path.basename(db_path_to_save)}...",
+                                                    icon=ALT_ICONS['tool'], timeout=0)
+                            logging.info(f"Found missing columns in 'periods' table: {missing_columns}. Adding them.")
+                            for col_name in missing_columns:
+                                # Find the full definition (name, type, constraints) from PERIODS_COLS
+                                col_def = next((c for c in PERIODS_COLS if c[0] == col_name), None)
+                                if col_def:
+                                    _, col_type, col_constraints = col_def
+                                    # Use safe_execute to add the column
+                                    # Note: Default value is handled by the constraints string like 'DEFAULT 0'
+                                    alter_query = f"ALTER TABLE periods ADD COLUMN {col_name} {col_type} {col_constraints}"
+                                    temp_db_man.safe_execute(alter_query,
+                                                             use_transaction=False)  # ALTER TABLE often can't be in a transaction
+                                    logging.info(f"Added column '{col_name}' to 'periods' table.")
+                                else:
+                                    logging.warning(
+                                        f"Column definition for '{col_name}' not found in PERIODS_COLS. Skipping.")
+                            self.set_status_message(f"Schema updated successfully.", icon=ALT_ICONS['check-circle'],
+                                                    timeout=3000)
+
+                        temp_db_man.close_connection()  # Close the temporary connection
+
+                except Exception as e:
+                    self.set_status_message(f"Error updating database schema: {str(e)}", icon=ALT_ICONS['alert-circle'],
+                                            timeout=5000)
+                    logging.error(f"Failed to update schema for {db_path_to_save}: {e}", exc_info=True)
+                    # Decide if you want to stop the save process if schema update fails
+                    return  # Stop saving if schema update failed
+                # --- End Schema Migration Logic ---
+
+                # --- Existing Save Logic ---
+                if not os.path.isfile(db_path_to_save):
                     try:
-                        shutil.copyfile(self.db_path, db_path)
-                        self.db_path = db_path
+                        shutil.copyfile(self.db_path, db_path_to_save)
+                        self.db_path = db_path_to_save
                     except Exception as e:
                         self.set_status_message(str(e), icon=ALT_ICONS['alert-circle'], timeout=5000)
                         return
 
                 try:
-                    self.processor = VisitsProcessor(db_path)
+                    self.processor = VisitsProcessor(db_path_to_save)
 
                     periods_df = model.getDataFrameCopy()
 
@@ -1570,6 +1666,7 @@ class VisitsView(QWidget):
                 except Exception as e:
                     self.set_status_message(str(e), icon=ALT_ICONS['alert-circle'], timeout=5000)
                     return
+                # --- End Existing Save Logic ---
 
     def seek_video(self):
 

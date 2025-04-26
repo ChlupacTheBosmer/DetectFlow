@@ -1,16 +1,15 @@
+import matplotlib.pyplot
 import traceback
 import os
 import sqlite3
 from datetime import datetime, timedelta
 import json
-from typing import Dict, List
-import matplotlib.pyplot as plt
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 from detectflow.manipulators.box_manipulator import BoxManipulator
 from detectflow.manipulators.database_manipulator import DatabaseManipulator
-from detectflow.process.database_manager import VISITS_COLS, VISITS_CONSTR
+from detectflow.config.database_structure import VISITS_COLS, VISITS_CONSTR
 import logging
 import ast
 import numpy as np
@@ -46,7 +45,16 @@ PERIODS_COLS = [
     ("visit_ids", "text", ""),
     ("visitor_id", "integer", "NOT NULL"),
     ("visitor_species", "text", ""),
-    ("flags", "text", "")
+    ("flags", "text", ""),
+    # --- New Columns ---
+    ("FC", "integer", "DEFAULT 0"),  # Flower Contact
+    ("AC", "integer", "DEFAULT 0"),  # Anther Contact
+    ("CS", "integer", "DEFAULT 0"),  # Stigma Contact
+    ("F", "integer", "DEFAULT 0"),   # Feeding
+    ("R", "integer", "DEFAULT 0"),   # Robbing
+    ("T", "integer", "DEFAULT 0"),   # Thieving
+    ("num_F", "integer", "DEFAULT 0") # Number of Visited Flowers
+    # --- End New Columns ---
 ]
 
 PERIODS_CONSTR = "PRIMARY KEY (video_id, visitor_id)"
@@ -242,6 +250,25 @@ def refine_periods(df: pd.DataFrame):
 
         # Ensure 'visitor_id' is an integer
         df['visitor_id'] = df['visitor_id'].astype(int)
+
+        # --- Add New Columns to Type Conversion ---
+        cols_to_int = [
+            'FC', 'AC', 'CS', 'F', 'R', 'T', 'num_F'
+        ]
+        for col in cols_to_int:
+            if col in df.columns:
+                # Fill NaNs with 0 before converting to int
+                df[col] = df[col].fillna(0).astype(int)
+            else:
+                # If column doesn't exist (older DB), add it with default 0
+                df[col] = 0
+
+        # --- Ensure new integer columns are integers (redundant but safe) ---
+        for col in cols_to_int:
+            if col in df.columns:
+                df[col] = df[col].astype(int)
+        # --- End New Columns ---
+
     except Exception as e:
         logging.error(
             f'Error ensuring column data types and calculating visit duration. Further exceptions possible: {e}')
@@ -400,50 +427,6 @@ class ResultsLoader:
 
         self.save_periods_table(periods_df, 'periods')
 
-        # from detectflow.utils.extract_data import safe_json, safe_str, safe_datetime, safe_float, safe_timedelta, safe_int
-        #
-        # self.initialize_periods_table('periods')
-        #
-        # data = []
-        # for row in periods_df.iterrows():
-        #     entry = (
-        #         safe_str(row[1]['video_id']),
-        #         safe_timedelta(row[1]['start_time']).split('.')[0],
-        #         safe_timedelta(row[1]['end_time']).split('.')[0],
-        #         safe_int(row[1]['start_frame']),
-        #         safe_int(row[1]['end_frame']),
-        #         safe_datetime(row[1]['start_real_life_time']),
-        #         safe_datetime(row[1]['end_real_life_time']),
-        #         safe_float(row[1]['visit_duration']),
-        #         safe_json(row[1]['flower_bboxes']),
-        #         safe_json(row[1]['visitor_bboxes']),
-        #         safe_json(row[1]['frame_numbers']),
-        #         safe_json(row[1]['visit_ids']),
-        #         safe_int(row[1]['visitor_id']),
-        #         safe_str(row[1]['visitor_species']),
-        #         safe_json(row[1]['flags'])
-        #     )
-        #     data.append(entry)
-        #
-        # delete_query = "DELETE FROM periods"
-        # try:
-        #     self.db_man.safe_execute(delete_query)
-        # except Exception as e:
-        #     logging.error(f'Error deleting existing period data in SQLite. Further exceptions possible: {e}')
-        #     traceback.print_exc()
-        #
-        # query = f"""
-        #             INSERT INTO periods ({','.join([col[0] for col in PERIODS_COLS])})
-        #             VALUES ({','.join(['?'] * len(PERIODS_COLS))})
-        #             ON CONFLICT(video_id, visitor_id)
-        #             DO UPDATE SET {','.join([f"{col[0]} = excluded.{col[0]}" for col in PERIODS_COLS])}
-        #         """
-        # try:
-        #     self.db_man.safe_execute(query, data)
-        # except Exception as e:
-        #     logging.error(f'Error saving processed visit periods to SQLite. Further exceptions possible: {e}')
-        #     traceback.print_exc()
-
     def save_periods_gt(self, periods_df):
         """
         Save the processed visits DataFrame to the periods_gt table in the SQLite database.
@@ -478,7 +461,16 @@ class ResultsLoader:
                 safe_json(row[1]['visit_ids']),
                 safe_int(row[1]['visitor_id']),
                 safe_str(row[1]['visitor_species']),
-                safe_json(row[1]['flags'])
+                safe_json(row[1]['flags']),
+                # --- Add Defaults for New Columns ---
+                safe_int(row[1]['FC']),
+                safe_int(row[1]['AC']),
+                safe_int(row[1]['CS']),
+                safe_int(row[1]['F']),
+                safe_int(row[1]['R']),
+                safe_int(row[1]['T']),
+                safe_int(row[1]['num_F'])
+                # --- End New Columns ---
             )
             data.append(entry)
 
@@ -615,6 +607,16 @@ class VisitsProcessor(ResultsLoader):
                 visit['flags'] = []
                 processed_visits.append(visit)
 
+                # --- Ensure New Columns Exist (even if start_new_visit didn't add them) ---
+                visit.setdefault('FC', 0)
+                visit.setdefault('AC', 0)
+                visit.setdefault('CS', 0)
+                visit.setdefault('F', 0)
+                visit.setdefault('R', 0)
+                visit.setdefault('T', 0)
+                visit.setdefault('num_F', 0)
+                # --- End New Columns ---
+
         return pd.DataFrame(processed_visits)
 
     def merge_detections(self, group, iou_threshold, max_missing_frames):
@@ -673,7 +675,16 @@ class VisitsProcessor(ResultsLoader):
             'visitor_bboxes': [[visitor_bbox]],
             'frame_numbers': [row['frame_number']],
             'visit_ids': [visitor_id],
-            'visitor_id': visitor_id
+            'visitor_id': visitor_id,
+            # --- Add Defaults for New Columns ---
+            'FC': 0,
+            'AC': 0,
+            'CS': 0,
+            'F': 0,
+            'R': 0,
+            'T': 0,
+            'num_F': 0
+            # --- End New Columns ---
         }
 
     def extend_visit(self, row, current_visit, visitor_bbox, visitor_id):
