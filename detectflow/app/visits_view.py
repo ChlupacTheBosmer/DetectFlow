@@ -212,9 +212,10 @@ class ColumnSettingsDialog(QDialog):
             else:
                 if column in self.model._visible_columns:
                     self.model._hidden_columns.append(column)
-        self.model.update_visible_columns()
+        #self.model.update_visible_columns()
 
     def save_and_close(self):
+        self.model.update_visible_columns()
         self.accept()
 
 
