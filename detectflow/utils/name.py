@@ -32,7 +32,7 @@ def parse_video_name(video_path: str):
 
     # Prepare name elements
     try:
-        locality, transect, plant_id, date, hour, minutes = filename[:-4].split("_")
+        locality, transect, plant_id, date, hour, minutes = os.path.splitext(filename)[0].split("_")
         file_extension = os.path.splitext(filename)[-1] if len(os.path.splitext(filename)) > 1 else None
 
     except Exception as e:
