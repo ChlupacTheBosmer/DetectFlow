@@ -1794,7 +1794,9 @@ class VisitsView(QWidget):
             except Exception as e:
                 self.set_status_message(str(e), icon=ALT_ICONS['alert-circle'], timeout=5000)
 
-            self.buttons.get('regenerate_visits_button').setEnabled(True)
+            # Enable all buttons
+            for key, button in self.buttons.items():
+                button.setEnabled(True)
 
     # def set_tableview_model(self, table_view, periods_df: pd.DataFrame, videos_df: pd.DataFrame,
     #                         visits_df: pd.DataFrame = None):
@@ -1970,9 +1972,7 @@ class VisitsView(QWidget):
             # Enable buttons (only if setting the main DB view, perhaps?)
             if table_view == self.stacked_widget.stacked_table_widget.table_view1:
                 for key, button in self.buttons.items():
-                    # Keep specific buttons disabled if needed (e.g., save until changes)
-                    if key != 'save_db_button':  # Example: keep save disabled initially
-                        button.setEnabled(True)
+                    button.setEnabled(True)
 
                 # Disable cycle tables button if only one main model is set
                 if not self._models.get('excel_model'):
