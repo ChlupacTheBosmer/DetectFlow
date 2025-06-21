@@ -1608,10 +1608,11 @@ class VisitsView(QWidget):
 
     @property
     def models(self):
-        return {
-            'db_model': self.stacked_widget.stacked_table_widget.table_view1.model(),
-            'excel_model': self.stacked_widget.stacked_table_widget.table_view2.model()
-        }
+        return self._models
+        # return {
+        #     'db_model': self.stacked_widget.stacked_table_widget.table_view1.model(),
+        #     'excel_model': self.stacked_widget.stacked_table_widget.table_view2.model()
+        # }
 
     @property
     def focused_table_view(self):
@@ -2168,7 +2169,7 @@ class VisitsView(QWidget):
         if not self.focused_table_view or not self.focused_table_view.model():
             return
 
-        model = self.focused_table_view.model()
+        model = self.focused_table_view.model().sourceModel()  # Get the source model from the proxy model
         selected_indexes = self.focused_table_view.selectionModel().selectedRows()
         if len(selected_indexes) == 1:
             row = selected_indexes[0].row()

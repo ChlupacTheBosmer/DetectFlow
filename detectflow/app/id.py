@@ -185,7 +185,7 @@ class MainWindow(QMainWindow):
                 db_path = self.visits_view.db_path
                 excel_path = self.visits_view.excel_path
                 model = self.visits_view.models.get('db_model', None)
-                model_data = model.sourceModel().getRefinedDataFrameCopy() if model else None
+                model_data = model.getRefinedDataFrameCopy() if model else None
             except Exception as e:
                 logging.warning(f"Error saving DB view state: {e}")
 
