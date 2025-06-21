@@ -526,7 +526,10 @@ class VisitsTableModel(QAbstractTableModel):
         self.color_map = {id_tuple[0]: id_tuple[1] for id_tuple in packed_ids}
         self.layoutChanged.emit()
 
-    def setVideoIDFilter(self, video_id):
+    def setVideoIDFilter(self, video_id, emit_layout_changed=True):
+        if emit_layout_changed:
+            self.layoutAboutToBeChanged.emit()
+
         self._current_video_id = video_id
         if self._current_video_id:
             self._filtered_df = self._df[self._df['video_id'] == self._current_video_id]
@@ -590,21 +593,57 @@ class VisitsTableModel(QAbstractTableModel):
             elif dtype == 'timedelta64[ns]':
                 value = pd.to_timedelta(value)
 
-            self._filtered_df.loc[self._filtered_df.index[index.row()], col_name] = value
-            self._df.loc[self._filtered_df.index[index.row()], col_name] = value
+            try:
+                # Get the original DataFrame index from the filtered view
+                original_index = self._filtered_df.index[index.row()]
 
-            # Recalculate linked columns if necessary
-            if col_name in ['start_frame', 'end_frame', 'start_time', 'end_time', 'start_real_life_time',
-                            'end_real_life_time']:
-                self.recalculate_linked_columns(index.row(), col_name)
+                # 1. Update the main DataFrame
+                self._df.loc[original_index, col_name] = value
 
-            # Update the visits dictionary
-            if col_name in ['start_frame', 'end_frame', 'visitor_bboxes', 'frame_numbers']:
-                self.update_visits_entry(index.row())
+                # 2. Recalculate any dependent columns in the main DataFrame
+                if col_name in ['start_frame', 'end_frame', 'start_time', 'end_time', 'start_real_life_time',
+                                'end_real_life_time']:
+                    self.recalculate_linked_columns(index.row(), col_name)
 
-            self.dataChanged.emit(index, index, (Qt.ItemDataRole.EditRole,))
-            return True
+                # 3. Synchronize ALL changes from the main DataFrame back to the filtered DataFrame
+                #    This ensures all linked columns are also updated in the view.
+                updated_row_data = self._df.loc[original_index]
+                for col_idx, visible_col_name in enumerate(self._visible_columns):
+                    if visible_col_name in updated_row_data:
+                        self._filtered_df.loc[original_index, visible_col_name] = updated_row_data[visible_col_name]
+
+                # 4. Update the dictionary entry for the video player
+                if col_name in ['start_frame', 'end_frame', 'visitor_bboxes', 'frame_numbers']:
+                    self.update_visits_entry(index.row())
+
+                # 5. Emit dataChanged for the entire row to reflect all updates
+                first_col_index = self.index(index.row(), 0)
+                last_col_index = self.index(index.row(), self.columnCount() - 1)
+                self.dataChanged.emit(first_col_index, last_col_index, [role])
+
+                return True
+
+            except (IndexError, KeyError) as e:
+                logging.error(f"Error setting data: {e}", exc_info=True)
+                return False
+
         return False
+
+        #     self._filtered_df.loc[self._filtered_df.index[index.row()], col_name] = value
+        #     self._df.loc[self._filtered_df.index[index.row()], col_name] = value
+        #
+        #     # Recalculate linked columns if necessary
+        #     if col_name in ['start_frame', 'end_frame', 'start_time', 'end_time', 'start_real_life_time',
+        #                     'end_real_life_time']:
+        #         self.recalculate_linked_columns(index.row(), col_name)
+        #
+        #     # Update the visits dictionary
+        #     if col_name in ['start_frame', 'end_frame', 'visitor_bboxes', 'frame_numbers']:
+        #         self.update_visits_entry(index.row())
+        #
+        #     self.dataChanged.emit(index, index, (Qt.ItemDataRole.EditRole,))
+        #     return True
+        # return False
 
     def generate_initial_visits_dict(self):
         print("Generating new dictionary")
@@ -669,7 +708,8 @@ class VisitsTableModel(QAbstractTableModel):
             self._df.loc[self._filtered_df.index[row], 'end_time'] = end_time
             self._df.loc[self._filtered_df.index[row], 'visit_duration'] = max(0.08, (end_frame - start_frame) / fps)
 
-        self.setVideoIDFilter(self._current_video_id)  # Reapply filter to update the view
+        # --- IMPORTANT: REMOVE THIS LINE ---
+        # self.setVideoIDFilter(self._current_video_id)  # DO NOT DO THIS HERE # Reapply filter to update the view
 
     def rowCount(self, parent=QModelIndex()):
         return self._filtered_df.shape[0]
@@ -788,6 +828,117 @@ class VisitsTableModel(QAbstractTableModel):
             # Add more mappings as needed
         }
         return color_map.get(visitor_id, QColor(Qt.GlobalColor.white))
+
+    def merge_rows(self, source_rows_to_merge):
+        """
+        Merges multiple rows into a single row, updating the model.
+        Args:
+            source_rows_to_merge (list): A list of integer row numbers from this source model's
+                                        current filtered view (_filtered_df).
+        """
+
+        def safe_cast(val, to_type, default=None):
+            try:
+                return to_type(val)
+            except (ValueError, TypeError):
+                return default
+
+        if not source_rows_to_merge or len(source_rows_to_merge) < 2:
+            return False
+
+        # Sort rows to ensure a consistent primary row (the one that appears first in the view)
+        source_rows_to_merge.sort()
+
+        try:
+            # --- 1. Get Original DataFrame Indices ---
+            # These are the actual labels from the main _df DataFrame
+            original_indices = [self._filtered_df.index[row_num] for row_num in source_rows_to_merge]
+
+            # The primary row is the first one in the sorted list
+            primary_original_index = original_indices[0]
+            indices_to_remove = original_indices[1:]
+
+            # --- 2. Perform the Merge Logic on the Data ---
+            # Work on a copy of the primary row to accumulate changes
+            merged_row_data = self._df.loc[primary_original_index].copy()
+
+            # Initialize lists for merging
+            flower_bboxes = list(merged_row_data.get('flower_bboxes', []))
+            visitor_bboxes = list(merged_row_data.get('visitor_bboxes', []))
+            frame_numbers = list(merged_row_data.get('frame_numbers', []))
+            visit_ids = list(merged_row_data.get('visit_ids', []))
+            flags = list(merged_row_data.get('flags', []))
+
+            # Aggregate boolean-like flags and flower count
+            fc, ac, cs, f, r, t, num_f = [merged_row_data.get(col, 0) for col in
+                                          ['FC', 'AC', 'CS', 'F', 'R', 'T', 'num_F']]
+
+            for idx_to_merge in indices_to_remove:
+                row_to_merge = self._df.loc[idx_to_merge]
+
+                # Merge list-like data
+                flower_bboxes.extend(list(row_to_merge.get('flower_bboxes', [])))
+                visitor_bboxes.extend(list(row_to_merge.get('visitor_bboxes', [])))
+                frame_numbers.extend(list(row_to_merge.get('frame_numbers', [])))
+                visit_ids.extend(list(row_to_merge.get('visit_ids', [])))
+                flags.extend(list(row_to_merge.get('flags', [])))
+
+                # Aggregate flags (if any are 1, the result is 1)
+                fc = fc or safe_cast(row_to_merge.get('FC', 0), int, 0)
+                ac = ac or safe_cast(row_to_merge.get('AC', 0), int, 0)
+                cs = cs or safe_cast(row_to_merge.get('CS', 0), int, 0)
+                f = f or safe_cast(row_to_merge.get('F', 0), int, 0)
+                r = r or safe_cast(row_to_merge.get('R', 0), int, 0)
+                t = t or safe_cast(row_to_merge.get('T', 0), int, 0)
+
+                # Sum the number of flowers
+                num_f += safe_cast(row_to_merge.get('num_F', 0), int, 0)
+
+                # Update start and end frames
+                merged_row_data['start_frame'] = min(merged_row_data['start_frame'], row_to_merge['start_frame'])
+                merged_row_data['end_frame'] = max(merged_row_data['end_frame'], row_to_merge['end_frame'])
+
+            # Assign merged lists and flags back to the temporary row data
+            merged_row_data['flower_bboxes'] = flower_bboxes
+            merged_row_data['visitor_bboxes'] = visitor_bboxes
+            merged_row_data['frame_numbers'] = frame_numbers
+            merged_row_data['visit_ids'] = visit_ids
+            merged_row_data['flags'] = flags
+            merged_row_data['FC'], merged_row_data['AC'], merged_row_data['CS'], merged_row_data['F'], merged_row_data[
+                'R'], merged_row_data['T'], merged_row_data['num_F'] = [int(v) for v in [fc, ac, cs, f, r, t, num_f]]
+
+            # --- 3. Atomically Update the Model ---
+            # A model reset is the safest way to signal a complex change like a merge
+            self.beginResetModel()
+
+            # Update the primary row in the main DataFrame
+            self._df.loc[primary_original_index] = merged_row_data
+
+            # Recalculate linked columns (like duration) for the updated row
+            # We need the row's new position in the filtered df, which we find after dropping
+
+            # Drop the merged rows from the main DataFrame
+            self._df.drop(index=indices_to_remove, inplace=True)
+
+            # Re-apply the video ID filter to rebuild the _filtered_df
+            self.setVideoIDFilter(self._current_video_id, emit_layout_changed=False)  # Rebuild _filtered_df quietly
+
+            # Now find the row index and recalculate linked columns
+            try:
+                primary_row_num = self._filtered_df.index.get_loc(primary_original_index)
+                self.recalculate_linked_columns(primary_row_num, 'start_frame')  # This updates _df again
+                self.update_visits_entry(primary_row_num)  # Update video player data
+            except KeyError:
+                logging.warning(f"Primary index {primary_original_index} not found after merge/filter.")
+
+            self.endResetModel()
+
+            return True
+
+        except Exception as e:
+            logging.error(f"Error during merge operation: {e}", exc_info=True)
+            self.endResetModel()  # Ensure we always end the reset, even on error
+            return False
 
 
 class VisitsControlPanel(QWidget):
@@ -2059,88 +2210,122 @@ class VisitsView(QWidget):
         QTimer.singleShot(1000, self.filter_visits_by_video_id)
 
     # DONE: Check for crashes and bugs and fix
+    # def merge_selected_entries(self):
+    #     model = self.models.get('db_model', None)
+    #     if not model or not self.database_view:
+    #         return
+    #
+    #     selected_indexes = self.database_view.selectionModel().selectedRows()
+    #     if len(selected_indexes) < 2:
+    #         return
+    #
+    #     # Get the original indices from the filtered DataFrame
+    #     original_indices = [model._filtered_df.index[idx.row()] for idx in selected_indexes]
+    #
+    #     # Retain the first item and modify it
+    #     primary_index = original_indices[0]
+    #     # print(original_indices)
+    #     primary_row = model._df.loc[primary_index]
+    #
+    #     # Initialize lists for merging
+    #     flower_bboxes = list(primary_row['flower_bboxes'])
+    #     visitor_bboxes = list(primary_row['visitor_bboxes'])
+    #     frame_numbers = list(primary_row['frame_numbers'])
+    #     visit_ids = list(primary_row['visit_ids'])
+    #     flags = list(primary_row['flags'])
+    #
+    #     # Update start and end frames
+    #     start_frame = primary_row['start_frame']
+    #     end_frame = primary_row['end_frame']
+    #
+    #     # For each merged item, update the lists and start and end frames
+    #     for idx in original_indices[1:]:
+    #         row = model._df.loc[idx]
+    #
+    #         # Merge the lists
+    #         flower_bboxes += list(row['flower_bboxes'])
+    #         visitor_bboxes += list(row['visitor_bboxes'])
+    #         frame_numbers += list(row['frame_numbers'])
+    #         visit_ids += list(row['visit_ids'])
+    #         flags += list(row['flags'])
+    #
+    #         # Update start and end frames
+    #         start_frame = min(start_frame, row['start_frame'])
+    #         end_frame = max(end_frame, row['end_frame'])
+    #
+    #     # print("merged")
+    #
+    #     # Ensure the lengths match
+    #     def set_list_value(index, value):
+    #         column_index = model._df.columns.get_loc(index)
+    #         current_value = model._df.at[primary_index, index]
+    #         if isinstance(current_value, list) and isinstance(value, list):
+    #             model._df.at[primary_index, index] = value
+    #         else:
+    #             model.setData(model.index(primary_index, column_index), value,
+    #                                role=Qt.ItemDataRole.EditRole)
+    #
+    #     # Update the primary row with merged data using setData
+    #     model._df.at[primary_index, 'start_frame'] = start_frame
+    #     model._df.at[primary_index, 'end_frame'] = end_frame
+    #     set_list_value('flower_bboxes', flower_bboxes)
+    #     set_list_value('visitor_bboxes', visitor_bboxes)
+    #     set_list_value('frame_numbers', frame_numbers)
+    #     set_list_value('visit_ids', visit_ids)
+    #     set_list_value('flags', flags)
+    #
+    #     # Recalculate the linked columns
+    #     model.recalculate_linked_columns(model._filtered_df.index.get_loc(primary_index), 'start_frame')
+    #
+    #     # Remove the other selected items
+    #     # print(original_indices[1:])
+    #     for idx in sorted(original_indices[1:], reverse=True):
+    #         if int(idx) in model._filtered_df.index:
+    #             index_loc = model._filtered_df.index.get_loc(int(idx))
+    #             # print(index_loc)
+    #             model.removeRows(index_loc, 1)
+    #             # print("deleted: ", idx)
+    #         # else:
+    #         #     print(f"Index {idx} not found in the DataFrame.")
+    #
+    #     # Start the timer to trigger after 1 second
+    #     QTimer.singleShot(1000, self.filter_visits_by_video_id)
+    #
+    #     # print("deleted")
+
     def merge_selected_entries(self):
-        model = self.models.get('db_model', None)
-        if not model or not self.database_view:
+        # 1. Get the currently active table view and its model
+        table_view = self.stacked_widget.stacked_table_widget.currentWidget()
+        proxy_model = table_view.model()
+        if not isinstance(proxy_model, VisitsSortFilterProxyModel):
+            logging.warning("Merge failed: Active view's model is not a proxy model.")
             return
 
-        selected_indexes = self.database_view.selectionModel().selectedRows()
-        if len(selected_indexes) < 2:
+        source_model = proxy_model.sourceModel()
+        if not isinstance(source_model, VisitsTableModel):
+            logging.warning("Merge failed: Proxy model's source is not a VisitsTableModel.")
             return
 
-        # Get the original indices from the filtered DataFrame
-        original_indices = [model._filtered_df.index[idx.row()] for idx in selected_indexes]
+        # 2. Get selected rows from the VIEW's selection model
+        selected_proxy_indexes = table_view.selectionModel().selectedRows()
+        if len(selected_proxy_indexes) < 2:
+            self.set_status_message("Please select at least two entries to merge.", icon=ALT_ICONS['alert-circle'],
+                                    timeout=3000)
+            return
 
-        # Retain the first item and modify it
-        primary_index = original_indices[0]
-        # print(original_indices)
-        primary_row = model._df.loc[primary_index]
+        # 3. Map proxy indices to source model indices to get correct row numbers
+        source_rows = [proxy_model.mapToSource(idx).row() for idx in selected_proxy_indexes]
 
-        # Initialize lists for merging
-        flower_bboxes = list(primary_row['flower_bboxes'])
-        visitor_bboxes = list(primary_row['visitor_bboxes'])
-        frame_numbers = list(primary_row['frame_numbers'])
-        visit_ids = list(primary_row['visit_ids'])
-        flags = list(primary_row['flags'])
+        # 4. Call the model's new merge method
+        self.set_status_message("Merging entries...", icon=ALT_ICONS['tool'], timeout=0)
+        success = source_model.merge_rows(source_rows)
 
-        # Update start and end frames
-        start_frame = primary_row['start_frame']
-        end_frame = primary_row['end_frame']
-
-        # For each merged item, update the lists and start and end frames
-        for idx in original_indices[1:]:
-            row = model._df.loc[idx]
-
-            # Merge the lists
-            flower_bboxes += list(row['flower_bboxes'])
-            visitor_bboxes += list(row['visitor_bboxes'])
-            frame_numbers += list(row['frame_numbers'])
-            visit_ids += list(row['visit_ids'])
-            flags += list(row['flags'])
-
-            # Update start and end frames
-            start_frame = min(start_frame, row['start_frame'])
-            end_frame = max(end_frame, row['end_frame'])
-
-        # print("merged")
-
-        # Ensure the lengths match
-        def set_list_value(index, value):
-            column_index = model._df.columns.get_loc(index)
-            current_value = model._df.at[primary_index, index]
-            if isinstance(current_value, list) and isinstance(value, list):
-                model._df.at[primary_index, index] = value
-            else:
-                model.setData(model.index(primary_index, column_index), value,
-                                   role=Qt.ItemDataRole.EditRole)
-
-        # Update the primary row with merged data using setData
-        model._df.at[primary_index, 'start_frame'] = start_frame
-        model._df.at[primary_index, 'end_frame'] = end_frame
-        set_list_value('flower_bboxes', flower_bboxes)
-        set_list_value('visitor_bboxes', visitor_bboxes)
-        set_list_value('frame_numbers', frame_numbers)
-        set_list_value('visit_ids', visit_ids)
-        set_list_value('flags', flags)
-
-        # Recalculate the linked columns
-        model.recalculate_linked_columns(model._filtered_df.index.get_loc(primary_index), 'start_frame')
-
-        # Remove the other selected items
-        # print(original_indices[1:])
-        for idx in sorted(original_indices[1:], reverse=True):
-            if int(idx) in model._filtered_df.index:
-                index_loc = model._filtered_df.index.get_loc(int(idx))
-                # print(index_loc)
-                model.removeRows(index_loc, 1)
-                # print("deleted: ", idx)
-            # else:
-            #     print(f"Index {idx} not found in the DataFrame.")
-
-        # Start the timer to trigger after 1 second
-        QTimer.singleShot(1000, self.filter_visits_by_video_id)
-
-        # print("deleted")
+        if success:
+            self.set_status_message(f"Successfully merged {len(source_rows)} entries.", icon=ALT_ICONS['check-circle'],
+                                    timeout=3000)
+        else:
+            self.set_status_message("Merge operation failed. See logs for details.", icon=ALT_ICONS['alert-circle'],
+                                    timeout=5000)
 
     def emit_data(self):
         table_view = self.focused_table_view
