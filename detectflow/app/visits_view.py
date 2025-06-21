@@ -2092,6 +2092,15 @@ class VisitsView(QWidget):
 
             if db_path_to_save:
 
+                # --- Check if the new path is existing db ---
+                if not os.path.isfile(db_path_to_save):
+                    try:
+                        shutil.copyfile(self.db_path, db_path_to_save)
+                        self.db_path = db_path_to_save
+                    except Exception as e:
+                        self.set_status_message(str(e), icon=ALT_ICONS['alert-circle'], timeout=5000)
+                        return
+
                 # --- Start Schema Migration Logic ---
                 try:
                     if os.path.isfile(db_path_to_save):
@@ -2137,15 +2146,6 @@ class VisitsView(QWidget):
                     # Decide if you want to stop the save process if schema update fails
                     return  # Stop saving if schema update failed
                 # --- End Schema Migration Logic ---
-
-                # --- Existing Save Logic ---
-                if not os.path.isfile(db_path_to_save):
-                    try:
-                        shutil.copyfile(self.db_path, db_path_to_save)
-                        self.db_path = db_path_to_save
-                    except Exception as e:
-                        self.set_status_message(str(e), icon=ALT_ICONS['alert-circle'], timeout=5000)
-                        return
 
                 try:
                     self.processor = VisitsProcessor(db_path_to_save)
