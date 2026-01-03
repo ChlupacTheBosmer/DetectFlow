@@ -64,18 +64,48 @@ def parse_video_name(video_path: str):
             "extension": file_extension}
 
 
-def is_valid_recording_id(recording_id):
-    # Recording ID has a format of XX(X)0_X0_XXXXXX00
-    recording_id_pattern = r'^[A-Za-z]{2,3}\d_[A-Za-z]\d_[A-Za-z]{6}\d{1,2}$'
+def is_valid_recording_id(recording_id, strict=False):
+    if strict:
+        # Recording ID has a format of XX(X)0_X0_XXXXXX00
+        recording_id_pattern = (
+        r'^[A-Za-z]{2,3}\d_'      # XX(X)0_
+        r'[A-Za-z]\d_'            # X0_
+        r'[A-Za-z]{6}\d{1,2}$'    # XXXXXX + 1–2 digits
+        )
+    else:
+        # Recording ID has a format of XX(X)0_X(X/0)_X(or more X)00
+        recording_id_pattern = (
+        r'^[A-Za-z]{2,3}\d_'      # XX(X)0_
+        r'[A-Za-z][A-Za-z0-9]_'   # X(0/X)_
+        r'[A-Za-z]{1,}\d{1,2}$'  # X(possibly more X) + 1-2 digits
+        )
 
     return re.match(recording_id_pattern, recording_id) is not None
 
 
-def is_valid_video_id(video_id):
-    # Video ID has a format of XX(X)0_X0_XXXXXX00_00000000_00_00
-    video_id_pattern = (r'^[A-Za-z]{2,3}\d_[A-Za-z]\d_[A-Za-z]{6}\d{1,2}_'
-                        r'(\d{4})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])_'
-                        r'([01]\d|2[0-3])_([0-5]\d)$')
+def is_valid_video_id(video_id, strict=False):
+    if strict:
+        # Video ID has a format of XX(X)0_X0_XXXXXX00_00000000_00_00
+        video_id_pattern = (
+        r'^[A-Za-z]{2,3}\d_'                  # XX(X)0_
+        r'[A-Za-z]\d_'                        # X0_
+        r'[A-Za-z]{6}\d{1,2}_'                # XXXXXX + 1–2 digits _
+        r'(\d{4})'                            # YYYY
+        r'(0[1-9]|1[0-2])'                    # MM
+        r'(0[1-9]|[12]\d|3[01])_'             # DD_
+        r'([01]\d|2[0-3])_'                   # HH_
+        r'([0-5]\d)$'                         # MM
+        )
+    else:
+        # Video ID has a format of XX(X)0_X(X/0)_X(or more X)00_00000000_00_00
+        video_id_pattern = (
+        r'^[A-Za-z]{2,3}\d_'                  # XX(X)0_
+        r'[A-Za-z][A-Za-z0-9]_'               # X(0/X)_
+        r'[A-Za-z]{1,}\d{1,2}_'               # XXXXXX(possibly more X) + 1-2 digits _
+        r'(\d{4})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])_'  # YYYYMMDD_
+        r'([01]\d|2[0-3])_'                   # HH_
+        r'([0-5]\d)$'                         # MM
+        )
 
     return re.match(video_id_pattern, video_id) is not None
 
